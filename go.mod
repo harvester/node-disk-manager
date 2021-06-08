@@ -1,4 +1,4 @@
-module github.com/harvester/node-disk-manager
+module github.com/longhorn/node-disk-manager
 
 go 1.16
 
