@@ -27,6 +27,7 @@ import (
 	blockdevicev1 "github.com/longhorn/node-disk-manager/pkg/controller/blockdevice"
 	longhornvctl1 "github.com/longhorn/node-disk-manager/pkg/generated/controllers/longhorn.io"
 	"github.com/longhorn/node-disk-manager/pkg/option"
+	"github.com/longhorn/node-disk-manager/pkg/udev"
 	"github.com/longhorn/node-disk-manager/pkg/version"
 )
 
@@ -166,6 +167,9 @@ func run(opt *option.Option) error {
 		// TODO
 		// 1. support for filtering out disks from adding as custom resources
 		// 2. add node actions, i.e. block device rescan
+
+		// register to monitor the UDEV events, similar to run `udevadm monitor -u`
+		go udev.NewUdev(block, lhs.Longhorn().V1beta1().BlockDevice(), opt).Monitor(ctx)
 	})
 
 	<-ctx.Done()
