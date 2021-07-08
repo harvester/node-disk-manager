@@ -18,6 +18,7 @@ func main() {
 			"longhorn.io": {
 				Types: []interface{}{
 					diskv1.BlockDevice{},
+					diskv1.Node{},
 				},
 				GenerateTypes:   true,
 				GenerateClients: false,

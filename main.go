@@ -25,6 +25,7 @@ import (
 
 	"github.com/longhorn/node-disk-manager/pkg/block"
 	blockdevicev1 "github.com/longhorn/node-disk-manager/pkg/controller/blockdevice"
+	nodev1 "github.com/longhorn/node-disk-manager/pkg/controller/node"
 	longhornvctl1 "github.com/longhorn/node-disk-manager/pkg/generated/controllers/longhorn.io"
 	"github.com/longhorn/node-disk-manager/pkg/option"
 	"github.com/longhorn/node-disk-manager/pkg/udev"
@@ -158,6 +159,11 @@ func run(opt *option.Option) error {
 		err = blockdevicev1.Register(ctx, lhs.Longhorn().V1beta1().BlockDevice(), block, opt)
 		if err != nil {
 			logrus.Fatalf("failed to register block device controller, %s", err.Error())
+		}
+
+		err = nodev1.Register(ctx, lhs.Longhorn().V1beta1().Node(), lhs.Longhorn().V1beta1().BlockDevice(), opt)
+		if err != nil {
+			logrus.Fatalf("failed to register ndm node controller, %s", err.Error())
 		}
 
 		if err := start.All(ctx, opt.Threadiness, lhs); err != nil {
