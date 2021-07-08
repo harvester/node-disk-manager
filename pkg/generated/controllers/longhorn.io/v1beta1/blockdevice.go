@@ -25,7 +25,10 @@ import (
 	v1beta1 "github.com/longhorn/node-disk-manager/pkg/apis/longhorn.io/v1beta1"
 	"github.com/rancher/lasso/pkg/client"
 	"github.com/rancher/lasso/pkg/controller"
+	"github.com/rancher/wrangler/pkg/apply"
+	"github.com/rancher/wrangler/pkg/condition"
 	"github.com/rancher/wrangler/pkg/generic"
+	"github.com/rancher/wrangler/pkg/kv"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -55,7 +58,7 @@ type BlockDeviceController interface {
 type BlockDeviceClient interface {
 	Create(*v1beta1.BlockDevice) (*v1beta1.BlockDevice, error)
 	Update(*v1beta1.BlockDevice) (*v1beta1.BlockDevice, error)
-
+	UpdateStatus(*v1beta1.BlockDevice) (*v1beta1.BlockDevice, error)
 	Delete(namespace, name string, options *metav1.DeleteOptions) error
 	Get(namespace, name string, options metav1.GetOptions) (*v1beta1.BlockDevice, error)
 	List(namespace string, opts metav1.ListOptions) (*v1beta1.BlockDeviceList, error)
@@ -184,6 +187,11 @@ func (c *blockDeviceController) Update(obj *v1beta1.BlockDevice) (*v1beta1.Block
 	return result, c.client.Update(context.TODO(), obj.Namespace, obj, result, metav1.UpdateOptions{})
 }
 
+func (c *blockDeviceController) UpdateStatus(obj *v1beta1.BlockDevice) (*v1beta1.BlockDevice, error) {
+	result := &v1beta1.BlockDevice{}
+	return result, c.client.UpdateStatus(context.TODO(), obj.Namespace, obj, result, metav1.UpdateOptions{})
+}
+
 func (c *blockDeviceController) Delete(namespace, name string, options *metav1.DeleteOptions) error {
 	if options == nil {
 		options = &metav1.DeleteOptions{}
@@ -253,4 +261,112 @@ func (c *blockDeviceCache) GetByIndex(indexName, key string) (result []*v1beta1.
 		result = append(result, obj.(*v1beta1.BlockDevice))
 	}
 	return result, nil
+}
+
+type BlockDeviceStatusHandler func(obj *v1beta1.BlockDevice, status v1beta1.BlockDeviceStatus) (v1beta1.BlockDeviceStatus, error)
+
+type BlockDeviceGeneratingHandler func(obj *v1beta1.BlockDevice, status v1beta1.BlockDeviceStatus) ([]runtime.Object, v1beta1.BlockDeviceStatus, error)
+
+func RegisterBlockDeviceStatusHandler(ctx context.Context, controller BlockDeviceController, condition condition.Cond, name string, handler BlockDeviceStatusHandler) {
+	statusHandler := &blockDeviceStatusHandler{
+		client:    controller,
+		condition: condition,
+		handler:   handler,
+	}
+	controller.AddGenericHandler(ctx, name, FromBlockDeviceHandlerToHandler(statusHandler.sync))
+}
+
+func RegisterBlockDeviceGeneratingHandler(ctx context.Context, controller BlockDeviceController, apply apply.Apply,
+	condition condition.Cond, name string, handler BlockDeviceGeneratingHandler, opts *generic.GeneratingHandlerOptions) {
+	statusHandler := &blockDeviceGeneratingHandler{
+		BlockDeviceGeneratingHandler: handler,
+		apply:                        apply,
+		name:                         name,
+		gvk:                          controller.GroupVersionKind(),
+	}
+	if opts != nil {
+		statusHandler.opts = *opts
+	}
+	controller.OnChange(ctx, name, statusHandler.Remove)
+	RegisterBlockDeviceStatusHandler(ctx, controller, condition, name, statusHandler.Handle)
+}
+
+type blockDeviceStatusHandler struct {
+	client    BlockDeviceClient
+	condition condition.Cond
+	handler   BlockDeviceStatusHandler
+}
+
+func (a *blockDeviceStatusHandler) sync(key string, obj *v1beta1.BlockDevice) (*v1beta1.BlockDevice, error) {
+	if obj == nil {
+		return obj, nil
+	}
+
+	origStatus := obj.Status.DeepCopy()
+	obj = obj.DeepCopy()
+	newStatus, err := a.handler(obj, obj.Status)
+	if err != nil {
+		// Revert to old status on error
+		newStatus = *origStatus.DeepCopy()
+	}
+
+	if a.condition != "" {
+		if errors.IsConflict(err) {
+			a.condition.SetError(&newStatus, "", nil)
+		} else {
+			a.condition.SetError(&newStatus, "", err)
+		}
+	}
+	if !equality.Semantic.DeepEqual(origStatus, &newStatus) {
+		if a.condition != "" {
+			// Since status has changed, update the lastUpdatedTime
+			a.condition.LastUpdated(&newStatus, time.Now().UTC().Format(time.RFC3339))
+		}
+
+		var newErr error
+		obj.Status = newStatus
+		newObj, newErr := a.client.UpdateStatus(obj)
+		if err == nil {
+			err = newErr
+		}
+		if newErr == nil {
+			obj = newObj
+		}
+	}
+	return obj, err
+}
+
+type blockDeviceGeneratingHandler struct {
+	BlockDeviceGeneratingHandler
+	apply apply.Apply
+	opts  generic.GeneratingHandlerOptions
+	gvk   schema.GroupVersionKind
+	name  string
+}
+
+func (a *blockDeviceGeneratingHandler) Remove(key string, obj *v1beta1.BlockDevice) (*v1beta1.BlockDevice, error) {
+	if obj != nil {
+		return obj, nil
+	}
+
+	obj = &v1beta1.BlockDevice{}
+	obj.Namespace, obj.Name = kv.RSplit(key, "/")
+	obj.SetGroupVersionKind(a.gvk)
+
+	return nil, generic.ConfigureApplyForObject(a.apply, obj, &a.opts).
+		WithOwner(obj).
+		WithSetID(a.name).
+		ApplyObjects()
+}
+
+func (a *blockDeviceGeneratingHandler) Handle(obj *v1beta1.BlockDevice, status v1beta1.BlockDeviceStatus) (v1beta1.BlockDeviceStatus, error) {
+	objs, newStatus, err := a.BlockDeviceGeneratingHandler(obj, status)
+	if err != nil {
+		return newStatus, err
+	}
+
+	return newStatus, generic.ConfigureApplyForObject(a.apply, obj, &a.opts).
+		WithOwner(obj).
+		WithSetID(a.name).
+		ApplyObjects(objs...)
 }

@@ -3,9 +3,10 @@ package main
 import (
 	"os"
 
-	v1 "github.com/longhorn/node-disk-manager/pkg/apis/longhorn.io/v1beta1"
 	controllergen "github.com/rancher/wrangler/pkg/controller-gen"
 	"github.com/rancher/wrangler/pkg/controller-gen/args"
+
+	diskv1 "github.com/longhorn/node-disk-manager/pkg/apis/longhorn.io/v1beta1"
 )
 
 func main() {
@@ -16,9 +17,10 @@ func main() {
 		Groups: map[string]args.Group{
 			"longhorn.io": {
 				Types: []interface{}{
-					v1.BlockDevice{},
+					diskv1.BlockDevice{},
 				},
-				GenerateTypes: true,
+				GenerateTypes:   true,
+				GenerateClients: false,
 			},
 		},
 	})
