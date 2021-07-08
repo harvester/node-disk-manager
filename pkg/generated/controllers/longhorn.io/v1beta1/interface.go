@@ -31,6 +31,7 @@ func init() {
 
 type Interface interface {
 	BlockDevice() BlockDeviceController
+	Node() NodeController
 }
 
 func New(controllerFactory controller.SharedControllerFactory) Interface {
@@ -45,4 +46,7 @@ type version struct {
 
 func (c *version) BlockDevice() BlockDeviceController {
 	return NewBlockDeviceController(schema.GroupVersionKind{Group: "longhorn.io", Version: "v1beta1", Kind: "BlockDevice"}, "blockdevices", true, c.controllerFactory)
+}
+func (c *version) Node() NodeController {
+	return NewNodeController(schema.GroupVersionKind{Group: "longhorn.io", Version: "v1beta1", Kind: "Node"}, "nodes", true, c.controllerFactory)
 }

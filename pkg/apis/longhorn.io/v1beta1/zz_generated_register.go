@@ -29,6 +29,7 @@ import (
 
 var (
 	BlockDeviceResourceName = "blockdevices"
+	NodeResourceName        = "nodes"
 )
 
 // SchemeGroupVersion is group version used to register these objects
@@ -54,6 +55,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&BlockDevice{},
 		&BlockDeviceList{},
+		&Node{},
+		&NodeList{},
 	)
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil
