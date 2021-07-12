@@ -16,9 +16,9 @@ import (
 
 	diskv1 "github.com/longhorn/node-disk-manager/pkg/apis/longhorn.io/v1beta1"
 	"github.com/longhorn/node-disk-manager/pkg/block"
+	"github.com/longhorn/node-disk-manager/pkg/filter"
 	ctldiskv1 "github.com/longhorn/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta1"
 	"github.com/longhorn/node-disk-manager/pkg/option"
-	"github.com/longhorn/node-disk-manager/pkg/util"
 )
 
 const (
@@ -32,24 +32,27 @@ type Controller struct {
 	Blockdevices     ctldiskv1.BlockDeviceController
 	BlockdeviceCache ctldiskv1.BlockDeviceCache
 	BlockInfo        *block.Info
+	Filters          []*filter.Filter
 }
 
 // Register register the block device CRD controller
-func Register(ctx context.Context, blockdevices ctldiskv1.BlockDeviceController, block *block.Info, opt *option.Option) error {
+func Register(ctx context.Context, bds ctldiskv1.BlockDeviceController, block *block.Info,
+	opt *option.Option, filters []*filter.Filter) error {
 	controller := &Controller{
 		namespace:        opt.Namespace,
 		nodeName:         opt.NodeName,
-		Blockdevices:     blockdevices,
-		BlockdeviceCache: blockdevices.Cache(),
+		Blockdevices:     bds,
+		BlockdeviceCache: bds.Cache(),
 		BlockInfo:        block,
+		Filters:          filters,
 	}
 
 	if err := controller.RegisterNodeBlockDevices(); err != nil {
 		return err
 	}
 
-	blockdevices.OnChange(ctx, blockDeviceHandlerName, controller.OnBlockDeviceChange)
-	blockdevices.OnRemove(ctx, blockDeviceHandlerName, controller.OnBlockDeviceDelete)
+	bds.OnChange(ctx, blockDeviceHandlerName, controller.OnBlockDeviceChange)
+	bds.OnRemove(ctx, blockDeviceHandlerName, controller.OnBlockDeviceDelete)
 	return nil
 }
 
@@ -60,13 +63,12 @@ func (c *Controller) RegisterNodeBlockDevices() error {
 
 	// list all the block devices
 	for _, disk := range c.BlockInfo.Disks {
-		// ignore block device that is created by the Longhorn
-		if util.IsLonghornBlockDevice(disk.BusPath) {
-			logrus.Debugf("Skip longhorn disk, %s", disk.Name)
+		// ignore block device by filters
+		if c.ApplyFilter(disk) {
 			continue
 		}
 
-		logrus.Infof("Found a block device %s", disk.Name)
+		logrus.Infof("Found a block device /dev/%s", disk.Name)
 		blockDevices := GetNewBlockDevices(disk, c.nodeName, c.namespace)
 		bds = append(bds, blockDevices...)
 	}
@@ -247,4 +249,15 @@ func (c *Controller) OnBlockDeviceDelete(key string, device *diskv1.BlockDevice)
 		}
 	}
 	return nil, nil
+}
+
+// ApplyFilter check the status of every register filters if the disk meets the filter criteria it will return true else it will return false
+func (c *Controller) ApplyFilter(disk *block.Disk) bool {
+	for _, filter := range c.Filters {
+		if filter.ApplyFilter(disk) {
+			logrus.Debugf("block device /dev/%s ignored by %s", disk.Name, filter.Name)
+			return true
+		}
+	}
+	return false
 }

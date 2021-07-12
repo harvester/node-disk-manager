@@ -14,6 +14,8 @@ import (
 	_ "net/http/pprof"
 	"os"
 
+	"github.com/longhorn/node-disk-manager/pkg/filter"
+
 	"github.com/ehazlett/simplelog"
 	"github.com/rancher/wrangler/pkg/kubeconfig"
 	"github.com/rancher/wrangler/pkg/leader"
@@ -87,6 +89,19 @@ func main() {
 			Usage:       "Specify the node name",
 			Destination: &opt.NodeName,
 		},
+		&cli.StringFlag{
+			Name:        "vendor-filter",
+			Value:       "longhorn",
+			EnvVars:     []string{"NDM_VENDOR_FILTER"},
+			Usage:       "A string of comma-separated values that you want to exclude for block device vendor filter",
+			Destination: &opt.VendorFilter,
+		},
+		&cli.StringFlag{
+			Name:        "path-filter",
+			EnvVars:     []string{"NDM_PATH_FILTER"},
+			Usage:       "A string of comma-separated values that you want to exclude for block device path filter",
+			Destination: &opt.PathFilter,
+		},
 	}
 
 	app.Action = func(c *cli.Context) error {
@@ -155,8 +170,10 @@ func run(opt *option.Option) error {
 
 	client := kubernetes.NewForConfigOrDie(kubeConfig)
 
+	filters := filter.SetDNMFilters(opt.VendorFilter, opt.PathFilter)
+
 	leader.RunOrDie(ctx, "", "node-disk-manager", client, func(ctx context.Context) {
-		err = blockdevicev1.Register(ctx, lhs.Longhorn().V1beta1().BlockDevice(), block, opt)
+		err = blockdevicev1.Register(ctx, lhs.Longhorn().V1beta1().BlockDevice(), block, opt, filters)
 		if err != nil {
 			logrus.Fatalf("failed to register block device controller, %s", err.Error())
 		}
@@ -175,7 +192,7 @@ func run(opt *option.Option) error {
 		// 2. add node actions, i.e. block device rescan
 
 		// register to monitor the UDEV events, similar to run `udevadm monitor -u`
-		go udev.NewUdev(block, lhs.Longhorn().V1beta1().BlockDevice(), opt).Monitor(ctx)
+		go udev.NewUdev(block, lhs.Longhorn().V1beta1().BlockDevice(), opt, filters).Monitor(ctx)
 	})
 
 	<-ctx.Done()

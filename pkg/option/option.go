@@ -10,4 +10,6 @@ type Option struct {
 	Trace           bool
 	LogFormat       string
 	ProfilerAddress string
+	VendorFilter    string
+	PathFilter      string
 }

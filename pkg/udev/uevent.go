@@ -20,6 +20,7 @@ import (
 	diskv1 "github.com/longhorn/node-disk-manager/pkg/apis/longhorn.io/v1beta1"
 	"github.com/longhorn/node-disk-manager/pkg/block"
 	"github.com/longhorn/node-disk-manager/pkg/controller/blockdevice"
+	"github.com/longhorn/node-disk-manager/pkg/filter"
 	ctldiskv1 "github.com/longhorn/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta1"
 	"github.com/longhorn/node-disk-manager/pkg/option"
 	"github.com/longhorn/node-disk-manager/pkg/util"
@@ -36,11 +37,12 @@ type Udev struct {
 	controller *blockdevice.Controller
 }
 
-func NewUdev(block *block.Info, blockdevices ctldiskv1.BlockDeviceController, opt *option.Option) *Udev {
+func NewUdev(block *block.Info, blockdevices ctldiskv1.BlockDeviceController, opt *option.Option, filters []*filter.Filter) *Udev {
 	controller := &blockdevice.Controller{
 		BlockInfo:        block,
 		Blockdevices:     blockdevices,
 		BlockdeviceCache: blockdevices.Cache(),
+		Filters:          filters,
 	}
 	return &Udev{
 		startOnce:  sync.Once{},
@@ -90,7 +92,7 @@ func (u *Udev) monitor(ctx context.Context) {
 
 func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 	udevDevice := InitUdevDevice(uevent.Env)
-	disk := u.controller.BlockInfo.GetDiskByDevPath(udevDevice.GetShortName())
+	disk := u.controller.BlockInfo.GetDiskByName(udevDevice.GetShortName())
 	// ignore block device by filters
 	if u.controller.ApplyFilter(disk) {
 		return
@@ -155,7 +157,6 @@ func (u *Udev) AddBlockDevice(device UdevDevice, duration time.Duration) {
 	disk := u.controller.BlockInfo.GetDiskByDevPath(devName)
 	bds := blockdevice.GetNewBlockDevices(disk, u.nodeName, u.namespace)
 
-	// block.GetNewBlockDevices()
 	bdList, err := u.controller.BlockdeviceCache.List(u.namespace, labels.Everything())
 	if err != nil {
 		logrus.Errorf("Failed to add block device via udev event, error: %s, retry in %s", err.Error(), duration.String())
@@ -180,11 +181,10 @@ func (u *Udev) RemoveBlockDevice(device UdevDevice, duration time.Duration) {
 	devName := device.GetShortName()
 	bdName := util.GetBlockDeviceName(devName, u.nodeName)
 	err := u.controller.Blockdevices.Delete(u.namespace, bdName, &metav1.DeleteOptions{})
-	if err != nil {
+	if err != nil && errors.IsNotFound(err) {
+		logrus.Errorf("failed to delete block device, %s is not found", bdName)
+	} else if err != nil {
 		logrus.Errorf("faield to delete the block device %s, error: %s", bdName, err.Error())
-	}
-	if err != nil && !errors.IsNotFound(err) {
-		logrus.Errorf("failed to delete block device %s, error: %s", bdName, err.Error())
 		u.RemoveBlockDevice(device, 2*duration)
 	}
 }

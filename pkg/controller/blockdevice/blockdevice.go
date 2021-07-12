@@ -1,8 +1,6 @@
 package blockdevice
 
 import (
-	"fmt"
-
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -35,7 +33,7 @@ func GetNewBlockDevices(disk *block.Disk, nodeName, namespace string) []*longhor
 		},
 		Spec: longhornv1.BlockDeviceSpec{
 			NodeName: nodeName,
-			DevPath:  getFullDevPath(disk.Name),
+			DevPath:  util.GetFullDevPath(disk.Name),
 			FileSystem: longhornv1.FilesystemInfo{
 				MountPoint: fileSystemInfo.MountPoint,
 			},
@@ -122,11 +120,4 @@ func GetPartitionBlockDevices(partitions []*block.Partition, parentDisk *longhor
 		blockDevices = append(blockDevices, blockDevice)
 	}
 	return blockDevices
-}
-
-func getFullDevPath(shortPath string) string {
-	if shortPath == "" {
-		return ""
-	}
-	return fmt.Sprintf("/dev/%s", shortPath)
 }
