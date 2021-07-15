@@ -92,7 +92,7 @@ func (u *Udev) monitor(ctx context.Context) {
 
 func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 	udevDevice := InitUdevDevice(uevent.Env)
-	disk := u.controller.BlockInfo.GetDiskByName(udevDevice.GetShortName())
+	disk := u.controller.BlockInfo.GetDiskByDevPath(udevDevice.GetShortName())
 	// ignore block device by filters
 	if u.controller.ApplyFilter(disk) {
 		return
