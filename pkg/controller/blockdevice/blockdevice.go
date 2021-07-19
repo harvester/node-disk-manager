@@ -17,7 +17,7 @@ const (
 func GetNewBlockDevices(disk *block.Disk, nodeName, namespace string) []*longhornv1.BlockDevice {
 	bdList := make([]*longhornv1.BlockDevice, 0)
 	partitioned := len(disk.Partitions) > 0
-	fileSystemInfo := longhornv1.FilesystemStatus{
+	fileSystemInfo := &longhornv1.FilesystemStatus{
 		MountPoint: disk.FileSystemInfo.MountPoint,
 		Type:       disk.FileSystemInfo.FsType,
 		IsReadOnly: disk.FileSystemInfo.IsReadOnly,
@@ -34,7 +34,7 @@ func GetNewBlockDevices(disk *block.Disk, nodeName, namespace string) []*longhor
 		Spec: longhornv1.BlockDeviceSpec{
 			NodeName: nodeName,
 			DevPath:  util.GetFullDevPath(disk.Name),
-			FileSystem: longhornv1.FilesystemInfo{
+			FileSystem: &longhornv1.FilesystemInfo{
 				MountPoint: fileSystemInfo.MountPoint,
 			},
 		},
@@ -72,7 +72,7 @@ func GetNewBlockDevices(disk *block.Disk, nodeName, namespace string) []*longhor
 func GetPartitionBlockDevices(partitions []*block.Partition, parentDisk *longhornv1.BlockDevice, nodeName string) []*longhornv1.BlockDevice {
 	blockDevices := make([]*longhornv1.BlockDevice, 0, len(partitions))
 	for _, part := range partitions {
-		fileSystemInfo := longhornv1.FilesystemStatus{
+		fileSystemInfo := &longhornv1.FilesystemStatus{
 			Type:       part.FileSystemInfo.FsType,
 			MountPoint: part.FileSystemInfo.MountPoint,
 			IsReadOnly: part.FileSystemInfo.IsReadOnly,
@@ -110,7 +110,7 @@ func GetPartitionBlockDevices(partitions []*block.Partition, parentDisk *longhor
 			Spec: longhornv1.BlockDeviceSpec{
 				NodeName: nodeName,
 				DevPath:  util.GetFullDevPath(part.Name),
-				FileSystem: longhornv1.FilesystemInfo{
+				FileSystem: &longhornv1.FilesystemInfo{
 					MountPoint: part.FileSystemInfo.MountPoint,
 				},
 			},

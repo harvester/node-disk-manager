@@ -1,6 +1,7 @@
 package block
 
 import (
+	"fmt"
 	"os/exec"
 	"strings"
 
@@ -63,4 +64,22 @@ func GetDiskUUID(part string, uuidType string) string {
 	}
 
 	return strings.ReplaceAll(strings.TrimSpace(parts[1]), `"`, "")
+}
+
+func GetParentDevName(devPath string) (string, error) {
+	if !strings.HasPrefix(devPath, "/dev") {
+		devPath = "/dev/" + devPath
+	}
+	args := []string{
+		"lsblk",
+		"-no",
+		"pkname",
+		devPath,
+	}
+	out, err := exec.Command(args[0], args[1:]...).Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get parent disk, %s", err.Error())
+	}
+
+	return string(out), nil
 }

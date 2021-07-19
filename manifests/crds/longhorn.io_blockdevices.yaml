@@ -15,6 +15,7 @@ spec:
     plural: blockdevices
     shortNames:
     - bd
+    - bds
     singular: blockdevice
   scope: Namespaced
   versions:

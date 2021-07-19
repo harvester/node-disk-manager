@@ -8,12 +8,13 @@ import (
 )
 
 var (
-	DeviceMounted condition.Cond = "Mounted"
+	DeviceMounted   condition.Cond = "Mounted"
+	DeviceFormatted condition.Cond = "Formatted"
 )
 
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-// +kubebuilder:resource:shortName=bd,scope=Namespaced
+// +kubebuilder:resource:shortName=bd;bds,scope=Namespaced
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=`.status.deviceStatus.details.deviceType`
 // +kubebuilder:printcolumn:name="MountPoint",type="string",JSONPath=`.status.deviceStatus.fileSystem.mountPoint`
 // +kubebuilder:printcolumn:name="NodeName",type="string",JSONPath=`.spec.nodeName`
@@ -37,7 +38,7 @@ type BlockDeviceSpec struct {
 	DevPath string `json:"devPath"`
 
 	// +optional
-	FileSystem FilesystemInfo `json:"fileSystem,omitempty"`
+	FileSystem *FilesystemInfo `json:"fileSystem,omitempty"`
 }
 
 type BlockDeviceStatus struct {
@@ -74,7 +75,7 @@ type DeviceStatus struct {
 	// a object describe the disk details
 	Details DeviceDetails `json:"details"`
 
-	FileSystem FilesystemStatus `json:"fileSystem"`
+	FileSystem *FilesystemStatus `json:"fileSystem"`
 }
 
 type DeviceCapcity struct {

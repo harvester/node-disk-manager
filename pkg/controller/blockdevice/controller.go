@@ -3,10 +3,11 @@ package blockdevice
 import (
 	"context"
 	"fmt"
-	"os"
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/longhorn/node-disk-manager/pkg/disk"
 
 	lhutil "github.com/longhorn/longhorn-manager/util"
 	"github.com/sirupsen/logrus"
@@ -103,13 +104,9 @@ func (c *Controller) RegisterNodeBlockDevices() error {
 }
 
 // OnBlockDeviceChange watch the block device CR on change and performing disk operations
-// like mounting the disks to a desired folder via ext4
+// like mounting the disks to a desired path via ext4
 func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
 	if device == nil || device.DeletionTimestamp != nil {
-		return device, nil
-	}
-
-	if device.Spec.FileSystem.MountPoint == "" {
 		return device, nil
 	}
 
@@ -117,32 +114,50 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 	fs := deviceCpy.Spec.FileSystem
 	fsStatus := deviceCpy.Status.DeviceStatus.FileSystem
 
-	// check whether need to performing disk operation
-	if _, valid := isValidFileSystem(fs, fsStatus); !valid {
-		logrus.Infof("performing disk operation of disk %s, mount path %s", device.Spec.DevPath, fs.MountPoint)
-		if fs.ForceFormatted && fsStatus.LastFormattedAt == nil {
-			//TODO, perform filesystem formatting to ext4
-			deviceCpy.Status.DeviceStatus.FileSystem.LastFormattedAt = &metav1.Time{Time: time.Now()}
-		}
-
-		if err := mountDevice(deviceCpy.Spec.DevPath, fs.MountPoint); err != nil {
-			diskv1.DeviceMounted.SetStatusBool(deviceCpy, false)
-			diskv1.DeviceMounted.SetError(deviceCpy, "", fmt.Errorf("failed to mount the device %s to path %s, error:%s",
-				device.Spec.DevPath, device.Spec.FileSystem.MountPoint, err.Error()))
+	if fs.ForceFormatted && fsStatus.LastFormattedAt == nil {
+		// - perform disk force-formatted operation
+		// - partition block device CR will be updated by the udev event watcher
+		if err := forceFormatDisk(device); err != nil {
+			diskv1.DeviceFormatted.SetStatusBool(deviceCpy, false)
+			diskv1.DeviceFormatted.SetError(deviceCpy, "", fmt.Errorf("failed to force format the block device %s, error: %s",
+				device.Spec.DevPath, err.Error()))
 			return c.Blockdevices.Update(deviceCpy)
 		}
 
+		// unset the parent device filesystem info since it has assigned to the single partition disk
+		deviceCpy.Spec.FileSystem = nil
+		deviceCpy.Status.DeviceStatus.FileSystem.LastFormattedAt = &metav1.Time{Time: time.Now()}
+	} else {
+		if fs.MountPoint != fsStatus.MountPoint && !deviceCpy.Status.DeviceStatus.Partitioned {
+			// mount the dev by path, do not mount partitioned device
+			if err := updateDeviceMount(deviceCpy.Spec.DevPath, fs.MountPoint, fsStatus.MountPoint); err != nil {
+				diskv1.DeviceMounted.SetStatusBool(deviceCpy, false)
+				diskv1.DeviceMounted.SetError(deviceCpy, "", fmt.Errorf("failed to mount the device %s to path %s, error: %s",
+					device.Spec.DevPath, device.Spec.FileSystem.MountPoint, err.Error()))
+				return c.Blockdevices.Update(deviceCpy)
+			}
+		}
+	}
+
+	// fetch the latest device filesystem info
+	if device.Status.DeviceStatus.ParentDevice == "" {
 		disk := c.BlockInfo.GetDiskByDevPath(deviceCpy.Spec.DevPath)
 		deviceCpy.Status.DeviceStatus.FileSystem.Type = disk.FileSystemInfo.FsType
 		deviceCpy.Status.DeviceStatus.FileSystem.MountPoint = disk.FileSystemInfo.MountPoint
+	} else {
+		part := c.BlockInfo.GetPartitionByDevPath(deviceCpy.Status.DeviceStatus.ParentDevice, deviceCpy.Spec.DevPath)
+		deviceCpy.Status.DeviceStatus.FileSystem.Type = part.FileSystemInfo.FsType
+		deviceCpy.Status.DeviceStatus.FileSystem.MountPoint = part.FileSystemInfo.MountPoint
 	}
 
-	err, validFs := isValidFileSystem(deviceCpy.Spec.FileSystem, deviceCpy.Status.DeviceStatus.FileSystem)
-	mounted := validFs && deviceCpy.Status.DeviceStatus.FileSystem.MountPoint != ""
-	diskv1.DeviceMounted.SetStatusBool(deviceCpy, mounted)
-	diskv1.DeviceMounted.SetError(deviceCpy, "", err)
-	if err != nil {
-		diskv1.DeviceMounted.Message(deviceCpy, err.Error())
+	if deviceCpy.Status.DeviceStatus.FileSystem.MountPoint != "" && deviceCpy.Status.DeviceStatus.FileSystem.Type != "" {
+		err := isValidFileSystem(deviceCpy.Spec.FileSystem, deviceCpy.Status.DeviceStatus.FileSystem)
+		mounted := err == nil && deviceCpy.Status.DeviceStatus.FileSystem.MountPoint != ""
+		diskv1.DeviceMounted.SetStatusBool(deviceCpy, mounted)
+		diskv1.DeviceMounted.SetError(deviceCpy, "", err)
+		if err != nil {
+			diskv1.DeviceMounted.Message(deviceCpy, err.Error())
+		}
 	}
 
 	if !reflect.DeepEqual(device, deviceCpy) {
@@ -154,35 +169,73 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 	return nil, nil
 }
 
-func mountDevice(devPath, mountPoint string) error {
-	_, err := os.Stat(mountPoint)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-
-	if os.IsNotExist(err) {
-		if err := os.Mkdir(mountPoint, os.ModeDir); err != nil {
+func updateDeviceMount(devPath, mountPoint, existingMount string) error {
+	// umount the previous path if exist
+	if existingMount != "" {
+		if err := disk.UmountDisk(existingMount); err != nil {
 			return err
 		}
 	}
 
-	return block.MountExt4(devPath, mountPoint, false)
+	return disk.MountDisk(devPath, mountPoint)
 }
 
-func isValidFileSystem(fs diskv1.FilesystemInfo, fsStatus diskv1.FilesystemStatus) (error, bool) {
+// forceFormatDisk will be called when the user chooses to force formatting the block device, the block device can only be
+// force-formatted once only. And the controller may reconcile this method multiple times if the process is failed.
+//
+// - umount the block device if it is mounted
+// - create a GUID partition table with a single linux partition of block device only
+// - create ext4 filesystem formatting of the single partition
+// - mount the single partition disk to the path
+func forceFormatDisk(device *diskv1.BlockDevice) error {
+	filesystem := device.Spec.FileSystem
+	fsStatus := device.Status.DeviceStatus.FileSystem
+	logrus.Infof("performing format operation of disk %s, mount path %s", device.Spec.DevPath, filesystem.MountPoint)
+
+	// umount the disk if it is mounted
+	if fsStatus.MountPoint != "" {
+		if err := disk.UmountDisk(fsStatus.MountPoint); err != nil {
+			return err
+		}
+	}
+
+	devPath := device.Spec.DevPath
+	// create a GUID partition table with a single linux partition only
+	if device.Status.DeviceStatus.Details.DeviceType == diskv1.DeviceTypeDisk {
+		if err := disk.MakeGPTPartition(devPath); err != nil {
+			return err
+		}
+
+		// create ext4 filesystem formatting of the partition disk
+		devPath = devPath + "1"
+		if err := disk.MakeDiskFormatting(devPath, "ext4"); err != nil {
+			return err
+		}
+	}
+
+	// mount device to the path
+	if filesystem.MountPoint != "" {
+		if err := disk.MountDisk(devPath, filesystem.MountPoint); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func isValidFileSystem(fs *diskv1.FilesystemInfo, fsStatus *diskv1.FilesystemStatus) error {
 	if len(fs.MountPoint) > 1 {
 		fs.MountPoint = strings.TrimSuffix(fs.MountPoint, "/")
 	}
 
 	if fs.MountPoint != fsStatus.MountPoint {
-		return fmt.Errorf("current mountPoint %s does not match the specified path: %s", fsStatus.MountPoint, fs.MountPoint), false
+		return fmt.Errorf("current mountPoint %s does not match the specified path: %s", fsStatus.MountPoint, fs.MountPoint)
 	}
 
 	if !lhutil.IsSupportedFileSystem(fsStatus.Type) {
-		return fmt.Errorf("unsupported filesystem type %s", fsStatus.Type), false
+		return fmt.Errorf("unsupported filesystem type %s", fsStatus.Type)
 	}
 
-	return nil, true
+	return nil
 }
 
 func (c *Controller) SaveBlockDevice(blockDevice *diskv1.BlockDevice, bds []*diskv1.BlockDevice) error {
