@@ -75,6 +75,7 @@ spec:
                 type: string
             required:
             - devPath
+            - fileSystem
             - nodeName
             type: object
           status:

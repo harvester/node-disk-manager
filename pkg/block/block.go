@@ -40,7 +40,7 @@ type Partition struct {
 }
 
 type FileSystemInfo struct {
-	FsType     string `json:"fs_type"`
+	Type       string `json:"type"`
 	IsReadOnly bool   `json:"read_only"`
 	MountPoint string `json:"mount_point"`
 }

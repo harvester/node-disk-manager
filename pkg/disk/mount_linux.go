@@ -21,12 +21,15 @@ func MountDisk(devPath, mountPoint string) error {
 	}
 
 	if os.IsNotExist(err) {
-		if err := os.Mkdir(mountPoint, os.ModeDir); err != nil {
+		if err := os.MkdirAll(mountPoint, os.ModeDir); err != nil {
 			return err
 		}
 	}
 
 	return mountExt4(devPath, mountPoint, false)
+
+	// UUID=39ea80c4-e748-47eb-835c-64025de53e26  /mnt/path  ext4 defaults 0 1
+
 }
 
 // UmountDisk unmounts the specified volume device to the specified path

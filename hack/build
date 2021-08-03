@@ -11,4 +11,4 @@ LINKFLAGS="-X github.com/rancher/node-disk-manager/pkg/version.Version=$VERSION"
 LINKFLAGS="-X github.com/rancher/node-disk-manager/pkg/version.GitCommit=$COMMIT $LINKFLAGS"
 GOOS=linux CGO_ENABLED=0 go build -ldflags "$LINKFLAGS $OTHER_LINKFLAGS" -o bin/node-disk-manager
 
-scp ./bin/node-disk-manager rancher@172.16.4.3:/home/rancher
+scp ./bin/node-disk-manager rancher@192.168.56.19:/home/rancher

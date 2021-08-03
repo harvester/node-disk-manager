@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
-	"reflect"
 	"sync"
 	"time"
 
@@ -17,13 +15,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
-	diskv1 "github.com/longhorn/node-disk-manager/pkg/apis/longhorn.io/v1beta1"
+	"github.com/longhorn/node-disk-manager/pkg/apis/longhorn.io/v1beta1"
 	"github.com/longhorn/node-disk-manager/pkg/block"
 	"github.com/longhorn/node-disk-manager/pkg/controller/blockdevice"
 	"github.com/longhorn/node-disk-manager/pkg/filter"
 	ctldiskv1 "github.com/longhorn/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta1"
 	"github.com/longhorn/node-disk-manager/pkg/option"
-	"github.com/longhorn/node-disk-manager/pkg/util"
 )
 
 const (
@@ -63,12 +60,12 @@ func (u *Udev) monitor(ctx context.Context) {
 
 	matcher, err := getOptionalMatcher(nil)
 	if err != nil {
-		logrus.Fatalf("failed to get udev config, error: %s", err.Error())
+		logrus.Fatalf("Failed to get udev config, error: %s", err.Error())
 	}
 
 	conn := new(netlink.UEventConn)
 	if err := conn.Connect(netlink.UdevEvent); err != nil {
-		logrus.Fatalf("unable to connect to Netlink Kobject UEvent socket, error: %s", err.Error())
+		logrus.Fatalf("Unable to connect to Netlink Kobject UEvent socket, error: %s", err.Error())
 	}
 	defer conn.Close()
 
@@ -92,99 +89,75 @@ func (u *Udev) monitor(ctx context.Context) {
 
 func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 	udevDevice := InitUdevDevice(uevent.Env)
-	disk := u.controller.BlockInfo.GetDiskByDevPath(udevDevice.GetShortName())
-	// ignore block device by filters
+	logrus.Infof("action handler:%s \n", pretty.Sprint(uevent))
+	if !udevDevice.IsDisk() && !udevDevice.IsPartition() {
+		return
+	}
+
+	disk := &block.Disk{}
+	part := &block.Partition{}
+	blockdevice := &v1beta1.BlockDevice{}
+	if udevDevice.IsDisk() {
+		disk = u.controller.BlockInfo.GetDiskByDevPath(udevDevice.GetShortName())
+		blockdevice = udevDevice.DeviceInfoFromUdevDisk(disk, u.nodeName, u.namespace)
+	} else {
+		parentPath, err := block.GetParentDevName(udevDevice.GetDevName())
+		logrus.Infof("debug: parent path %s", parentPath)
+		if err != nil {
+			logrus.Errorf("failed to get parent dev name, %s", err.Error())
+		}
+		part = u.controller.BlockInfo.GetPartitionByDevPath(parentPath, udevDevice.GetDevName())
+		disk = part.Disk
+		blockdevice = udevDevice.DeviceInfoFromUdevPartition(part, u.nodeName, u.namespace)
+	}
+
 	if u.controller.ApplyFilter(disk) {
 		return
 	}
 
-	if udevDevice.IsDisk() {
-		log.Println("Handle", pretty.Sprint(uevent))
-		switch uevent.Action {
-		case netlink.ADD:
-			u.AddBlockDevice(udevDevice, defaultDuration)
-		case netlink.REMOVE:
-			u.RemoveBlockDevice(udevDevice, defaultDuration)
-		case netlink.ONLINE:
-			u.UpdateBlockDevice(udevDevice, defaultDuration, uevent.Action)
-		case netlink.OFFLINE:
-			u.UpdateBlockDevice(udevDevice, defaultDuration, uevent.Action)
-		}
-	}
-}
-func (u *Udev) UpdateBlockDevice(device UdevDevice, duration time.Duration, action netlink.KObjAction) {
-	if duration > defaultDuration {
-		time.Sleep(duration)
-	}
-	logrus.Debugf("uevent update block deivce %s", device.GetPath())
-	devName := device.GetShortName()
-	bdName := util.GetBlockDeviceName(devName, u.nodeName)
-	disk := u.controller.BlockInfo.GetDiskByDevPath(devName)
-
-	bd, err := u.controller.BlockdeviceCache.Get(u.namespace, bdName)
-	if err != nil {
-		logrus.Errorf("failed to get block device %s, error: %s", bdName, err.Error())
-	}
-
-	bdCopy := bd.DeepCopy()
-	switch action {
-	case netlink.ONLINE:
-		bdCopy.Status.State = diskv1.BlockDeviceActive
-	case netlink.OFFLINE:
-		bdCopy.Status.State = diskv1.BlockDeviceInactive
-	default:
-		return
-	}
-
-	mounted := disk.FileSystemInfo.MountPoint != ""
-	diskv1.DeviceMounted.SetStatusBool(bdCopy, mounted)
-
-	if !reflect.DeepEqual(bd.Status, bdCopy.Status) {
-		if _, err := u.controller.Blockdevices.UpdateStatus(bdCopy); err != nil {
-			u.UpdateBlockDevice(device, 2*duration, action)
+	logrus.Println("Handle", pretty.Sprint(uevent))
+	switch uevent.Action {
+	//case netlink.ADD:
+	//	u.AddBlockDevice(blockdevice, defaultDuration)
+	case netlink.REMOVE:
+		if udevDevice.IsDisk() {
+			u.RemoveBlockDevice(blockdevice, defaultDuration)
 		}
 	}
 }
 
 // AddBlockDevice add new block device and partitions by watching the udev add action
-func (u *Udev) AddBlockDevice(device UdevDevice, duration time.Duration) {
+func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, duration time.Duration) {
 	if duration > defaultDuration {
 		time.Sleep(duration)
 	}
-	logrus.Debugf("uevent add block deivce %s", device.GetPath())
-
-	devName := device.GetShortName()
-	disk := u.controller.BlockInfo.GetDiskByDevPath(devName)
-	bds := blockdevice.GetNewBlockDevices(disk, u.nodeName, u.namespace)
+	logrus.Debugf("uevent add block deivce %s", device.Spec.DevPath)
 
 	bdList, err := u.controller.BlockdeviceCache.List(u.namespace, labels.Everything())
 	if err != nil {
-		logrus.Errorf("Failed to add block device via udev event, error: %s, retry in %s", err.Error(), duration.String())
+		logrus.Errorf("Failed to add block device via udev event, error: %s, retry in %s", err.Error(), 2*duration)
 		u.AddBlockDevice(device, 2*duration)
 	}
 
-	for _, bd := range bds {
-		if err := u.controller.SaveBlockDevice(bd, bdList); err != nil {
-			logrus.Errorf("failed to save block device %s, error: %s", bd.Name, err.Error())
-			u.AddBlockDevice(device, 2*defaultDuration)
-		}
+	if err := u.controller.SaveBlockDevice(device, bdList); err != nil {
+		logrus.Errorf("failed to save block device %s, error: %s", device.Name, err.Error())
+		//u.AddBlockDevice(device, 2*defaultDuration)
 	}
 }
 
 // RemoveBlockDevice will set the existing block device to detached state
-func (u *Udev) RemoveBlockDevice(device UdevDevice, duration time.Duration) {
+func (u *Udev) RemoveBlockDevice(device *v1beta1.BlockDevice, duration time.Duration) {
 	if duration > defaultDuration {
 		time.Sleep(duration)
 	}
-	logrus.Debugf("uevent remove block deivce %s", device.GetPath())
 
-	devName := device.GetShortName()
-	bdName := util.GetBlockDeviceName(devName, u.nodeName)
-	err := u.controller.Blockdevices.Delete(u.namespace, bdName, &metav1.DeleteOptions{})
+	logrus.Debugf("uevent remove block deivce %s", device.Spec.DevPath)
+
+	err := u.controller.Blockdevices.Delete(u.namespace, device.Name, &metav1.DeleteOptions{})
 	if err != nil && errors.IsNotFound(err) {
-		logrus.Errorf("failed to delete block device, %s is not found", bdName)
+		logrus.Errorf("failed to delete block device, %s is not found", device.Name)
 	} else if err != nil {
-		logrus.Errorf("faield to delete the block device %s, error: %s", bdName, err.Error())
+		logrus.Errorf("faield to delete the block device %s, error: %s", device.Name, err.Error())
 		u.RemoveBlockDevice(device, 2*duration)
 	}
 }

@@ -60,9 +60,23 @@ func (i *Info) GetDiskByDevPath(name string) *Disk {
 }
 
 func (i *Info) GetPartitionByDevPath(disk, part string) *Partition {
-	name := strings.TrimPrefix(disk, "/dev/")
+	disk = strings.TrimPrefix(disk, "/dev/")
+	part = strings.TrimPrefix(part, "/dev/")
 	paths := linuxpath.New(i.ctx)
-	return diskPartition(paths, name, part)
+	partition := diskPartition(paths, disk, part)
+	partition.Disk = getDisk(i.ctx, paths, disk)
+	return partition
+}
+
+func (i *Info) GetFileSystemInfoByDevPath(dname string) *FileSystemInfo {
+	dname = strings.TrimPrefix(dname, "/dev/")
+	paths := linuxpath.New(i.ctx)
+	mp, pt, ro := partitionInfo(paths, dname)
+	return &FileSystemInfo{
+		MountPoint: mp,
+		Type:       pt,
+		IsReadOnly: ro,
+	}
 }
 
 func diskPhysicalBlockSizeBytes(paths *linuxpath.Paths, disk string) uint64 {
@@ -239,7 +253,7 @@ func diskPartition(paths *linuxpath.Paths, disk, fname string) *Partition {
 		SizeBytes: size,
 		FileSystemInfo: FileSystemInfo{
 			MountPoint: mp,
-			FsType:     pt,
+			Type:       pt,
 			IsReadOnly: ro,
 		},
 		UUID:              du,
@@ -282,12 +296,12 @@ func getDisk(ctx *context.Context, paths *linuxpath.Paths, dname string) *Disk {
 	mp, pt, ro := partitionInfo(paths, dname)
 	fs := FileSystemInfo{
 		MountPoint: mp,
-		FsType:     pt,
+		Type:       pt,
 		IsReadOnly: ro,
 	}
 
-	if fs.FsType == "" {
-		fs.FsType = GetFileSystemType(dname)
+	if fs.Type == "" {
+		fs.Type = GetFileSystemType(dname)
 	}
 
 	d := &Disk{

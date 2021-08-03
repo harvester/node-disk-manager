@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	DeviceMounted   condition.Cond = "Mounted"
-	DeviceFormatted condition.Cond = "Formatted"
+	DeviceMounted    condition.Cond = "Mounted"
+	DeviceFormatting condition.Cond = "Formatting"
 )
 
 // +genclient
@@ -37,8 +37,7 @@ type BlockDeviceSpec struct {
 	// +kubebuilder:validation:Required
 	DevPath string `json:"devPath"`
 
-	// +optional
-	FileSystem *FilesystemInfo `json:"fileSystem,omitempty"`
+	FileSystem *FilesystemInfo `json:"fileSystem"`
 }
 
 type BlockDeviceStatus struct {

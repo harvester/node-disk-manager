@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/sirupsen/logrus"
 )
 
 var gptPartitionOptions = strings.Join([]string{
@@ -18,7 +20,8 @@ var gptPartitionOptions = strings.Join([]string{
 }, " ")
 
 // MakeGPTPartition making GPT partition table and creating partitions using parted in Linux
-func MakeGPTPartition(device string) error {
+func MakeGPTPartition(device, label string) error {
+	logrus.Infof("make gpt partition of device %s", device)
 	cmd := exec.Command("parted", "-s", device, gptPartitionOptions)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -26,12 +29,15 @@ func MakeGPTPartition(device string) error {
 	if err != nil {
 		return fmt.Errorf("%s", stderr.String())
 	}
-	return nil
+
+	// e2label dev/sda1 LABEL
+	return exec.Command("e2label", device, label).Run()
 }
 
-// MakeDiskFormatting making GPT partition table and creating partitions using parted in Linux
-func MakeDiskFormatting(device, fsType string) error {
-	cmd := exec.Command("mkfs.ext4", device)
+// MakeExt4DiskFormatting create ext4 filesystem formatting of the specified devPath
+func MakeExt4DiskFormatting(devPath string) error {
+	logrus.Infof("make ext4 format of the device %s", devPath)
+	cmd := exec.Command("mkfs.ext4", "-F", devPath)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	err := cmd.Run()
