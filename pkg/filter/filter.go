@@ -11,7 +11,7 @@ type Filter struct {
 	Interface FilterInterface
 }
 
-func SetDNMFilters(vendorString, pathString string) []*Filter {
+func SetNDMFilters(vendorString, pathString string) []*Filter {
 	logrus.Info("register ndm filters")
 	listFilter := make([]*Filter, 0)
 
