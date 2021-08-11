@@ -170,7 +170,7 @@ func run(opt *option.Option) error {
 
 	client := kubernetes.NewForConfigOrDie(kubeConfig)
 
-	filters := filter.SetDNMFilters(opt.VendorFilter, opt.PathFilter)
+	filters := filter.SetNDMFilters(opt.VendorFilter, opt.PathFilter)
 
 	leader.RunOrDie(ctx, "", "node-disk-manager", client, func(ctx context.Context) {
 		err = blockdevicev1.Register(ctx, lhs.Longhorn().V1beta1().BlockDevice(), block, opt, filters)
