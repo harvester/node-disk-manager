@@ -214,7 +214,7 @@ func (c *Controller) forceFormatDisk(device *diskv1.BlockDevice) (*diskv1.BlockD
 	// create a GUID partition table with a single partition only
 	if device.Status.DeviceStatus.Details.DeviceType == diskv1.DeviceTypeDisk {
 		// should never mount the parent device, using the first partition instead
-		if err := disk.MakeGPTPartition(device.Spec.DevPath, device.Name); err != nil {
+		if err := disk.MakeGPTPartition(device.Spec.DevPath); err != nil {
 			return device, err
 		}
 
@@ -255,7 +255,7 @@ func (c *Controller) forceFormatDisk(device *diskv1.BlockDevice) (*diskv1.BlockD
 	// make ext4 filesystem format of the partition disk
 	if device.Status.DeviceStatus.Details.DeviceType == diskv1.DeviceTypePart {
 		logrus.Debugf("make ext4 filesystem format of disk %s", device.Spec.DevPath)
-		if err := disk.MakeExt4DiskFormatting(device.Spec.DevPath); err != nil {
+		if err := disk.MakeExt4DiskFormatting(device.Spec.DevPath, device.Name); err != nil {
 			return device, err
 		}
 		diskv1.DeviceFormatting.SetStatus(device, "False")
