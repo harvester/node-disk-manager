@@ -232,7 +232,7 @@ func (c *Controller) forceFormatDisk(device *diskv1.BlockDevice) (*diskv1.BlockD
 
 		if bd == nil {
 			if _, err := c.Blockdevices.Create(partitionBlockDevice); err != nil {
-				logrus.Errorf("failed to create partion block device %s, %s", bd.Name, err.Error())
+				logrus.Errorf("failed to create partition block device %s, %s", bd.Name, err.Error())
 				return device, err
 			}
 		} else {
@@ -243,7 +243,7 @@ func (c *Controller) forceFormatDisk(device *diskv1.BlockDevice) (*diskv1.BlockD
 			diskv1.DeviceFormatting.Message(partitionBlockDevice, fmt.Sprintf("formatting disk partition %s with ext4 filesystem", toUpdate.Spec.DevPath))
 			fmt.Printf("debug to update %s: %+v\n", bd.Name, bd.Spec.FileSystem)
 			if _, err := c.Blockdevices.Update(toUpdate); err != nil {
-				logrus.Errorf("failed to update partion block device %s, %s", bd.Name, err.Error())
+				logrus.Errorf("failed to update partition block device %s, %s", bd.Name, err.Error())
 				return device, err
 			}
 
