@@ -173,7 +173,7 @@ func run(opt *option.Option) error {
 	filters := filter.SetNDMFilters(opt.VendorFilter, opt.PathFilter)
 
 	leader.RunOrDie(ctx, "", "node-disk-manager", client, func(ctx context.Context) {
-		err = blockdevicev1.Register(ctx, lhs.Longhorn().V1beta1().BlockDevice(), block, opt, filters)
+		err = blockdevicev1.Register(ctx, lhs.Longhorn().V1beta1().Node(), lhs.Longhorn().V1beta1().BlockDevice(), block, opt, filters)
 		if err != nil {
 			logrus.Fatalf("failed to register block device controller, %s", err.Error())
 		}
