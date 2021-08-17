@@ -114,8 +114,8 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 	}
 
 	switch uevent.Action {
-	//case netlink.ADD:
-	//	u.AddBlockDevice(blockdevice, defaultDuration)
+	case netlink.ADD:
+		u.AddBlockDevice(blockdevice, defaultDuration)
 	case netlink.REMOVE:
 		if udevDevice.IsDisk() {
 			u.RemoveBlockDevice(blockdevice, defaultDuration)
