@@ -15,21 +15,11 @@ var ext4MountOptions = strings.Join([]string{
 
 // MountDisk mounts the specified ext4 volume device to the specified path
 func MountDisk(devPath, mountPoint string) error {
-	_, err := os.Stat(mountPoint)
-	if err != nil && !os.IsNotExist(err) {
+	if err := os.MkdirAll(mountPoint, os.ModeDir); err != nil {
 		return err
 	}
 
-	if os.IsNotExist(err) {
-		if err := os.MkdirAll(mountPoint, os.ModeDir); err != nil {
-			return err
-		}
-	}
-
 	return mountExt4(devPath, mountPoint, false)
-
-	// UUID=39ea80c4-e748-47eb-835c-64025de53e26  /mnt/path  ext4 defaults 0 1
-
 }
 
 // UmountDisk unmounts the specified volume device to the specified path
