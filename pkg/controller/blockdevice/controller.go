@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	lhtypes "github.com/longhorn/longhorn-manager/types"
 	lhutil "github.com/longhorn/longhorn-manager/util"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -30,6 +31,9 @@ type Controller struct {
 	namespace string
 	nodeName  string
 
+	nodeCache ctldiskv1.NodeCache
+	nodes     ctldiskv1.NodeClient
+
 	Blockdevices     ctldiskv1.BlockDeviceController
 	BlockdeviceCache ctldiskv1.BlockDeviceCache
 	BlockInfo        *block.Info
@@ -37,11 +41,13 @@ type Controller struct {
 }
 
 // Register register the block device CRD controller
-func Register(ctx context.Context, bds ctldiskv1.BlockDeviceController, block *block.Info,
+func Register(ctx context.Context, nodes ctldiskv1.NodeController, bds ctldiskv1.BlockDeviceController, block *block.Info,
 	opt *option.Option, filters []*filter.Filter) error {
 	controller := &Controller{
 		namespace:        opt.Namespace,
 		nodeName:         opt.NodeName,
+		nodeCache:        nodes.Cache(),
+		nodes:            nodes,
 		Blockdevices:     bds,
 		BlockdeviceCache: bds.Cache(),
 		BlockInfo:        block,
@@ -117,10 +123,10 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 	if fs.ForceFormatted && fsStatus.LastFormattedAt == nil {
 		// perform disk force-format operation
 		if deviceCpy, err := c.forceFormatDisk(deviceCpy); err != nil {
-			logrus.Errorf("failed to force format the device %s, %s", device.Spec.DevPath, err.Error())
+			error := fmt.Errorf("failed to force format the device %s, %s", device.Spec.DevPath, err.Error())
+			logrus.Error(error)
 			diskv1.DeviceFormatting.SetStatusBool(deviceCpy, true)
-			diskv1.DeviceFormatting.SetError(deviceCpy, "", fmt.Errorf("failed to force format the block device %s, error: %s",
-				device.Spec.DevPath, err.Error()))
+			diskv1.DeviceFormatting.SetError(deviceCpy, "", error)
 			return c.Blockdevices.Update(deviceCpy)
 		}
 
@@ -132,9 +138,21 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 	// mount device by path, and skip mount partitioned device
 	if !deviceCpy.Status.DeviceStatus.Partitioned && fs.MountPoint != fsStatus.MountPoint {
 		if err := updateDeviceMount(deviceCpy.Spec.DevPath, fs.MountPoint, fsStatus.MountPoint); err != nil {
+			error := fmt.Errorf("failed to mount the device %s to path %s, error: %s", device.Spec.DevPath, fs.MountPoint, err.Error())
+			logrus.Error(error)
 			diskv1.DeviceMounted.SetStatusBool(deviceCpy, false)
-			diskv1.DeviceMounted.SetError(deviceCpy, "", fmt.Errorf("failed to mount the device %s to path %s, error: %s",
-				device.Spec.DevPath, fs.MountPoint, err.Error()))
+			diskv1.DeviceMounted.SetError(deviceCpy, "", error)
+			return c.Blockdevices.Update(deviceCpy)
+		}
+	}
+
+	if device.Status.DeviceStatus.Details.DeviceType == diskv1.DeviceTypePart && fs.MountPoint != "" {
+		if deviceCpy, err := c.addDeviceToNode(deviceCpy); err != nil {
+			error := fmt.Errorf("failed to add device %s to node %s on path %s", device.Name, c.nodeName, device.Spec.FileSystem.MountPoint)
+			logrus.Error(error)
+			diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
+			diskv1.DiskAddedToNode.SetError(deviceCpy, "", error)
+			diskv1.DiskAddedToNode.Message(deviceCpy, err.Error())
 			return c.Blockdevices.Update(deviceCpy)
 		}
 	}
@@ -167,6 +185,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 	}
 
 	if !reflect.DeepEqual(device, deviceCpy) {
+
 		if _, err := c.Blockdevices.Update(deviceCpy); err != nil {
 			return device, err
 		}
@@ -176,16 +195,16 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 }
 
 func updateDeviceMount(devPath, mountPoint, existingMount string) error {
-	logrus.Infof("mount dev %s to path %s", devPath, mountPoint)
 	// umount the previous path if exist
 	if existingMount != "" {
+		logrus.Debugf("start unmounting dev %s from path %s", devPath, mountPoint)
 		if err := disk.UmountDisk(existingMount); err != nil {
 			return err
 		}
 	}
 
 	if mountPoint != "" {
-		logrus.Debugf("mount disk %s to %s", devPath, mountPoint)
+		logrus.Debugf("start mounting disk %s to %s", devPath, mountPoint)
 		if err := disk.MountDisk(devPath, mountPoint); err != nil {
 			return err
 		}
@@ -264,6 +283,64 @@ func (c *Controller) forceFormatDisk(device *diskv1.BlockDevice) (*diskv1.BlockD
 	}
 
 	return device, nil
+}
+
+// addDeviceToNode adds a device to longhorn node as an additional disk.
+func (c *Controller) addDeviceToNode(device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
+	node, err := c.nodeCache.Get(c.namespace, c.nodeName)
+	if err != nil {
+		return device, err
+	}
+
+	mountPoint := device.Spec.FileSystem.MountPoint
+	if disk, ok := node.Spec.Disks[device.Name]; ok && disk.Path == mountPoint {
+		// Device exists and with the same mount point. No need to update.
+		return device, nil
+	}
+
+	nodeCpy := node.DeepCopy()
+	diskSpec := lhtypes.DiskSpec{
+		Path:              mountPoint,
+		AllowScheduling:   true,
+		EvictionRequested: false,
+		StorageReserved:   0, // TODO: shall we expose this field to user?
+		Tags:              []string{},
+	}
+	nodeCpy.Spec.Disks[device.Name] = diskSpec
+	if _, err = c.nodes.Update(nodeCpy); err != nil {
+		return device, err
+	}
+
+	msg := fmt.Sprintf("Added to longhorn node `%s` as an additional disk", nodeCpy.Name)
+	diskv1.DiskAddedToNode.SetStatusBool(device, true)
+	diskv1.DiskAddedToNode.SetError(device, "", nil)
+	diskv1.DiskAddedToNode.Message(device, msg)
+	return device, nil
+}
+
+// removeDeviceFromNode rmoves a device from a longhorn node.
+func (c *Controller) removeDeviceFromNode(device *diskv1.BlockDevice) error {
+	if !diskv1.DiskAddedToNode.IsTrue(device) {
+		return nil
+	}
+	node, err := c.nodeCache.Get(c.namespace, c.nodeName)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Skip since the node is not there.
+			return nil
+		}
+		return err
+	}
+	if _, ok := node.Spec.Disks[device.Name]; !ok {
+		logrus.Debugf("disk %s not found in disks of longhorn node %s/%s", device.Name, c.namespace, c.nodeName)
+		return nil
+	}
+	nodeCpy := node.DeepCopy()
+	delete(nodeCpy.Spec.Disks, device.Name)
+	if _, err := c.nodes.Update(nodeCpy); err != nil {
+		return err
+	}
+	return nil
 }
 
 func isValidFileSystem(fs *diskv1.FilesystemInfo, fsStatus *diskv1.FilesystemStatus) error {
@@ -345,6 +422,10 @@ func (c *Controller) OnBlockDeviceDelete(key string, device *diskv1.BlockDevice)
 	}
 
 	for _, bd := range bds {
+		// Remove disk from related node if needed
+		if err := c.removeDeviceFromNode(bd); err != nil {
+			return device, err
+		}
 		if err := c.Blockdevices.Delete(c.namespace, bd.Name, &metav1.DeleteOptions{}); err != nil {
 			return device, err
 		}

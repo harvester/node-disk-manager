@@ -10,6 +10,7 @@ import (
 var (
 	DeviceMounted    condition.Cond = "Mounted"
 	DeviceFormatting condition.Cond = "Formatting"
+	DiskAddedToNode  condition.Cond = "AddedToNode"
 )
 
 // +genclient
@@ -29,7 +30,7 @@ type BlockDevice struct {
 }
 
 type BlockDeviceSpec struct {
-	// a Node struct, describe the node details the BD is attached to
+	// name of the node to which the block device is attached
 	// +kubebuilder:validation:Required
 	NodeName string `json:"nodeName"`
 

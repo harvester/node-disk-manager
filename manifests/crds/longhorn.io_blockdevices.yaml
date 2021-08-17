@@ -70,8 +70,7 @@ spec:
                 - mountPoint
                 type: object
               nodeName:
-                description: a Node struct, describe the node details the BD is attached
-                  to
+                description: name of the node to which the block device is attached
                 type: string
             required:
             - devPath
