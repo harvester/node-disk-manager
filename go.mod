@@ -34,7 +34,6 @@ require (
 	github.com/ehazlett/simplelog v0.0.0-20200226020431-d374894e92a4
 	github.com/google/go-cmp v0.5.5 // indirect
 	github.com/jaypipes/ghw v0.8.1-0.20210701154532-dd036bd38c40
-	github.com/kr/pretty v0.2.1
 	github.com/longhorn/longhorn-manager v1.1.1
 	github.com/pilebones/go-udev v0.0.0-20210126000448-a3c2a7a4afb7
 	github.com/rancher/lasso v0.0.0-20210408231703-9ddd9378d08d
