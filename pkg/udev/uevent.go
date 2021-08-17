@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kr/pretty"
 	"github.com/pilebones/go-udev/netlink"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -89,7 +88,6 @@ func (u *Udev) monitor(ctx context.Context) {
 
 func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 	udevDevice := InitUdevDevice(uevent.Env)
-	logrus.Infof("action handler:%s \n", pretty.Sprint(uevent))
 	if !udevDevice.IsDisk() && !udevDevice.IsPartition() {
 		return
 	}
@@ -115,7 +113,6 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 		return
 	}
 
-	logrus.Println("Handle", pretty.Sprint(uevent))
 	switch uevent.Action {
 	//case netlink.ADD:
 	//	u.AddBlockDevice(blockdevice, defaultDuration)
