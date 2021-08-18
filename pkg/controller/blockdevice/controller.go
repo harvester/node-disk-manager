@@ -160,6 +160,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 	// fetch the latest device filesystem info
 	filesystem := c.BlockInfo.GetFileSystemInfoByDevPath(deviceCpy.Spec.DevPath)
 	deviceCpy.Status.DeviceStatus.FileSystem.Type = filesystem.Type
+	deviceCpy.Status.DeviceStatus.FileSystem.IsReadOnly = filesystem.IsReadOnly
 	deviceCpy.Status.DeviceStatus.FileSystem.MountPoint = fs.MountPoint
 
 	if filesystem.MountPoint != "" && filesystem.Type != "" {
