@@ -157,42 +157,50 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 		}
 	}
 
-	// fetch the latest device filesystem info
-	filesystem := c.BlockInfo.GetFileSystemInfoByDevPath(deviceCpy.Spec.DevPath)
-	deviceCpy.Status.DeviceStatus.FileSystem.Type = filesystem.Type
-	deviceCpy.Status.DeviceStatus.FileSystem.IsReadOnly = filesystem.IsReadOnly
-	deviceCpy.Status.DeviceStatus.FileSystem.MountPoint = fs.MountPoint
-
-	if filesystem.MountPoint != "" && filesystem.Type != "" {
-		err := isValidFileSystem(deviceCpy.Spec.FileSystem, deviceCpy.Status.DeviceStatus.FileSystem)
-		mounted := err == nil && filesystem.MountPoint != ""
-		diskv1.DeviceMounted.SetStatusBool(deviceCpy, mounted)
-		diskv1.DeviceMounted.SetError(deviceCpy, "", err)
-		if err != nil {
-			diskv1.DeviceMounted.Message(deviceCpy, err.Error())
-		}
-	} else if fs.MountPoint != "" && deviceCpy.Status.DeviceStatus.Partitioned {
-		diskv1.DeviceMounted.SetStatusBool(deviceCpy, false)
-		diskv1.DeviceMounted.SetError(deviceCpy, "", fmt.Errorf("cannot mount parent device with partitions"))
-	} else if fs.MountPoint == "" && fs.MountPoint == filesystem.MountPoint {
-		existingMount := deviceCpy.Status.DeviceStatus.FileSystem.MountPoint
-		if existingMount != "" {
-			if err := disk.UmountDisk(existingMount); err != nil {
-				return device, err
-			}
-		}
-		diskv1.DeviceMounted.SetStatus(deviceCpy, "False")
-		diskv1.DeviceMounted.SetError(deviceCpy, "", nil)
+	if err := c.updateFileSystemStatus(deviceCpy); err != nil {
+		return device, err
 	}
 
 	if !reflect.DeepEqual(device, deviceCpy) {
-
 		if _, err := c.Blockdevices.Update(deviceCpy); err != nil {
 			return device, err
 		}
 	}
 
 	return nil, nil
+}
+
+func (c *Controller) updateFileSystemStatus(device *diskv1.BlockDevice) error {
+	// fetch the latest device filesystem info
+	filesystem := c.BlockInfo.GetFileSystemInfoByDevPath(device.Spec.DevPath)
+	fs := *device.Spec.FileSystem
+	device.Status.DeviceStatus.FileSystem.Type = filesystem.Type
+	device.Status.DeviceStatus.FileSystem.IsReadOnly = filesystem.IsReadOnly
+	device.Status.DeviceStatus.FileSystem.MountPoint = fs.MountPoint
+
+	if filesystem.MountPoint != "" && filesystem.Type != "" {
+		err := isValidFileSystem(device.Spec.FileSystem, device.Status.DeviceStatus.FileSystem)
+		mounted := err == nil && filesystem.MountPoint != ""
+		diskv1.DeviceMounted.SetStatusBool(device, mounted)
+		diskv1.DeviceMounted.SetError(device, "", err)
+		if err != nil {
+			diskv1.DeviceMounted.Message(device, err.Error())
+		}
+	} else if fs.MountPoint != "" && device.Status.DeviceStatus.Partitioned {
+		diskv1.DeviceMounted.SetStatusBool(device, false)
+		diskv1.DeviceMounted.SetError(device, "", fmt.Errorf("cannot mount parent device with partitions"))
+	} else if fs.MountPoint == "" && fs.MountPoint == filesystem.MountPoint {
+		existingMount := device.Status.DeviceStatus.FileSystem.MountPoint
+		if existingMount != "" {
+			if err := disk.UmountDisk(existingMount); err != nil {
+				return err
+			}
+		}
+		diskv1.DeviceMounted.SetStatus(device, "False")
+		diskv1.DeviceMounted.SetError(device, "", nil)
+	}
+
+	return nil
 }
 
 func updateDeviceMount(devPath, mountPoint, existingMount string) error {
