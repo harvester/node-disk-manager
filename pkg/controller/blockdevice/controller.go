@@ -125,33 +125,33 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 		if deviceCpy, err := c.forceFormatDisk(deviceCpy); err != nil {
 			error := fmt.Errorf("failed to force format the device %s, %s", device.Spec.DevPath, err.Error())
 			logrus.Error(error)
-			diskv1.DeviceFormatting.SetStatusBool(deviceCpy, true)
 			diskv1.DeviceFormatting.SetError(deviceCpy, "", error)
+			diskv1.DeviceFormatting.SetStatusBool(deviceCpy, true)
 			return c.Blockdevices.Update(deviceCpy)
 		}
 
-		diskv1.DeviceFormatting.SetStatusBool(deviceCpy, false)
 		diskv1.DeviceFormatting.SetError(deviceCpy, "", nil)
+		diskv1.DeviceFormatting.SetStatusBool(deviceCpy, false)
 		deviceCpy.Status.DeviceStatus.FileSystem.LastFormattedAt = &metav1.Time{Time: time.Now()}
 	}
 
 	// mount device by path, and skip mount partitioned device
 	if !deviceCpy.Status.DeviceStatus.Partitioned && fs.MountPoint != fsStatus.MountPoint {
 		if err := updateDeviceMount(deviceCpy.Spec.DevPath, fs.MountPoint, fsStatus.MountPoint); err != nil {
-			error := fmt.Errorf("failed to mount the device %s to path %s, error: %s", device.Spec.DevPath, fs.MountPoint, err.Error())
-			logrus.Error(error)
+			err := fmt.Errorf("failed to mount the device %s to path %s, error: %s", device.Spec.DevPath, fs.MountPoint, err.Error())
+			logrus.Error(err)
+			diskv1.DeviceMounted.SetError(deviceCpy, "", err)
 			diskv1.DeviceMounted.SetStatusBool(deviceCpy, false)
-			diskv1.DeviceMounted.SetError(deviceCpy, "", error)
 			return c.Blockdevices.Update(deviceCpy)
 		}
 	}
 
 	if device.Status.DeviceStatus.Details.DeviceType == diskv1.DeviceTypePart && fs.MountPoint != "" {
 		if deviceCpy, err := c.addDeviceToNode(deviceCpy); err != nil {
-			error := fmt.Errorf("failed to add device %s to node %s on path %s", device.Name, c.nodeName, device.Spec.FileSystem.MountPoint)
-			logrus.Error(error)
+			err := fmt.Errorf("failed to add device %s to node %s on path %s", device.Name, c.nodeName, device.Spec.FileSystem.MountPoint)
+			logrus.Error(err)
+			diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
 			diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
-			diskv1.DiskAddedToNode.SetError(deviceCpy, "", error)
 			diskv1.DiskAddedToNode.Message(deviceCpy, err.Error())
 			return c.Blockdevices.Update(deviceCpy)
 		}
@@ -199,14 +199,14 @@ func (c *Controller) updateFileSystemStatus(device *diskv1.BlockDevice) error {
 	if filesystem.MountPoint != "" && filesystem.Type != "" {
 		err := isValidFileSystem(device.Spec.FileSystem, device.Status.DeviceStatus.FileSystem)
 		mounted := err == nil && filesystem.MountPoint != ""
-		diskv1.DeviceMounted.SetStatusBool(device, mounted)
 		diskv1.DeviceMounted.SetError(device, "", err)
+		diskv1.DeviceMounted.SetStatusBool(device, mounted)
 		if err != nil {
 			diskv1.DeviceMounted.Message(device, err.Error())
 		}
 	} else if fs.MountPoint != "" && device.Status.DeviceStatus.Partitioned {
-		diskv1.DeviceMounted.SetStatusBool(device, false)
 		diskv1.DeviceMounted.SetError(device, "", fmt.Errorf("cannot mount parent device with partitions"))
+		diskv1.DeviceMounted.SetStatusBool(device, false)
 	} else if fs.MountPoint == "" && fs.MountPoint == filesystem.MountPoint {
 		existingMount := device.Status.DeviceStatus.FileSystem.MountPoint
 		if existingMount != "" {
@@ -214,8 +214,8 @@ func (c *Controller) updateFileSystemStatus(device *diskv1.BlockDevice) error {
 				return err
 			}
 		}
-		diskv1.DeviceMounted.SetStatus(device, "False")
 		diskv1.DeviceMounted.SetError(device, "", nil)
+		diskv1.DeviceMounted.SetStatusBool(device, false)
 	}
 
 	return nil
@@ -270,7 +270,7 @@ func (c *Controller) forceFormatDisk(device *diskv1.BlockDevice) (*diskv1.BlockD
 		partitionBlockDevice.Spec.FileSystem.MountPoint = filesystem.MountPoint
 		partitionBlockDevice.Spec.FileSystem.ForceFormatted = true
 		bd, err := c.BlockdeviceCache.Get(device.Namespace, partitionBlockDevice.Name)
-		diskv1.DeviceFormatting.SetStatus(partitionBlockDevice, "True")
+		diskv1.DeviceFormatting.SetStatusBool(partitionBlockDevice, true)
 		diskv1.DeviceFormatting.Message(partitionBlockDevice, fmt.Sprintf("formatting disk partition %s with ext4 filesystem", partitionBlockDevice.Spec.DevPath))
 		if err != nil && !errors.IsNotFound(err) {
 			return device, err
@@ -285,7 +285,7 @@ func (c *Controller) forceFormatDisk(device *diskv1.BlockDevice) (*diskv1.BlockD
 			toUpdate := bd.DeepCopy()
 			toUpdate.Spec = partitionBlockDevice.Spec
 			toUpdate.Status = partitionBlockDevice.Status
-			diskv1.DeviceFormatting.SetStatus(toUpdate, "True")
+			diskv1.DeviceFormatting.SetStatusBool(toUpdate, true)
 			diskv1.DeviceFormatting.Message(partitionBlockDevice, fmt.Sprintf("formatting disk partition %s with ext4 filesystem", toUpdate.Spec.DevPath))
 			fmt.Printf("debug to update %s: %+v\n", bd.Name, bd.Spec.FileSystem)
 			if _, err := c.Blockdevices.Update(toUpdate); err != nil {
@@ -304,8 +304,8 @@ func (c *Controller) forceFormatDisk(device *diskv1.BlockDevice) (*diskv1.BlockD
 		if err := disk.MakeExt4DiskFormatting(device.Spec.DevPath, device.Name); err != nil {
 			return device, err
 		}
-		diskv1.DeviceFormatting.SetStatus(device, "False")
 		diskv1.DeviceFormatting.SetError(device, "", nil)
+		diskv1.DeviceFormatting.SetStatusBool(device, false)
 		diskv1.DeviceFormatting.Message(device, "Done device ext4 filesystem formatting")
 	}
 
@@ -339,8 +339,8 @@ func (c *Controller) addDeviceToNode(device *diskv1.BlockDevice) (*diskv1.BlockD
 	}
 
 	msg := fmt.Sprintf("Added disk %s to longhorn node `%s` as an additional disk", device.Name, nodeCpy.Name)
-	diskv1.DiskAddedToNode.SetStatusBool(device, true)
 	diskv1.DiskAddedToNode.SetError(device, "", nil)
+	diskv1.DiskAddedToNode.SetStatusBool(device, true)
 	diskv1.DiskAddedToNode.Message(device, msg)
 	return device, nil
 }
