@@ -66,7 +66,7 @@ func Register(ctx context.Context, nodes ctldiskv1.NodeController, bds ctldiskv1
 // RegisterNodeBlockDevices will scan the block devices on the node, and it will either create or update the block device
 func (c *Controller) RegisterNodeBlockDevices() error {
 	logrus.Infof("Register block devices of node: %s", c.nodeName)
-	bds := make([]*diskv1.BlockDevice, 0)
+	newBds := make([]*diskv1.BlockDevice, 0)
 
 	// list all the block devices
 	for _, disk := range c.BlockInfo.Disks {
@@ -76,34 +76,34 @@ func (c *Controller) RegisterNodeBlockDevices() error {
 		}
 
 		logrus.Infof("Found a block device /dev/%s", disk.Name)
-		blockDevices := GetNewBlockDevices(disk, c.nodeName, c.namespace)
-		bds = append(bds, blockDevices...)
+		bd := DeviceInfoFromDisk(disk, c.nodeName, c.namespace)
+		newBds = append(newBds, bd)
+
+		for _, part := range disk.Partitions {
+			bd := DeviceInfoFromPartition(part, c.nodeName, c.namespace)
+			newBds = append(newBds, bd)
+		}
 	}
 
-	bdList, err := c.Blockdevices.List(c.namespace, v1.ListOptions{})
+	oldBdList, err := c.Blockdevices.List(c.namespace, v1.ListOptions{})
 	if err != nil {
 		return err
 	}
 
+	oldBds := convertBlockDeviceListToMap(oldBdList)
+
 	// either create or update the block device
-	for _, bd := range bds {
-		if err := c.SaveBlockDeviceByList(bd, bdList); err != nil {
+	for _, bd := range newBds {
+		if err := c.SaveBlockDevice(bd, oldBds); err != nil {
 			return err
 		}
 	}
 
-	// clean up previous registered block device
-	for _, existingBD := range bdList.Items {
-		toDelete := true
-		for _, bd := range bds {
-			if existingBD.Name == bd.Name {
-				toDelete = false
-			}
-		}
-		if toDelete {
-			if err := c.Blockdevices.Delete(existingBD.Namespace, existingBD.Name, &metav1.DeleteOptions{}); err != nil {
-				return err
-			}
+	// This oldBds are leftover after running SaveBlockDevice.
+	// Clean up all previous registered block devices.
+	for _, oldBd := range oldBds {
+		if err := c.Blockdevices.Delete(oldBd.Namespace, oldBd.Name, &metav1.DeleteOptions{}); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -168,6 +168,24 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 	}
 
 	return nil, nil
+}
+
+func convertBlockDeviceListToMap(bdList *diskv1.BlockDeviceList) map[string]*diskv1.BlockDevice {
+	bds := make([]*diskv1.BlockDevice, 0, len(bdList.Items))
+	for _, bd := range bdList.Items {
+		bd := bd
+		bds = append(bds, &bd)
+	}
+	return ConvertBlockDevicesToMap(bds)
+}
+
+// ConvertBlockDevicesToMap converts a BlockDeviceList to a map with GUID (Name) as keys.
+func ConvertBlockDevicesToMap(bds []*diskv1.BlockDevice) map[string]*diskv1.BlockDevice {
+	bdMap := make(map[string]*diskv1.BlockDevice, len(bds))
+	for _, bd := range bds {
+		bdMap[bd.Name] = bd
+	}
+	return bdMap
 }
 
 func (c *Controller) updateFileSystemStatus(device *diskv1.BlockDevice) error {
@@ -248,7 +266,7 @@ func (c *Controller) forceFormatDisk(device *diskv1.BlockDevice) (*diskv1.BlockD
 
 		// create the single partition block device
 		part := c.BlockInfo.GetPartitionByDevPath(device.Spec.DevPath, device.Spec.DevPath+"1")
-		partitionBlockDevice := GetPartitionBlockDevice(part, device, c.nodeName)
+		partitionBlockDevice := DeviceInfoFromPartition(part, c.nodeName, c.namespace)
 		partitionBlockDevice.Spec.FileSystem.MountPoint = filesystem.MountPoint
 		partitionBlockDevice.Spec.FileSystem.ForceFormatted = true
 		bd, err := c.BlockdeviceCache.Get(device.Namespace, partitionBlockDevice.Name)
@@ -320,7 +338,7 @@ func (c *Controller) addDeviceToNode(device *diskv1.BlockDevice) (*diskv1.BlockD
 		return device, err
 	}
 
-	msg := fmt.Sprintf("Added to longhorn node `%s` as an additional disk", nodeCpy.Name)
+	msg := fmt.Sprintf("Added disk %s to longhorn node `%s` as an additional disk", device.Name, nodeCpy.Name)
 	diskv1.DiskAddedToNode.SetStatusBool(device, true)
 	diskv1.DiskAddedToNode.SetError(device, "", nil)
 	diskv1.DiskAddedToNode.Message(device, msg)
@@ -340,6 +358,7 @@ func (c *Controller) removeDeviceFromNode(device *diskv1.BlockDevice) error {
 		}
 		return err
 	}
+
 	if _, ok := node.Spec.Disks[device.Name]; !ok {
 		logrus.Debugf("disk %s not found in disks of longhorn node %s/%s", device.Name, c.namespace, c.nodeName)
 		return nil
@@ -368,50 +387,27 @@ func isValidFileSystem(fs *diskv1.FilesystemInfo, fsStatus *diskv1.FilesystemSta
 	return nil
 }
 
-func (c *Controller) SaveBlockDevice(blockDevice *diskv1.BlockDevice, bds []*diskv1.BlockDevice) error {
-	for _, existingBD := range bds {
-		if existingBD.Name == blockDevice.Name {
-			if !reflect.DeepEqual(existingBD, blockDevice) {
-				logrus.Infof("Update existing block device %s with devPath: %s", existingBD.Name, existingBD.Spec.DevPath)
-				toUpdate := existingBD.DeepCopy()
-				//toUpdate.Spec = blockDevice.Spec
-				toUpdate.Status.DeviceStatus = blockDevice.Status.DeviceStatus
-				if _, err := c.Blockdevices.Update(toUpdate); err != nil {
-					return err
-				}
+func (c *Controller) SaveBlockDevice(bd *diskv1.BlockDevice, oldBds map[string]*diskv1.BlockDevice) error {
+	if oldBd, ok := oldBds[bd.Name]; ok {
+		if !reflect.DeepEqual(oldBd, bd) {
+			logrus.Infof("Update existing block device %s with devPath: %s", oldBd.Name, oldBd.Spec.DevPath)
+			toUpdate := oldBd.DeepCopy()
+			toUpdate.Status.DeviceStatus = bd.Status.DeviceStatus
+			lastFormatted := oldBd.Status.DeviceStatus.FileSystem.LastFormattedAt
+			if lastFormatted != nil {
+				toUpdate.Status.DeviceStatus.FileSystem.LastFormattedAt = lastFormatted
 			}
-			return nil
-		}
-	}
-
-	logrus.Infof("Add new block device %s with device: %s", blockDevice.Name, blockDevice.Spec.DevPath)
-	if _, err := c.Blockdevices.Create(blockDevice); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *Controller) SaveBlockDeviceByList(blockDevice *diskv1.BlockDevice, bdList *diskv1.BlockDeviceList) error {
-	for _, existingBD := range bdList.Items {
-		if existingBD.Name == blockDevice.Name {
-			if !reflect.DeepEqual(existingBD, blockDevice) {
-				logrus.Infof("Update existing block device %s with device: %s", existingBD.Name, existingBD.Spec.DevPath)
-				toUpdate := existingBD.DeepCopy()
-				toUpdate.Status.DeviceStatus = blockDevice.Status.DeviceStatus
-				lastFormatted := existingBD.Status.DeviceStatus.FileSystem.LastFormattedAt
-				if lastFormatted != nil {
-					toUpdate.Status.DeviceStatus.FileSystem.LastFormattedAt = lastFormatted
-				}
-				if _, err := c.Blockdevices.Update(toUpdate); err != nil {
-					return err
-				}
+			if _, err := c.Blockdevices.Update(toUpdate); err != nil {
+				return err
 			}
-			return nil
 		}
+		// remove blockedevice from old device so we can delete missing devices afterward
+		delete(oldBds, bd.Name)
+		return nil
 	}
 
-	logrus.Infof("Add new block device %s with device: %s", blockDevice.Name, blockDevice.Spec.DevPath)
-	if _, err := c.Blockdevices.Create(blockDevice); err != nil {
+	logrus.Infof("Add new block device %s with device: %s", bd.Name, bd.Spec.DevPath)
+	if _, err := c.Blockdevices.Create(bd); err != nil {
 		return err
 	}
 	return nil
