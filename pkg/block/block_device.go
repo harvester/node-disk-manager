@@ -2,6 +2,8 @@ package block
 
 import (
 	"bufio"
+	"crypto/md5"
+	"encoding/hex"
 	"io"
 	"io/ioutil"
 	"os"
@@ -14,6 +16,7 @@ import (
 	"github.com/jaypipes/ghw/pkg/linuxpath"
 	"github.com/jaypipes/ghw/pkg/option"
 	"github.com/jaypipes/ghw/pkg/util"
+	"github.com/sirupsen/logrus"
 )
 
 // borrowed from https://github.com/jaypipes/ghw/blob/master/pkg/block/block_linux.go
@@ -493,4 +496,41 @@ func parseMountEntry(line string) *mountEntry {
 	opts := strings.Split(fields[3], ",")
 	res.Options = opts
 	return res
+}
+
+// GeneratePartitionGUID generates a GUID for partition.
+func GeneratePartitionGUID(part *Partition) string {
+	if valueExists(part.UUID) {
+		return makeHashGUID(part.UUID)
+	}
+	return ""
+}
+
+// GenerateDiskGUID generates a GUID for disks. Make sure the logic
+// synchronizes with generateDeviceGUID.
+func GenerateDiskGUID(disk *Disk) string {
+	var id string
+	if valueExists(disk.WWN) {
+		id = disk.WWN + disk.Vendor + disk.Model + disk.SerialNumber
+	} else if valueExists(disk.UUID) {
+		id = disk.UUID
+	} else if valueExists(disk.PtUUID) {
+		id = disk.PtUUID
+	} else {
+		logrus.Warnf("Cannot generate device GUID for /dev/%s", disk.Name)
+	}
+	if valueExists(id) {
+		return makeHashGUID(id)
+	}
+	return ""
+}
+
+func makeHashGUID(payload string) string {
+	hasher := md5.New()
+	hasher.Write([]byte(payload))
+	return hex.EncodeToString(hasher.Sum(nil))
+}
+
+func valueExists(value string) bool {
+	return len(value) > 0 && value != Unknown
 }
