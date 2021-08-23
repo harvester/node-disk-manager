@@ -94,10 +94,10 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 
 	disk := &block.Disk{}
 	part := &block.Partition{}
-	blockdevice := &v1beta1.BlockDevice{}
+	bd := &v1beta1.BlockDevice{}
 	if udevDevice.IsDisk() {
 		disk = u.controller.BlockInfo.GetDiskByDevPath(udevDevice.GetShortName())
-		blockdevice = udevDevice.DeviceInfoFromUdevDisk(disk, u.nodeName, u.namespace)
+		bd = blockdevice.DeviceInfoFromDisk(disk, u.nodeName, u.namespace)
 	} else {
 		parentPath, err := block.GetParentDevName(udevDevice.GetDevName())
 		logrus.Infof("debug: parent path %s", parentPath)
@@ -106,7 +106,7 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 		}
 		part = u.controller.BlockInfo.GetPartitionByDevPath(parentPath, udevDevice.GetDevName())
 		disk = part.Disk
-		blockdevice = udevDevice.DeviceInfoFromUdevPartition(part, u.nodeName, u.namespace)
+		bd = blockdevice.DeviceInfoFromPartition(part, u.nodeName, u.namespace)
 	}
 
 	if u.controller.ApplyFilter(disk) {
@@ -115,10 +115,10 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 
 	switch uevent.Action {
 	case netlink.ADD:
-		u.AddBlockDevice(blockdevice, defaultDuration)
+		u.AddBlockDevice(bd, defaultDuration)
 	case netlink.REMOVE:
 		if udevDevice.IsDisk() {
-			u.RemoveBlockDevice(blockdevice, defaultDuration)
+			u.RemoveBlockDevice(bd, defaultDuration)
 		}
 	}
 }
@@ -135,8 +135,9 @@ func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, duration time.Duratio
 		logrus.Errorf("Failed to add block device via udev event, error: %s, retry in %s", err.Error(), 2*duration)
 		u.AddBlockDevice(device, 2*duration)
 	}
+	oldBds := blockdevice.ConvertBlockDevicesToMap(bdList)
 
-	if err := u.controller.SaveBlockDevice(device, bdList); err != nil {
+	if err := u.controller.SaveBlockDevice(device, oldBds); err != nil {
 		logrus.Errorf("failed to save block device %s, error: %s", device.Name, err.Error())
 		//u.AddBlockDevice(device, 2*defaultDuration)
 	}

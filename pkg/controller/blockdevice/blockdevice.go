@@ -14,16 +14,41 @@ const (
 	DeviceTypeLabel   = "ndm.longhorn.io/device-type"
 )
 
-func GetNewBlockDevices(disk *block.Disk, nodeName, namespace string) []*longhornv1.BlockDevice {
-	bdList := make([]*longhornv1.BlockDevice, 0)
+func DeviceInfoFromDisk(disk *block.Disk, nodeName, namespace string) *longhornv1.BlockDevice {
 	fileSystemInfo := &longhornv1.FilesystemStatus{
 		MountPoint: disk.FileSystemInfo.MountPoint,
 		Type:       disk.FileSystemInfo.Type,
 		IsReadOnly: disk.FileSystemInfo.IsReadOnly,
 	}
-	parent := &longhornv1.BlockDevice{
+
+	status := longhornv1.BlockDeviceStatus{
+		State: longhornv1.BlockDeviceActive,
+		DeviceStatus: longhornv1.DeviceStatus{
+			Partitioned: block.HasPartitions(disk),
+			Capacity: longhornv1.DeviceCapcity{
+				SizeBytes:              disk.SizeBytes,
+				PhysicalBlockSizeBytes: disk.PhysicalBlockSizeBytes,
+			},
+			Details: longhornv1.DeviceDetails{
+				DeviceType:        longhornv1.DeviceTypeDisk,
+				DriveType:         disk.DriveType.String(),
+				IsRemovable:       disk.IsRemovable,
+				StorageController: disk.StorageController.String(),
+				UUID:              disk.UUID,
+				PtUUID:            disk.PtUUID,
+				BusPath:           disk.BusPath,
+				Model:             disk.Model,
+				Vendor:            disk.Vendor,
+				SerialNumber:      disk.SerialNumber,
+				NUMANodeID:        disk.NUMANodeID,
+				WWN:               disk.WWN,
+			},
+			FileSystem: fileSystemInfo,
+		},
+	}
+
+	bd := &longhornv1.BlockDevice{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      util.GetBlockDeviceName(disk.Name, nodeName),
 			Namespace: namespace,
 			Labels: map[string]string{
 				v1.LabelHostname: nodeName,
@@ -37,40 +62,17 @@ func GetNewBlockDevices(disk *block.Disk, nodeName, namespace string) []*longhor
 				MountPoint: fileSystemInfo.MountPoint,
 			},
 		},
-		Status: longhornv1.BlockDeviceStatus{
-			State: longhornv1.BlockDeviceActive,
-			DeviceStatus: longhornv1.DeviceStatus{
-				Partitioned: block.HasPartitions(disk),
-				Capacity: longhornv1.DeviceCapcity{
-					SizeBytes:              disk.SizeBytes,
-					PhysicalBlockSizeBytes: disk.PhysicalBlockSizeBytes,
-				},
-				Details: longhornv1.DeviceDetails{
-					DeviceType:        longhornv1.DeviceTypeDisk,
-					DriveType:         disk.DriveType.String(),
-					IsRemovable:       disk.IsRemovable,
-					StorageController: disk.StorageController.String(),
-					UUID:              disk.UUID,
-					PtUUID:            disk.PtUUID,
-					BusPath:           disk.BusPath,
-					Model:             disk.Model,
-					Vendor:            disk.Vendor,
-					SerialNumber:      disk.SerialNumber,
-					NUMANodeID:        disk.NUMANodeID,
-					WWN:               disk.WWN,
-				},
-				FileSystem: fileSystemInfo,
-			},
-		},
+		Status: status,
 	}
-	bdList = append(bdList, parent)
-	for _, part := range disk.Partitions {
-		bdList = append(bdList, GetPartitionBlockDevice(part, parent, nodeName))
+
+	if guid := block.GenerateDiskGUID(disk); len(guid) > 0 {
+		bd.ObjectMeta.Name = guid
 	}
-	return bdList
+
+	return bd
 }
 
-func GetPartitionBlockDevice(part *block.Partition, parentDevice *longhornv1.BlockDevice, nodeName string) *longhornv1.BlockDevice {
+func DeviceInfoFromPartition(part *block.Partition, nodeName, namespace string) *longhornv1.BlockDevice {
 	fileSystemInfo := &longhornv1.FilesystemStatus{
 		Type:       part.FileSystemInfo.Type,
 		MountPoint: part.FileSystemInfo.MountPoint,
@@ -80,7 +82,7 @@ func GetPartitionBlockDevice(part *block.Partition, parentDevice *longhornv1.Blo
 		DeviceStatus: longhornv1.DeviceStatus{
 			Capacity: longhornv1.DeviceCapcity{
 				SizeBytes:              part.SizeBytes,
-				PhysicalBlockSizeBytes: parentDevice.Status.DeviceStatus.Capacity.PhysicalBlockSizeBytes,
+				PhysicalBlockSizeBytes: part.Disk.PhysicalBlockSizeBytes,
 			},
 			Partitioned: false,
 			Details: longhornv1.DeviceDetails{
@@ -91,19 +93,17 @@ func GetPartitionBlockDevice(part *block.Partition, parentDevice *longhornv1.Blo
 				StorageController: part.StorageController.String(),
 			},
 			FileSystem:   fileSystemInfo,
-			ParentDevice: parentDevice.Spec.DevPath,
+			ParentDevice: util.GetFullDevPath(part.Disk.Name),
 		},
 		State: longhornv1.BlockDeviceActive,
 	}
 
-	return &longhornv1.BlockDevice{
+	bd := &longhornv1.BlockDevice{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      util.GetBlockDeviceName(part.Name, nodeName),
-			Namespace: parentDevice.Namespace,
+			Namespace: namespace,
 			Labels: map[string]string{
-				v1.LabelHostname:  nodeName,
-				ParentDeviceLabel: parentDevice.Name,
-				DeviceTypeLabel:   string(longhornv1.DeviceTypePart),
+				v1.LabelHostname: nodeName,
+				DeviceTypeLabel:  string(longhornv1.DeviceTypePart),
 			},
 		},
 		Spec: longhornv1.BlockDeviceSpec{
@@ -115,4 +115,14 @@ func GetPartitionBlockDevice(part *block.Partition, parentDevice *longhornv1.Blo
 		},
 		Status: status,
 	}
+
+	if parentDeviceName := block.GenerateDiskGUID(part.Disk); len(parentDeviceName) > 0 {
+		bd.ObjectMeta.Labels[ParentDeviceLabel] = parentDeviceName
+	}
+
+	if guid := block.GeneratePartitionGUID(part); len(guid) > 0 {
+		bd.ObjectMeta.Name = guid
+	}
+
+	return bd
 }
