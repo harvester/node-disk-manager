@@ -2,6 +2,8 @@ package udev
 
 import (
 	"strings"
+
+	"github.com/longhorn/node-disk-manager/pkg/block"
 )
 
 const (
@@ -9,16 +11,46 @@ const (
 	UDEV_PARTITION  = "partition" // used to filter out partitions
 	LINK_NAME_INDEX = 2           // this is used to get link index from dev link
 
-	UDEV_ID_PATH = "ID_PATH" // udev attribute to get device id path
-	UDEV_TYPE    = "ID_TYPE" // udev attribute to get device option
-	UDEV_DEVTYPE = "DEVTYPE" // udev attribute to get the device type
-	UDEV_DEVNAME = "DEVNAME" // udev attribute contain disk name given by kernel
+	UDEV_DEVNAME         = "DEVNAME"
+	UDEV_DEVTYPE         = "DEVTYPE"
+	UDEV_FS_UUID         = "ID_FS_UUID"
+	UDEV_ID_PATH         = "ID_PATH"
+	UDEV_MODEL           = "ID_MODEL"
+	UDEV_PART_ENTRY_TYPE = "ID_PART_ENTRY_TYPE"
+	UDEV_PART_ENTRY_UUID = "ID_PART_ENTRY_UUID"
+	UDEV_PART_TABLE_TYPE = "ID_PART_TABLE_TYPE"
+	UDEV_PART_TABLE_UUID = "ID_PART_TABLE_UUID"
+	UDEV_SERIAL_NUMBER   = "ID_SERIAL"
+	UDEV_TYPE            = "ID_TYPE"
+	UDEV_VENDOR          = "ID_VENDOR"
+	UDEV_WWN             = "ID_WWN"
 )
 
 type UdevDevice map[string]string
 
 func InitUdevDevice(udev map[string]string) UdevDevice {
 	return udev
+}
+
+func (device UdevDevice) updateDiskFromUdev(disk *block.Disk) {
+	if len(device[UDEV_FS_UUID]) > 0 {
+		disk.UUID = device[UDEV_FS_UUID]
+	}
+	if len(device[UDEV_PART_TABLE_UUID]) > 0 {
+		disk.PtUUID = device[UDEV_PART_TABLE_UUID]
+	}
+	if len(device[UDEV_MODEL]) > 0 {
+		disk.Model = device[UDEV_MODEL]
+	}
+	if len(UDEV_VENDOR) > 0 {
+		disk.Vendor = device[UDEV_VENDOR]
+	}
+	if len(device[UDEV_SERIAL_NUMBER]) > 0 {
+		disk.SerialNumber = device[UDEV_SERIAL_NUMBER]
+	}
+	if len(device[UDEV_WWN]) > 0 {
+		disk.WWN = device[UDEV_WWN]
+	}
 }
 
 // IsDisk check if device is a disk
