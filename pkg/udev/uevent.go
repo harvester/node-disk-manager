@@ -17,6 +17,7 @@ import (
 	"github.com/longhorn/node-disk-manager/pkg/apis/longhorn.io/v1beta1"
 	"github.com/longhorn/node-disk-manager/pkg/block"
 	"github.com/longhorn/node-disk-manager/pkg/controller/blockdevice"
+	"github.com/longhorn/node-disk-manager/pkg/disk"
 	"github.com/longhorn/node-disk-manager/pkg/filter"
 	ctldiskv1 "github.com/longhorn/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta1"
 	"github.com/longhorn/node-disk-manager/pkg/option"
@@ -118,7 +119,7 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 		u.AddBlockDevice(bd, defaultDuration)
 	case netlink.REMOVE:
 		if udevDevice.IsDisk() {
-			u.RemoveBlockDevice(bd, defaultDuration)
+			u.RemoveBlockDevice(bd, &udevDevice, disk, defaultDuration)
 		}
 	}
 }
@@ -128,7 +129,20 @@ func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, duration time.Duratio
 	if duration > defaultDuration {
 		time.Sleep(duration)
 	}
-	logrus.Debugf("uevent add block deivce %s", device.Spec.DevPath)
+	devPath := device.Spec.DevPath
+	logrus.Debugf("uevent add block deivce %s", devPath)
+
+	if len(device.ObjectMeta.Name) == 0 &&
+		// No device.Name means no WWN nor filesystem UUID for this device.
+		// To identify this device uniquely, we create a GPT table for it.
+		device.Status.DeviceStatus.Details.DeviceType == v1beta1.DeviceTypeDisk {
+		if err := disk.MakeGPTPartition(devPath); err != nil {
+			logrus.Errorf("failed to make GPT parition table for block device %s, error: %v", devPath, err)
+			return
+		}
+		disk := u.controller.BlockInfo.GetDiskByDevPath(devPath)
+		device = blockdevice.DeviceInfoFromDisk(disk, u.nodeName, u.namespace)
+	}
 
 	bdList, err := u.controller.BlockdeviceCache.List(u.namespace, labels.Everything())
 	if err != nil {
@@ -144,19 +158,24 @@ func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, duration time.Duratio
 }
 
 // RemoveBlockDevice will set the existing block device to detached state
-func (u *Udev) RemoveBlockDevice(device *v1beta1.BlockDevice, duration time.Duration) {
+func (u *Udev) RemoveBlockDevice(device *v1beta1.BlockDevice, udevDevice *UdevDevice, disk *block.Disk, duration time.Duration) {
 	if duration > defaultDuration {
 		time.Sleep(duration)
 	}
 
 	logrus.Debugf("uevent remove block deivce %s", device.Spec.DevPath)
 
+	udevDevice.updateDiskFromUdev(disk)
+	if guid := block.GenerateDiskGUID(disk); len(guid) > 0 {
+		device.ObjectMeta.Name = guid
+	}
+
 	err := u.controller.Blockdevices.Delete(u.namespace, device.Name, &metav1.DeleteOptions{})
 	if err != nil && errors.IsNotFound(err) {
 		logrus.Errorf("failed to delete block device, %s is not found", device.Name)
 	} else if err != nil {
 		logrus.Errorf("faield to delete the block device %s, error: %s", device.Name, err.Error())
-		u.RemoveBlockDevice(device, 2*duration)
+		u.RemoveBlockDevice(device, udevDevice, disk, 2*duration)
 	}
 }
 
