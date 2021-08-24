@@ -486,13 +486,16 @@ func isValidFileSystem(fs *diskv1.FilesystemInfo, fsStatus *diskv1.FilesystemSta
 }
 
 // SaveBlockDevice persists the blockedevice information. If oldBds contains a
-// blockedevice under the same name, it will only do an update, otherwise create
-// a new one.
+// blockedevice under the same name (GUID), it will only do an update, otherwise
+// create a new one.
+//
+// Note that this method also activate the device if it's previously inactive.
 func (c *Controller) SaveBlockDevice(bd *diskv1.BlockDevice, oldBds map[string]*diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
 	if oldBd, ok := oldBds[bd.Name]; ok {
 		if !reflect.DeepEqual(oldBd.Status.DeviceStatus, bd.Status.DeviceStatus) {
 			logrus.Infof("Update existing block device status %s with devPath: %s", oldBd.Name, oldBd.Spec.DevPath)
 			toUpdate := oldBd.DeepCopy()
+			toUpdate.Status.State = diskv1.BlockDeviceActive
 			toUpdate.Status.DeviceStatus = bd.Status.DeviceStatus
 			lastFormatted := oldBd.Status.DeviceStatus.FileSystem.LastFormattedAt
 			if lastFormatted != nil {
