@@ -146,15 +146,27 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 		}
 	}
 
-	if device.Status.DeviceStatus.Details.DeviceType == diskv1.DeviceTypePart && fs.MountPoint != "" {
-		if deviceCpy, err := c.addDeviceToNode(deviceCpy); err != nil {
-			err := fmt.Errorf("failed to add device %s to node %s on path %s", device.Name, c.nodeName, device.Spec.FileSystem.MountPoint)
-			logrus.Error(err)
-			diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
-			diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
-			diskv1.DiskAddedToNode.Message(deviceCpy, err.Error())
-			return c.Blockdevices.Update(deviceCpy)
-		}
+	if device.Status.DeviceStatus.Details.DeviceType == diskv1.DeviceTypePart {
+		switch {
+		case fs.MountPoint != "":
+			if deviceCpy, err := c.addDeviceToNode(deviceCpy); err != nil {
+				err := fmt.Errorf("failed to add device %s to node %s on path %s", device.Name, c.nodeName, device.Spec.FileSystem.MountPoint)
+				logrus.Error(err)
+				diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
+				diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
+				diskv1.DiskAddedToNode.Message(deviceCpy, err.Error())
+				return c.Blockdevices.Update(deviceCpy)
+			}
+		case fs.MountPoint == "":
+			if deviceCpy, err := c.removeDeviceFromNode(deviceCpy); err != nil {
+				err := fmt.Errorf("failed to remove device %s from node %s on path %s", device.Name, c.nodeName, device.Spec.FileSystem.MountPoint)
+				logrus.Error(err)
+				diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
+				diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
+				diskv1.DiskAddedToNode.Message(deviceCpy, err.Error())
+				return c.Blockdevices.Update(deviceCpy)
+			}
+		} 
 	}
 
 	if err := c.updateFileSystemStatus(deviceCpy); err != nil {
@@ -314,6 +326,12 @@ func (c *Controller) forceFormatDisk(device *diskv1.BlockDevice) (*diskv1.BlockD
 
 // addDeviceToNode adds a device to longhorn node as an additional disk.
 func (c *Controller) addDeviceToNode(device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
+	filesystem := c.BlockInfo.GetFileSystemInfoByDevPath(device.Spec.DevPath)
+	if filesystem == nil || filesystem.MountPoint == "" {
+		// No mount point. Skipping...
+		return device, nil
+	}
+
 	node, err := c.nodeCache.Get(c.namespace, c.nodeName)
 	if err != nil {
 		return device, err
@@ -346,29 +364,34 @@ func (c *Controller) addDeviceToNode(device *diskv1.BlockDevice) (*diskv1.BlockD
 }
 
 // removeDeviceFromNode rmoves a device from a longhorn node.
-func (c *Controller) removeDeviceFromNode(device *diskv1.BlockDevice) error {
+func (c *Controller) removeDeviceFromNode(device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
 	if !diskv1.DiskAddedToNode.IsTrue(device) {
-		return nil
+		return device, nil
 	}
 	node, err := c.nodeCache.Get(c.namespace, c.nodeName)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Skip since the node is not there.
-			return nil
+			return device, nil
 		}
-		return err
+		return device, err
 	}
 
 	if _, ok := node.Spec.Disks[device.Name]; !ok {
 		logrus.Debugf("disk %s not found in disks of longhorn node %s/%s", device.Name, c.namespace, c.nodeName)
-		return nil
+		return device, nil
 	}
 	nodeCpy := node.DeepCopy()
 	delete(nodeCpy.Spec.Disks, device.Name)
 	if _, err := c.nodes.Update(nodeCpy); err != nil {
-		return err
+		return device, err
 	}
-	return nil
+
+	msg := fmt.Sprintf("Removed disk %s from longhorn node `%s`", device.Name, nodeCpy.Name)
+	diskv1.DiskAddedToNode.SetError(device, "", nil)
+	diskv1.DiskAddedToNode.SetStatusBool(device, false)
+	diskv1.DiskAddedToNode.Message(device, msg)
+	return device, nil
 }
 
 func isValidFileSystem(fs *diskv1.FilesystemInfo, fsStatus *diskv1.FilesystemStatus) error {
@@ -428,7 +451,7 @@ func (c *Controller) OnBlockDeviceDelete(key string, device *diskv1.BlockDevice)
 
 	for _, bd := range bds {
 		// Remove disk from related node if needed
-		if err := c.removeDeviceFromNode(bd); err != nil {
+		if device, err := c.removeDeviceFromNode(bd); err != nil {
 			return device, err
 		}
 		if err := c.Blockdevices.Delete(c.namespace, bd.Name, &metav1.DeleteOptions{}); err != nil {
