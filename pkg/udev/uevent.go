@@ -125,6 +125,8 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 	case netlink.REMOVE:
 		if udevDevice.IsDisk() {
 			u.RemoveBlockDevice(bd, &udevDevice, disk, defaultDuration)
+		} else if udevDevice.IsPartition() {
+			u.deactivateBlockDevice(bd)
 		}
 	}
 }
@@ -180,8 +182,33 @@ func (u *Udev) RemoveBlockDevice(device *v1beta1.BlockDevice, udevDevice *Device
 	if err != nil && errors.IsNotFound(err) {
 		logrus.Errorf("failed to delete block device, %s is not found", device.Name)
 	} else if err != nil {
-		logrus.Errorf("faield to delete the block device %s, error: %s", device.Name, err.Error())
+		logrus.Errorf("failed to delete block device %s, error: %s", device.Name, err.Error())
 		u.RemoveBlockDevice(device, udevDevice, disk, 2*duration)
+	}
+}
+
+func (u *Udev) deactivateBlockDevice(device *v1beta1.BlockDevice) {
+	bd, err := u.controller.BlockdeviceCache.Get(u.namespace, device.Name)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Do nothing since the device has already be deleted.
+			return
+		}
+
+		logrus.Errorf("failed to deactivate block device %s, error: %s", device.Name, err.Error())
+		return
+	}
+	if bd.Status.State == v1beta1.BlockDeviceInactive {
+		// Already inactive. Skip...
+		return
+	}
+
+	logrus.Debugf("deactivate block deivce %s on path %s", bd.Name, bd.Spec.DevPath)
+
+	deviceCpy := bd.DeepCopy()
+	deviceCpy.Status.State = v1beta1.BlockDeviceInactive
+	if _, err := u.controller.Blockdevices.Update(deviceCpy); err != nil && !errors.IsNotFound(err) {
+		logrus.Errorf("failed to deactivate block device %s, error: %s", device.Name, err.Error())
 	}
 }
 
