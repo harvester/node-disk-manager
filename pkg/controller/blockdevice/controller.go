@@ -37,12 +37,12 @@ type Controller struct {
 
 	Blockdevices     ctldiskv1.BlockDeviceClient
 	BlockdeviceCache ctldiskv1.BlockDeviceCache
-	BlockInfo        *block.Info
+	BlockInfo        block.Info
 	Filters          []*filter.Filter
 }
 
 // Register register the block device CRD controller
-func Register(ctx context.Context, nodes ctllonghornv1.NodeController, bds ctldiskv1.BlockDeviceController, block *block.Info,
+func Register(ctx context.Context, nodes ctllonghornv1.NodeController, bds ctldiskv1.BlockDeviceController, block block.Info,
 	opt *option.Option, filters []*filter.Filter) error {
 	controller := &Controller{
 		namespace:        opt.Namespace,
@@ -70,7 +70,7 @@ func (c *Controller) RegisterNodeBlockDevices() error {
 	newBds := make([]*diskv1.BlockDevice, 0)
 
 	// list all the block devices
-	for _, disk := range c.BlockInfo.Disks {
+	for _, disk := range c.BlockInfo.GetDisks() {
 		// ignore block device by filters
 		if c.ApplyFilter(disk) {
 			continue

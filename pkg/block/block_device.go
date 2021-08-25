@@ -32,36 +32,52 @@ const (
 type UUIDType string
 
 // Info describes all disk drives and partitions in the host system.
-type Info struct {
+type Info interface {
+	GetDisks() []*Disk
+	GetPartitions() []*Partition
+	GetDiskByDevPath(name string) *Disk
+	GetPartitionByDevPath(disk, part string) *Partition
+	GetFileSystemInfoByDevPath(dname string) *FileSystemInfo
+}
+
+type infoImpl struct {
 	ctx        *context.Context
 	Disks      []*Disk      `json:"disks"`
 	Partitions []*Partition `json:"-"`
 }
 
-// New returns a pointer to an Info struct that describes the block storage
-// resources of the host system.
-func New(opts ...*option.Option) (*Info, error) {
+// New returns a pointer to an Info implementation that describes the block
+// storage resources of the host system.
+func New(opts ...*option.Option) (Info, error) {
 	ctx := context.New(opts...)
-	info := &Info{ctx: ctx}
+	info := &infoImpl{ctx: ctx}
 	if err := ctx.Do(info.load); err != nil {
 		return nil, err
 	}
 	return info, nil
 }
 
-func (i *Info) load() error {
+func (i *infoImpl) load() error {
 	paths := linuxpath.New(i.ctx)
 	i.Disks = disks(i.ctx, paths)
 	return nil
 }
 
-func (i *Info) GetDiskByDevPath(name string) *Disk {
+func (i *infoImpl) GetDisks() []*Disk {
+	return i.Disks
+}
+
+func (i *infoImpl) GetPartitions() []*Partition {
+	return i.Partitions
+}
+
+func (i *infoImpl) GetDiskByDevPath(name string) *Disk {
 	name = strings.TrimPrefix(name, "/dev/")
 	paths := linuxpath.New(i.ctx)
 	return getDisk(i.ctx, paths, name)
 }
 
-func (i *Info) GetPartitionByDevPath(disk, part string) *Partition {
+func (i *infoImpl) GetPartitionByDevPath(disk, part string) *Partition {
 	disk = strings.TrimPrefix(disk, "/dev/")
 	part = strings.TrimPrefix(part, "/dev/")
 	paths := linuxpath.New(i.ctx)
@@ -70,7 +86,7 @@ func (i *Info) GetPartitionByDevPath(disk, part string) *Partition {
 	return partition
 }
 
-func (i *Info) GetFileSystemInfoByDevPath(dname string) *FileSystemInfo {
+func (i *infoImpl) GetFileSystemInfoByDevPath(dname string) *FileSystemInfo {
 	dname = strings.TrimPrefix(dname, "/dev/")
 	paths := linuxpath.New(i.ctx)
 	mp, pt, ro := partitionInfo(paths, dname)
