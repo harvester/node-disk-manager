@@ -34,7 +34,7 @@ type Udev struct {
 	controller *blockdevice.Controller
 }
 
-func NewUdev(block *block.Info, blockdevices ctldiskv1.BlockDeviceController, opt *option.Option, filters []*filter.Filter) *Udev {
+func NewUdev(block block.Info, blockdevices ctldiskv1.BlockDeviceController, opt *option.Option, filters []*filter.Filter) *Udev {
 	controller := &blockdevice.Controller{
 		BlockInfo:        block,
 		Blockdevices:     blockdevices,
