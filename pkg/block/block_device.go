@@ -493,7 +493,7 @@ type mountEntry struct {
 func parseMountEntry(line string) *mountEntry {
 	// mount entries for mounted partitions look like this:
 	// /dev/sda6 / ext4 rw,relatime,errors=remount-ro,data=ordered 0 0
-	if line[0] != '/' {
+	if len(line) == 0 || line[0] != '/' {
 		return nil
 	}
 	fields := strings.Fields(line)

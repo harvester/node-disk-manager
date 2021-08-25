@@ -6,6 +6,57 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func Test_ParseMountEntry(t *testing.T) {
+	var testCases = []struct {
+		name     string
+		given    string
+		expected *mountEntry
+	}{
+		{
+			name:     "empty",
+			given:    "",
+			expected: nil,
+		},
+		{
+			name:     "missing leading slash",
+			given:    "🤡",
+			expected: nil,
+		},
+		{
+			name:     "missing mount options",
+			given:    "/dev/sda1 /mnt/sda1 ext4",
+			expected: nil,
+		},
+		{
+			name:  "simple mount entry",
+			given: "/dev/sda1 /mnt/sda1 ext4 rw,relatime",
+			expected: &mountEntry{
+				Partition:      "/dev/sda1",
+				Mountpoint:     "/mnt/sda1",
+				FilesystemType: "ext4",
+				Options:        []string{"rw", "relatime"},
+			},
+		},
+		{
+			name:  "whitespace encoding",
+			given: "/dev/sda1 /mnt/\\011\\012\\040\\\\ ext4 rw,relatime",
+			expected: &mountEntry{
+				Partition:      "/dev/sda1",
+				Mountpoint:     "/mnt/\t\n \\",
+				FilesystemType: "ext4",
+				Options:        []string{"rw", "relatime"},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := parseMountEntry(tc.given)
+			assert.Equal(t, tc.expected, entry)
+		})
+	}
+}
+
 func Test_GenerateDiskGUID(t *testing.T) {
 	var testCases = []struct {
 		name     string
