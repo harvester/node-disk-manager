@@ -5,10 +5,6 @@ import (
 	"strings"
 )
 
-func GetBlockDeviceName(deviceName, nodeName string) string {
-	return fmt.Sprintf("%s-%s", deviceName, nodeName)
-}
-
 func GetFullDevPath(shortPath string) string {
 	if shortPath == "" {
 		return ""

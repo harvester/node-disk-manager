@@ -166,7 +166,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 				diskv1.DiskAddedToNode.Message(deviceCpy, err.Error())
 				return c.Blockdevices.Update(deviceCpy)
 			}
-		} 
+		}
 	}
 
 	if err := c.updateFileSystemStatus(deviceCpy); err != nil {
