@@ -16,7 +16,6 @@ import (
 	"github.com/jaypipes/ghw/pkg/linuxpath"
 	"github.com/jaypipes/ghw/pkg/option"
 	"github.com/jaypipes/ghw/pkg/util"
-	"github.com/sirupsen/logrus"
 )
 
 // borrowed from https://github.com/jaypipes/ghw/blob/master/pkg/block/block_linux.go
@@ -516,8 +515,6 @@ func GenerateDiskGUID(disk *Disk) string {
 		id = disk.UUID
 	} else if valueExists(disk.PtUUID) {
 		id = disk.PtUUID
-	} else {
-		logrus.Warnf("Cannot generate device GUID for /dev/%s", disk.Name)
 	}
 	if valueExists(id) {
 		return makeHashGUID(id)
