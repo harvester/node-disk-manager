@@ -551,7 +551,19 @@ func GenerateDiskGUID(disk *Disk) string {
 	return ""
 }
 
-func makeHashGUID(payload string) string {
+var makeHashGUID = md5Hash
+
+func setMakeHashGUIDForTesting() {
+	makeHashGUID = func(s string) string {
+		return s
+	}
+}
+
+func resetMakeHashGUIDForTesting() {
+	makeHashGUID = md5Hash
+}
+
+func md5Hash(payload string) string {
 	hasher := md5.New()
 	hasher.Write([]byte(payload))
 	return hex.EncodeToString(hasher.Sum(nil))
