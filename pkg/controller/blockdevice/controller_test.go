@@ -225,6 +225,182 @@ func Test_addDeivceToNode(t *testing.T) {
 	}
 }
 
+func Test_removeDeivceFromNode(t *testing.T) {
+	type input struct {
+		node  *longhornv1.Node
+		conds []diskv1.Condition
+		disks map[string]lhtypes.DiskSpec
+	}
+	type output struct {
+		conds []diskv1.Condition
+		disks map[string]lhtypes.DiskSpec
+	}
+
+	bd := diskv1.BlockDevice{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: deviceName,
+		},
+		Spec: diskv1.BlockDeviceSpec{
+			DevPath: devPath,
+			FileSystem: &diskv1.FilesystemInfo{
+				MountPoint: mountPoint,
+			},
+		},
+	}
+
+	node := longhornv1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nodeName,
+			Namespace: namespace,
+		},
+		Spec: lhtypes.NodeSpec{
+			Disks: map[string]lhtypes.DiskSpec{},
+		},
+	}
+
+	disks := map[string]lhtypes.DiskSpec{deviceName: {Path: mountPoint}}
+	conds := []diskv1.Condition{
+		{
+			Type:    diskv1.DiskAddedToNode,
+			Status:  "True",
+			Message: fmt.Sprintf("Added disk %s to longhorn node `%s` as an additional disk", deviceName, nodeName),
+		},
+	}
+
+	var testCases = []struct {
+		name     string
+		given    input
+		expected output
+	}{
+		{
+			name: "AddedToNode.Status with False should return without error",
+			given: input{
+				node: node.DeepCopy(),
+				conds: []diskv1.Condition{
+					{
+						Type:    diskv1.DiskAddedToNode,
+						Status:  "False",
+						Message: "Make this unique",
+					},
+				},
+				disks: disks,
+			},
+			expected: output{
+				conds: []diskv1.Condition{
+					{
+						Type:    diskv1.DiskAddedToNode,
+						Status:  "False",
+						Message: "Make this unique",
+					},
+				},
+				disks: disks,
+			},
+		},
+		{
+			name: "without condition AddedToNode should return without error",
+			given: input{
+				node: node.DeepCopy(),
+				conds: []diskv1.Condition{
+					{
+						Type:    diskv1.DeviceFormatting,
+						Status:  "False",
+						Message: "Make this unique",
+					},
+				},
+				disks: disks,
+			},
+			expected: output{
+				conds: []diskv1.Condition{
+					{
+						Type:    diskv1.DeviceFormatting,
+						Status:  "False",
+						Message: "Make this unique",
+					},
+				},
+				disks: disks,
+			},
+		},
+		{
+			name: "node not found should return wihtout error",
+			given: input{
+				node:  nil,
+				conds: conds,
+				disks: nil,
+			},
+			expected: output{
+				conds: conds,
+				disks: nil,
+			},
+		},
+		{
+			name: "disk not found should return without error",
+			given: input{
+				node:  node.DeepCopy(),
+				conds: conds,
+				disks: map[string]lhtypes.DiskSpec{},
+			},
+			expected: output{
+				conds: conds,
+				disks: map[string]lhtypes.DiskSpec{},
+			},
+		},
+		{
+			name: "remove successfully",
+			given: input{
+				node:  node.DeepCopy(),
+				conds: conds,
+				disks: disks,
+			},
+			expected: output{
+				conds: conds,
+				disks: map[string]lhtypes.DiskSpec{},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Arrange
+			var clientset = fake.NewSimpleClientset()
+			if tc.given.node != nil {
+				tc.given.node.Spec.Disks = tc.given.disks
+				err := clientset.Tracker().Add(tc.given.node)
+				assert.Nil(t, err, "mock resource should add into fake controller tracker")
+			}
+			bd := bd.DeepCopy()
+			bd.Status.Conditions = tc.given.conds
+			ctrl := &Controller{
+				Namespace: namespace,
+				NodeName:  nodeName,
+				NodeCache: fakeclients.NodeCache(clientset.LonghornV1beta1().Nodes),
+				Nodes:     fakeclients.NodeClient(clientset.LonghornV1beta1().Nodes),
+			}
+
+			// Act
+			outputBd, err := ctrl.removeDeviceFromNode(bd)
+
+			// Assert
+			var actual output
+			actual.conds = outputBd.Status.Conditions
+			assert.Nil(t, err, "removeDeviceFromNode should return no error")
+			assert.Equal(t, len(tc.expected.conds), len(actual.conds), "case %q", tc.name)
+			if len(tc.expected.conds) > 0 {
+				exp := tc.expected.conds[0]
+				got := actual.conds[0]
+				assert.Equal(t, exp.Message, got.Message, "case %q", tc.name)
+				assert.Equal(t, exp.Type, got.Type, "case %q", tc.name)
+				assert.Equal(t, exp.Status, got.Status, "case %q", tc.name)
+			}
+			if tc.given.node != nil {
+				outputNode, err := ctrl.NodeCache.Get(namespace, nodeName)
+				actual.disks = outputNode.Spec.Disks
+				assert.Nil(t, err, "Get should return no error")
+				assert.Equal(t, tc.expected.disks, actual.disks, "case %q", tc.name)
+			}
+		})
+	}
+}
+
 type fakeInfo struct {
 	mock.Mock
 }
