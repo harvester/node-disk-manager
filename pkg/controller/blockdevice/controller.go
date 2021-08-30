@@ -35,7 +35,7 @@ type Controller struct {
 	nodeCache ctllonghornv1.NodeCache
 	nodes     ctllonghornv1.NodeClient
 
-	Blockdevices     ctldiskv1.BlockDeviceController
+	Blockdevices     ctldiskv1.BlockDeviceClient
 	BlockdeviceCache ctldiskv1.BlockDeviceCache
 	BlockInfo        *block.Info
 	Filters          []*filter.Filter
@@ -95,9 +95,12 @@ func (c *Controller) RegisterNodeBlockDevices() error {
 
 	// either create or update the block device
 	for _, bd := range newBds {
-		if err := c.SaveBlockDevice(bd, oldBds); err != nil {
+		bd, err := c.SaveBlockDevice(bd, oldBds)
+		if err != nil {
 			return err
 		}
+		// remove blockdevice from old device so we can delete missing devices afterward
+		delete(oldBds, bd.Name)
 	}
 
 	// This oldBds are leftover after running SaveBlockDevice.
@@ -411,7 +414,10 @@ func isValidFileSystem(fs *diskv1.FilesystemInfo, fsStatus *diskv1.FilesystemSta
 	return nil
 }
 
-func (c *Controller) SaveBlockDevice(bd *diskv1.BlockDevice, oldBds map[string]*diskv1.BlockDevice) error {
+// SaveBlockDevice persists the blockedevice information. If oldBds contains a
+// blockedevice under the same name, it will only do an update, otherwise create
+// a new one.
+func (c *Controller) SaveBlockDevice(bd *diskv1.BlockDevice, oldBds map[string]*diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
 	if oldBd, ok := oldBds[bd.Name]; ok {
 		if !reflect.DeepEqual(oldBd, bd) {
 			logrus.Infof("Update existing block device %s with devPath: %s", oldBd.Name, oldBd.Spec.DevPath)
@@ -421,20 +427,13 @@ func (c *Controller) SaveBlockDevice(bd *diskv1.BlockDevice, oldBds map[string]*
 			if lastFormatted != nil {
 				toUpdate.Status.DeviceStatus.FileSystem.LastFormattedAt = lastFormatted
 			}
-			if _, err := c.Blockdevices.Update(toUpdate); err != nil {
-				return err
-			}
+			return c.Blockdevices.Update(toUpdate)
 		}
-		// remove blockedevice from old device so we can delete missing devices afterward
-		delete(oldBds, bd.Name)
-		return nil
+		return oldBd, nil
 	}
 
 	logrus.Infof("Add new block device %s with device: %s", bd.Name, bd.Spec.DevPath)
-	if _, err := c.Blockdevices.Create(bd); err != nil {
-		return err
-	}
-	return nil
+	return c.Blockdevices.Create(bd)
 }
 
 // OnBlockDeviceDelete will delete the block devices that belongs to the same parent device
