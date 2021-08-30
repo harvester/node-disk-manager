@@ -16,7 +16,7 @@ import (
 type Controller struct {
 	namespace string
 
-	BlockDevices     ctldiskv1.BlockDeviceController
+	BlockDevices     ctldiskv1.BlockDeviceClient
 	BlockDeviceCache ctldiskv1.BlockDeviceCache
 	Nodes            ctllonghornv1.NodeController
 }

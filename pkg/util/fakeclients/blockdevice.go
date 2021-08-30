@@ -54,7 +54,17 @@ func (c BlockeDeviceCache) Get(namespace, name string) (*diskv1.BlockDevice, err
 }
 
 func (c BlockeDeviceCache) List(namespace string, selector labels.Selector) ([]*diskv1.BlockDevice, error) {
-	panic("implement me")
+	list, err := c(namespace).List(context.TODO(), metav1.ListOptions{
+		LabelSelector: selector.String(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*diskv1.BlockDevice, 0, len(list.Items))
+	for _, bd := range list.Items {
+		result = append(result, &bd)
+	}
+	return result, err
 }
 
 func (c BlockeDeviceCache) AddIndexer(indexName string, indexer ctlharvesterv1.BlockDeviceIndexer) {
