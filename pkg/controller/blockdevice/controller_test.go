@@ -24,6 +24,163 @@ const (
 	mountPoint = "/mnt/mymountpoint"
 )
 
+func Test_SaveBlockDevice(t *testing.T) {
+	type input struct {
+		oldBds map[string]*diskv1.BlockDevice
+		bd     *diskv1.BlockDevice
+	}
+	type output struct {
+		bd *diskv1.BlockDevice
+	}
+
+	var testCases = []struct {
+		name     string
+		given    input
+		expected output
+	}{
+		{
+			name: "create one",
+			given: input{
+				oldBds: map[string]*diskv1.BlockDevice{},
+				bd: &diskv1.BlockDevice{
+					ObjectMeta: metav1.ObjectMeta{Name: deviceName, Namespace: namespace},
+				},
+			},
+			expected: output{
+				bd: &diskv1.BlockDevice{
+					ObjectMeta: metav1.ObjectMeta{Name: deviceName, Namespace: namespace},
+				},
+			},
+		},
+		{
+			name: "update one",
+			given: input{
+				oldBds: map[string]*diskv1.BlockDevice{
+					deviceName: {
+						ObjectMeta: metav1.ObjectMeta{Name: deviceName, Namespace: namespace},
+						Spec: diskv1.BlockDeviceSpec{
+							NodeName:   nodeName,
+							DevPath:    devPath,
+							FileSystem: &diskv1.FilesystemInfo{},
+						},
+						Status: diskv1.BlockDeviceStatus{
+							State:      diskv1.BlockDeviceInactive,
+							Conditions: []diskv1.Condition{},
+							DeviceStatus: diskv1.DeviceStatus{
+								ParentDevice: "/dev/my-old-parent",
+								Partitioned:  false,
+								FileSystem: &diskv1.FilesystemStatus{
+									LastFormattedAt: &metav1.Time{},
+								},
+							},
+						},
+					},
+				},
+				bd: &diskv1.BlockDevice{
+					ObjectMeta: metav1.ObjectMeta{Name: deviceName, Namespace: namespace},
+					Spec: diskv1.BlockDeviceSpec{
+						NodeName:   "device-name-from-nowhere",
+						DevPath:    "/dev/from-nowhere",
+						FileSystem: &diskv1.FilesystemInfo{},
+					},
+					Status: diskv1.BlockDeviceStatus{
+						State:      diskv1.BlockDeviceActive,
+						Conditions: []diskv1.Condition{},
+						DeviceStatus: diskv1.DeviceStatus{
+							ParentDevice: "/dev/my-new-parent",
+							Partitioned:  true,
+							FileSystem:   &diskv1.FilesystemStatus{},
+						},
+					},
+				},
+			},
+			expected: output{
+				bd: &diskv1.BlockDevice{
+					ObjectMeta: metav1.ObjectMeta{Name: deviceName, Namespace: namespace},
+					Spec: diskv1.BlockDeviceSpec{
+						NodeName:   nodeName,
+						DevPath:    devPath,
+						FileSystem: &diskv1.FilesystemInfo{},
+					},
+					Status: diskv1.BlockDeviceStatus{
+						State:      diskv1.BlockDeviceInactive,
+						Conditions: []diskv1.Condition{},
+						DeviceStatus: diskv1.DeviceStatus{
+							ParentDevice: "/dev/my-new-parent",
+							Partitioned:  true,
+							FileSystem: &diskv1.FilesystemStatus{
+								LastFormattedAt: &metav1.Time{},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "no change no op",
+			given: input{
+				oldBds: map[string]*diskv1.BlockDevice{
+					deviceName: {
+						ObjectMeta: metav1.ObjectMeta{Name: deviceName, Namespace: namespace},
+						Spec: diskv1.BlockDeviceSpec{
+							NodeName:   nodeName,
+							DevPath:    devPath,
+							FileSystem: &diskv1.FilesystemInfo{},
+						},
+					},
+				},
+				bd: &diskv1.BlockDevice{
+					ObjectMeta: metav1.ObjectMeta{Name: deviceName, Namespace: namespace},
+					Spec: diskv1.BlockDeviceSpec{
+						NodeName:   nodeName,
+						DevPath:    devPath,
+						FileSystem: &diskv1.FilesystemInfo{},
+					},
+				},
+			},
+			expected: output{
+				bd: &diskv1.BlockDevice{
+					ObjectMeta: metav1.ObjectMeta{Name: deviceName, Namespace: namespace},
+					Spec: diskv1.BlockDeviceSpec{
+						NodeName:   nodeName,
+						DevPath:    devPath,
+						FileSystem: &diskv1.FilesystemInfo{},
+					},
+				},
+			},
+		},
+	}
+	for _, tc := range testCases {
+
+		t.Run(tc.name, func(t *testing.T) {
+			// arrange
+			var clientset = fake.NewSimpleClientset()
+			if len(tc.given.oldBds) > 0 {
+				for _, oldBd := range tc.given.oldBds {
+					err := clientset.Tracker().Add(oldBd)
+					assert.Nil(t, err, "mock resource should add into fake controller tracker")
+				}
+			}
+
+			ctrl := &Controller{
+				Namespace:    namespace,
+				NodeName:     nodeName,
+				Blockdevices: fakeclients.BlockeDeviceClient(clientset.HarvesterhciV1beta1().BlockDevices),
+			}
+
+			// act
+			outputBd, err := ctrl.SaveBlockDevice(tc.given.bd, tc.given.oldBds)
+
+			// assert
+			assert.Nil(t, err, "SaveBlockDevice should return no error")
+			assert.Equal(t, tc.expected.bd, outputBd, "case %q", tc.name)
+			bdFromClient, err := ctrl.Blockdevices.Get(namespace, deviceName, metav1.GetOptions{})
+			assert.Nil(t, err, "SaveBlockDevice should return no error")
+			assert.Equal(t, tc.expected.bd, bdFromClient, "case %q", tc.name)
+		})
+	}
+}
+
 func Test_addDeivceToNode(t *testing.T) {
 	type input struct {
 		conds  []diskv1.Condition
