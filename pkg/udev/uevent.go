@@ -150,7 +150,7 @@ func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, duration time.Duratio
 	}
 	oldBds := blockdevice.ConvertBlockDevicesToMap(bdList)
 
-	if err := u.controller.SaveBlockDevice(device, oldBds); err != nil {
+	if _, err := u.controller.SaveBlockDevice(device, oldBds); err != nil {
 		logrus.Errorf("failed to save block device %s, error: %s", device.Name, err.Error())
 		//u.AddBlockDevice(device, 2*defaultDuration)
 	}
