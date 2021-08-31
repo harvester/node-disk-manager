@@ -10,8 +10,10 @@ import (
 )
 
 const (
+	// ParentDeviceLabel stores the parent device name of a device
 	ParentDeviceLabel = "ndm.longhorn.io/parent-device"
-	DeviceTypeLabel   = "ndm.longhorn.io/device-type"
+	// DeviceTypeLabel indicates whether the device is a disk or a partition
+	DeviceTypeLabel = "ndm.longhorn.io/device-type"
 )
 
 func DeviceInfoFromDisk(disk *block.Disk, nodeName, namespace string) *longhornv1.BlockDevice {
