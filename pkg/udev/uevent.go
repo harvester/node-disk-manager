@@ -93,9 +93,8 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 		return
 	}
 
-	disk := &block.Disk{}
-	part := &block.Partition{}
-	bd := &v1beta1.BlockDevice{}
+	var disk *block.Disk
+	var bd *v1beta1.BlockDevice
 	if udevDevice.IsDisk() {
 		disk = u.controller.BlockInfo.GetDiskByDevPath(udevDevice.GetShortName())
 		bd = blockdevice.DeviceInfoFromDisk(disk, u.nodeName, u.namespace)
@@ -105,7 +104,7 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 		if err != nil {
 			logrus.Errorf("failed to get parent dev name, %s", err.Error())
 		}
-		part = u.controller.BlockInfo.GetPartitionByDevPath(parentPath, udevDevice.GetDevName())
+		part := u.controller.BlockInfo.GetPartitionByDevPath(parentPath, udevDevice.GetDevName())
 		disk = part.Disk
 		bd = blockdevice.DeviceInfoFromPartition(part, u.nodeName, u.namespace)
 	}
@@ -158,7 +157,7 @@ func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, duration time.Duratio
 }
 
 // RemoveBlockDevice will set the existing block device to detached state
-func (u *Udev) RemoveBlockDevice(device *v1beta1.BlockDevice, udevDevice *UdevDevice, disk *block.Disk, duration time.Duration) {
+func (u *Udev) RemoveBlockDevice(device *v1beta1.BlockDevice, udevDevice *Device, disk *block.Disk, duration time.Duration) {
 	if duration > defaultDuration {
 		time.Sleep(duration)
 	}

@@ -8,6 +8,7 @@ import (
 // borrowed from https://github.com/jaypipes/ghw/blob/master/pkg/block/block.go
 
 const (
+	// Unknown is re-exported from `github.com/jaypipes/ghw/pkg/util`
 	Unknown = util.UNKNOWN
 )
 

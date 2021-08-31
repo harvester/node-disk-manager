@@ -6,87 +6,91 @@ import (
 	"github.com/longhorn/node-disk-manager/pkg/block"
 )
 
+// key and env of udev uevent.
 const (
-	UDEV_SYSTEM     = "disk"      // used to filter devices other than disk which udev tracks (eg. CD ROM)
-	UDEV_PARTITION  = "partition" // used to filter out partitions
-	LINK_NAME_INDEX = 2           // this is used to get link index from dev link
+	// UdevSystem is used to filter devices other than disk which udev tracks (eg. CD ROM)
+	UdevSystem = "disk"
+	// UDevPartition is used to filter out partitions
+	UdevPartition = "partition"
+	// LinkNameIndex is used to get link index from dev link
+	LinkNameIndex = 2
 
-	UDEV_DEVNAME         = "DEVNAME"
-	UDEV_DEVTYPE         = "DEVTYPE"
-	UDEV_FS_UUID         = "ID_FS_UUID"
-	UDEV_ID_PATH         = "ID_PATH"
-	UDEV_MODEL           = "ID_MODEL"
-	UDEV_PART_ENTRY_TYPE = "ID_PART_ENTRY_TYPE"
-	UDEV_PART_ENTRY_UUID = "ID_PART_ENTRY_UUID"
-	UDEV_PART_TABLE_TYPE = "ID_PART_TABLE_TYPE"
-	UDEV_PART_TABLE_UUID = "ID_PART_TABLE_UUID"
-	UDEV_SERIAL_NUMBER   = "ID_SERIAL"
-	UDEV_TYPE            = "ID_TYPE"
-	UDEV_VENDOR          = "ID_VENDOR"
-	UDEV_WWN             = "ID_WWN"
+	UdevDevname       = "DEVNAME"
+	UdevDevtype       = "DEVTYPE"
+	UdevFsUUID        = "ID_FS_UUID"
+	UdevIDPath        = "ID_PATH"
+	UdevModel         = "ID_MODEL"
+	UdevPartEntryType = "ID_PART_ENTRY_TYPE"
+	UdevPartEntryUUID = "ID_PART_ENTRY_UUID"
+	UdevPartTableType = "ID_PART_TABLE_TYPE"
+	UdevPartTableUUID = "ID_PART_TABLE_UUID"
+	UdevSerialNumber  = "ID_SERIAL"
+	UdevType          = "ID_TYPE"
+	UdevVendor        = "ID_VENDOR"
+	UdevWWN           = "ID_WWN"
 )
 
-type UdevDevice map[string]string
+type Device map[string]string
 
-func InitUdevDevice(udev map[string]string) UdevDevice {
+func InitUdevDevice(udev map[string]string) Device {
 	return udev
 }
 
-func (device UdevDevice) updateDiskFromUdev(disk *block.Disk) {
-	if len(device[UDEV_FS_UUID]) > 0 {
-		disk.UUID = device[UDEV_FS_UUID]
+func (device Device) updateDiskFromUdev(disk *block.Disk) {
+	if len(device[UdevFsUUID]) > 0 {
+		disk.UUID = device[UdevFsUUID]
 	}
-	if len(device[UDEV_PART_TABLE_UUID]) > 0 {
-		disk.PtUUID = device[UDEV_PART_TABLE_UUID]
+	if len(device[UdevPartTableUUID]) > 0 {
+		disk.PtUUID = device[UdevPartTableUUID]
 	}
-	if len(device[UDEV_MODEL]) > 0 {
-		disk.Model = device[UDEV_MODEL]
+	if len(device[UdevModel]) > 0 {
+		disk.Model = device[UdevModel]
 	}
-	if len(UDEV_VENDOR) > 0 {
-		disk.Vendor = device[UDEV_VENDOR]
+	if len(UdevVendor) > 0 {
+		disk.Vendor = device[UdevVendor]
 	}
-	if len(device[UDEV_SERIAL_NUMBER]) > 0 {
-		disk.SerialNumber = device[UDEV_SERIAL_NUMBER]
+	if len(device[UdevSerialNumber]) > 0 {
+		disk.SerialNumber = device[UdevSerialNumber]
 	}
-	if len(device[UDEV_WWN]) > 0 {
-		disk.WWN = device[UDEV_WWN]
+	if len(device[UdevWWN]) > 0 {
+		disk.WWN = device[UdevWWN]
 	}
 }
 
 // IsDisk check if device is a disk
-func (device UdevDevice) IsDisk() bool {
-	return device[UDEV_DEVTYPE] == UDEV_SYSTEM
+func (device Device) IsDisk() bool {
+	return device[UdevDevtype] == UdevSystem
 }
 
 // IsPartition check if device is a partition
-func (device UdevDevice) IsPartition() bool {
-	return device[UDEV_DEVTYPE] == UDEV_PARTITION
+func (device Device) IsPartition() bool {
+	return device[UdevDevtype] == UdevPartition
 }
 
 // GetDevName returns the path of device in /dev directory
-func (device UdevDevice) GetDevName() string {
-	return device[UDEV_DEVNAME]
+func (device Device) GetDevName() string {
+	return device[UdevDevname]
 }
 
 // GetShortName returns the short device name of the /dev directory, e.g /dev/sda will return the name sda
-func (device UdevDevice) GetShortName() string {
-	name := device[UDEV_DEVNAME]
+func (device Device) GetShortName() string {
+	name := device[UdevDevname]
 	parts := strings.Split(name, "/")
-	if len(parts) < LINK_NAME_INDEX+1 {
+	if len(parts) < LinkNameIndex+1 {
 		return ""
 	}
-	return parts[LINK_NAME_INDEX]
+	return parts[LinkNameIndex]
 }
 
 // GetIDPath returns the device id path
-func (device UdevDevice) GetIDPath() string {
-	return device[UDEV_ID_PATH]
+func (device Device) GetIDPath() string {
+	return device[UdevIDPath]
 }
 
-func (device UdevDevice) GetIDType() string {
-	return device[UDEV_TYPE]
+func (device Device) GetIDType() string {
+	return device[UdevType]
 }
 
-func (device UdevDevice) GetDevType() string {
-	return device[UDEV_DEVTYPE]
+func (device Device) GetDevType() string {
+	return device[UdevDevtype]
 }

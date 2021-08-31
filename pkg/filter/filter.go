@@ -8,7 +8,7 @@ import (
 
 type Filter struct {
 	Name      string
-	Interface FilterInterface
+	Interface Interface
 }
 
 func SetNDMFilters(vendorString, pathString string) []*Filter {
@@ -22,7 +22,7 @@ func SetNDMFilters(vendorString, pathString string) []*Filter {
 	return listFilter
 }
 
-type FilterInterface interface {
+type Interface interface {
 	Filters
 }
 
