@@ -333,7 +333,7 @@ func (c *Controller) addDeviceToNode(device *diskv1.BlockDevice) (*diskv1.BlockD
 		return device, nil
 	}
 
-	node, err := c.nodeCache.Get(c.namespace, c.nodeName)
+	node, err := c.nodes.Get(c.namespace, c.nodeName, metav1.GetOptions{})
 	if err != nil {
 		return device, err
 	}
@@ -369,7 +369,7 @@ func (c *Controller) removeDeviceFromNode(device *diskv1.BlockDevice) (*diskv1.B
 	if !diskv1.DiskAddedToNode.IsTrue(device) {
 		return device, nil
 	}
-	node, err := c.nodeCache.Get(c.namespace, c.nodeName)
+	node, err := c.nodes.Get(c.namespace, c.nodeName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Skip since the node is not there.
