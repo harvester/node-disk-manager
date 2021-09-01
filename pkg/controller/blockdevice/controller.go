@@ -15,11 +15,12 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
-	diskv1 "github.com/longhorn/node-disk-manager/pkg/apis/longhorn.io/v1beta1"
+	diskv1 "github.com/longhorn/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/longhorn/node-disk-manager/pkg/block"
 	"github.com/longhorn/node-disk-manager/pkg/disk"
 	"github.com/longhorn/node-disk-manager/pkg/filter"
-	ctldiskv1 "github.com/longhorn/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta1"
+	ctldiskv1 "github.com/longhorn/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
+	ctllonghornv1 "github.com/longhorn/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta1"
 	"github.com/longhorn/node-disk-manager/pkg/option"
 )
 
@@ -31,8 +32,8 @@ type Controller struct {
 	namespace string
 	nodeName  string
 
-	nodeCache ctldiskv1.NodeCache
-	nodes     ctldiskv1.NodeClient
+	nodeCache ctllonghornv1.NodeCache
+	nodes     ctllonghornv1.NodeClient
 
 	Blockdevices     ctldiskv1.BlockDeviceController
 	BlockdeviceCache ctldiskv1.BlockDeviceCache
@@ -41,7 +42,7 @@ type Controller struct {
 }
 
 // Register register the block device CRD controller
-func Register(ctx context.Context, nodes ctldiskv1.NodeController, bds ctldiskv1.BlockDeviceController, block *block.Info,
+func Register(ctx context.Context, nodes ctllonghornv1.NodeController, bds ctldiskv1.BlockDeviceController, block *block.Info,
 	opt *option.Option, filters []*filter.Filter) error {
 	controller := &Controller{
 		namespace:        opt.Namespace,

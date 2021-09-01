@@ -6,9 +6,9 @@ metadata:
   annotations:
     {}
   creationTimestamp: null
-  name: blockdevices.longhorn.io
+  name: blockdevices.harvesterhci.io
 spec:
-  group: longhorn.io
+  group: harvesterhci.io
   names:
     kind: BlockDevice
     listKind: BlockDeviceList

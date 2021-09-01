@@ -14,12 +14,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
-	"github.com/longhorn/node-disk-manager/pkg/apis/longhorn.io/v1beta1"
+	"github.com/longhorn/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/longhorn/node-disk-manager/pkg/block"
 	"github.com/longhorn/node-disk-manager/pkg/controller/blockdevice"
 	"github.com/longhorn/node-disk-manager/pkg/disk"
 	"github.com/longhorn/node-disk-manager/pkg/filter"
-	ctldiskv1 "github.com/longhorn/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta1"
+	ctldiskv1 "github.com/longhorn/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	"github.com/longhorn/node-disk-manager/pkg/option"
 )
 
