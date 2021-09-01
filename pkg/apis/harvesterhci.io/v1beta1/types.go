@@ -1,7 +1,6 @@
 package v1beta1
 
 import (
-	lhtypes "github.com/longhorn/longhorn-manager/types"
 	"github.com/rancher/wrangler/pkg/condition"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -218,14 +217,4 @@ type Condition struct {
 
 	// Human-readable message indicating details about last transition
 	Message string `json:"message,omitempty"`
-}
-
-// +genclient
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
-type Node struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata"`
-	Spec              lhtypes.NodeSpec   `json:"spec"`
-	Status            lhtypes.NodeStatus `json:"status"`
 }

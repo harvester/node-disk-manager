@@ -19,7 +19,7 @@ limitations under the License.
 package v1beta1
 
 import (
-	v1beta1 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta1"
+	v1beta1 "github.com/longhorn/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/rancher/lasso/pkg/controller"
 	"github.com/rancher/wrangler/pkg/schemes"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -30,7 +30,7 @@ func init() {
 }
 
 type Interface interface {
-	Node() NodeController
+	BlockDevice() BlockDeviceController
 }
 
 func New(controllerFactory controller.SharedControllerFactory) Interface {
@@ -43,6 +43,6 @@ type version struct {
 	controllerFactory controller.SharedControllerFactory
 }
 
-func (c *version) Node() NodeController {
-	return NewNodeController(schema.GroupVersionKind{Group: "longhorn.io", Version: "v1beta1", Kind: "Node"}, "nodes", true, c.controllerFactory)
+func (c *version) BlockDevice() BlockDeviceController {
+	return NewBlockDeviceController(schema.GroupVersionKind{Group: "harvesterhci.io", Version: "v1beta1", Kind: "BlockDevice"}, "blockdevices", true, c.controllerFactory)
 }
