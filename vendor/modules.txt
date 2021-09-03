@@ -62,7 +62,8 @@ github.com/jaypipes/ghw/pkg/unitutil
 github.com/jaypipes/ghw/pkg/util
 # github.com/json-iterator/go v1.1.10
 github.com/json-iterator/go
-# github.com/longhorn/go-iscsi-helper v0.0.0-20201111045018-ee87992ec536
+# github.com/longhorn/go-iscsi-helper v0.0.0-20210330030558-49a327fb024e
+## explicit
 github.com/longhorn/go-iscsi-helper/util
 # github.com/longhorn/longhorn-manager v1.1.1
 ## explicit

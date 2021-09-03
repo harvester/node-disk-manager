@@ -410,8 +410,9 @@ github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de/go.mod h1:zAbeS9
 github.com/lithammer/dedent v1.1.0/go.mod h1:jrXYCQtgg0nJiN+StA2KgR7w6CiQNv9Fd/Z9BP0jIOc=
 github.com/longhorn/backing-image-manager v0.0.0-20210420131143-904cd772a7a9/go.mod h1:4E4M6wO7zXgb5Jgxs0+zkG70yMFP1ySJzht6txwonoI=
 github.com/longhorn/backupstore v0.0.0-20210413103305-10466b9f5adf/go.mod h1:UOpvZ/qRS2G8BBSybHuS/c4h1P21XTEnL2hoJz2JUuo=
-github.com/longhorn/go-iscsi-helper v0.0.0-20201111045018-ee87992ec536 h1:+Z/mGnoCdY+YCX+y4X19E2YT4FsVA3aVm7uLj1tg/wM=
 github.com/longhorn/go-iscsi-helper v0.0.0-20201111045018-ee87992ec536/go.mod h1:9z/y9glKmWEdV50tjlUPxFwi1goQfIrrsoZbnMyIZbY=
+github.com/longhorn/go-iscsi-helper v0.0.0-20210330030558-49a327fb024e h1:hz4quJkaJWDo+xW+G6wTF6d6/95QvJ+o2D0+bB/tJ1U=
+github.com/longhorn/go-iscsi-helper v0.0.0-20210330030558-49a327fb024e/go.mod h1:9z/y9glKmWEdV50tjlUPxFwi1goQfIrrsoZbnMyIZbY=
 github.com/longhorn/longhorn-instance-manager v0.0.0-20201016215346-d8437b4e156e/go.mod h1:SfnIsnFj+HdmRiyF2buQ6+CB1WTD1pDQ4zEE6lBLs4s=
 github.com/longhorn/longhorn-manager v1.1.1 h1:6Puo+WOBtY3izdDwetwMpCbQ4mEmhRMwdmEErpMgAK8=
 github.com/longhorn/longhorn-manager v1.1.1/go.mod h1:zHLmolcOdkaMPt3t6AENAUNtVGtB/n8Q3NWraob1kNo=
