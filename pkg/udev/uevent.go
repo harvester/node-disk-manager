@@ -97,7 +97,7 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 	var bd *v1beta1.BlockDevice
 	if udevDevice.IsDisk() {
 		disk = u.controller.BlockInfo.GetDiskByDevPath(udevDevice.GetShortName())
-		bd = blockdevice.DeviceInfoFromDisk(disk, u.nodeName, u.namespace)
+		bd = blockdevice.GetDiskBlockDevice(disk, u.nodeName, u.namespace)
 	} else {
 		parentPath, err := block.GetParentDevName(udevDevice.GetDevName())
 		logrus.Infof("debug: parent path %s", parentPath)
@@ -106,7 +106,7 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 		}
 		part := u.controller.BlockInfo.GetPartitionByDevPath(parentPath, udevDevice.GetDevName())
 		disk = part.Disk
-		bd = blockdevice.DeviceInfoFromPartition(part, u.nodeName, u.namespace)
+		bd = blockdevice.GetPartitionBlockDevice(part, u.nodeName, u.namespace)
 	}
 
 	if u.controller.ApplyFilter(disk) {
@@ -140,7 +140,7 @@ func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, duration time.Duratio
 			return
 		}
 		disk := u.controller.BlockInfo.GetDiskByDevPath(devPath)
-		device = blockdevice.DeviceInfoFromDisk(disk, u.nodeName, u.namespace)
+		device = blockdevice.GetDiskBlockDevice(disk, u.nodeName, u.namespace)
 	}
 
 	bdList, err := u.controller.BlockdeviceCache.List(u.namespace, labels.Everything())

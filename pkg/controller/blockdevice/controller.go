@@ -77,11 +77,11 @@ func (c *Controller) RegisterNodeBlockDevices() error {
 		}
 
 		logrus.Infof("Found a block device /dev/%s", disk.Name)
-		bd := DeviceInfoFromDisk(disk, c.nodeName, c.namespace)
+		bd := GetDiskBlockDevice(disk, c.nodeName, c.namespace)
 		newBds = append(newBds, bd)
 
 		for _, part := range disk.Partitions {
-			bd := DeviceInfoFromPartition(part, c.nodeName, c.namespace)
+			bd := GetPartitionBlockDevice(part, c.nodeName, c.namespace)
 			newBds = append(newBds, bd)
 		}
 	}
@@ -281,7 +281,7 @@ func (c *Controller) forceFormatDisk(device *diskv1.BlockDevice) (*diskv1.BlockD
 
 		// create the single partition block device
 		part := c.BlockInfo.GetPartitionByDevPath(device.Spec.DevPath, device.Spec.DevPath+"1")
-		partitionBlockDevice := DeviceInfoFromPartition(part, c.nodeName, c.namespace)
+		partitionBlockDevice := GetPartitionBlockDevice(part, c.nodeName, c.namespace)
 		partitionBlockDevice.Spec.FileSystem.MountPoint = filesystem.MountPoint
 		partitionBlockDevice.Spec.FileSystem.ForceFormatted = true
 		bd, err := c.BlockdeviceCache.Get(device.Namespace, partitionBlockDevice.Name)
