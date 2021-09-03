@@ -27,7 +27,7 @@ func MakeGPTPartition(device string) error {
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
-		return fmt.Errorf("%s", stderr.String())
+		return fmt.Errorf("stderr: %s, err: %s", stderr.String(), err.Error())
 	}
 	return nil
 }
@@ -44,7 +44,7 @@ func MakeExt4DiskFormatting(devPath, label string) error {
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
-		return fmt.Errorf("%s", stderr.String())
+		return fmt.Errorf("stderr: %s, err: %s", stderr.String(), err.Error())
 	}
 	return nil
 }
