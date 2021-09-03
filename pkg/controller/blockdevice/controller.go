@@ -130,7 +130,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 			error := fmt.Errorf("failed to force format the device %s, %s", device.Spec.DevPath, err.Error())
 			logrus.Error(error)
 			diskv1.DeviceFormatting.SetError(deviceCpy, "", error)
-			diskv1.DeviceFormatting.SetStatusBool(deviceCpy, true)
+			diskv1.DeviceFormatting.SetStatusBool(deviceCpy, false)
 			return c.Blockdevices.Update(deviceCpy)
 		}
 
@@ -158,7 +158,6 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 				logrus.Error(err)
 				diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
 				diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
-				diskv1.DiskAddedToNode.Message(deviceCpy, err.Error())
 				return c.Blockdevices.Update(deviceCpy)
 			}
 		case fs.MountPoint == "":
@@ -167,9 +166,12 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 				logrus.Error(err)
 				diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
 				diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
-				diskv1.DiskAddedToNode.Message(deviceCpy, err.Error())
 				return c.Blockdevices.Update(deviceCpy)
 			}
+			msg := fmt.Sprintf("Removed disk %s from longhorn node `%s`", device.Name, c.nodeName)
+			diskv1.DiskAddedToNode.SetError(device, "", nil)
+			diskv1.DiskAddedToNode.SetStatusBool(device, false)
+			diskv1.DiskAddedToNode.Message(device, msg)
 		}
 	}
 
@@ -217,9 +219,6 @@ func (c *Controller) updateFileSystemStatus(device *diskv1.BlockDevice) error {
 		mounted := err == nil && filesystem.MountPoint != ""
 		diskv1.DeviceMounted.SetError(device, "", err)
 		diskv1.DeviceMounted.SetStatusBool(device, mounted)
-		if err != nil {
-			diskv1.DeviceMounted.Message(device, err.Error())
-		}
 	} else if fs.MountPoint != "" && device.Status.DeviceStatus.Partitioned {
 		diskv1.DeviceMounted.SetError(device, "", fmt.Errorf("cannot mount parent device with partitions"))
 		diskv1.DeviceMounted.SetStatusBool(device, false)
@@ -391,10 +390,6 @@ func (c *Controller) removeDeviceFromNode(device *diskv1.BlockDevice) (*diskv1.B
 		return device, err
 	}
 
-	msg := fmt.Sprintf("Removed disk %s from longhorn node `%s`", device.Name, nodeCpy.Name)
-	diskv1.DiskAddedToNode.SetError(device, "", nil)
-	diskv1.DiskAddedToNode.SetStatusBool(device, false)
-	diskv1.DiskAddedToNode.Message(device, msg)
 	return device, nil
 }
 
