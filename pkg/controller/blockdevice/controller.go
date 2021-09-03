@@ -351,7 +351,7 @@ func (c *Controller) addDeviceToNode(device *diskv1.BlockDevice) (*diskv1.BlockD
 		Path:              mountPoint,
 		AllowScheduling:   true,
 		EvictionRequested: false,
-		StorageReserved:   0, // TODO: shall we expose this field to user?
+		StorageReserved:   0,
 		Tags:              []string{},
 	}
 	nodeCpy.Spec.Disks[device.Name] = diskSpec
@@ -366,7 +366,7 @@ func (c *Controller) addDeviceToNode(device *diskv1.BlockDevice) (*diskv1.BlockD
 	return device, nil
 }
 
-// removeDeviceFromNode rmoves a device from a longhorn node.
+// removeDeviceFromNode removes a device from a longhorn node.
 func (c *Controller) removeDeviceFromNode(device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
 	if !diskv1.DiskAddedToNode.IsTrue(device) {
 		return device, nil

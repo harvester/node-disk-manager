@@ -536,7 +536,7 @@ func parseMountEntry(line string) *mountEntry {
 	return res
 }
 
-// GeneratePartitionGUID generates a GUID for partition.
+// GeneratePartitionGUID generates a GUID for partitions.
 func GeneratePartitionGUID(part *Partition) string {
 	if valueExists(part.UUID) {
 		return makeHashGUID(part.UUID)
@@ -544,8 +544,7 @@ func GeneratePartitionGUID(part *Partition) string {
 	return ""
 }
 
-// GenerateDiskGUID generates a GUID for disks. Make sure the logic
-// synchronizes with generateDeviceGUID.
+// GenerateDiskGUID generates a GUID for disks.
 func GenerateDiskGUID(disk *Disk) string {
 	var id string
 	if valueExists(disk.WWN) {
