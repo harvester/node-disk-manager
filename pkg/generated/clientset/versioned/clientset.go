@@ -21,8 +21,8 @@ package versioned
 import (
 	"fmt"
 
-	harvesterhciv1beta1 "github.com/longhorn/node-disk-manager/pkg/generated/clientset/versioned/typed/harvesterhci.io/v1beta1"
-	longhornv1beta1 "github.com/longhorn/node-disk-manager/pkg/generated/clientset/versioned/typed/longhorn.io/v1beta1"
+	harvesterhciv1beta1 "github.com/harvester/node-disk-manager/pkg/generated/clientset/versioned/typed/harvesterhci.io/v1beta1"
+	longhornv1beta1 "github.com/harvester/node-disk-manager/pkg/generated/clientset/versioned/typed/longhorn.io/v1beta1"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"

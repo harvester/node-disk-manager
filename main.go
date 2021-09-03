@@ -14,7 +14,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 
-	"github.com/longhorn/node-disk-manager/pkg/filter"
+	"github.com/harvester/node-disk-manager/pkg/filter"
 
 	"github.com/ehazlett/simplelog"
 	"github.com/rancher/wrangler/pkg/kubeconfig"
@@ -25,14 +25,14 @@ import (
 	"github.com/urfave/cli/v2"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/longhorn/node-disk-manager/pkg/block"
-	blockdevicev1 "github.com/longhorn/node-disk-manager/pkg/controller/blockdevice"
-	nodev1 "github.com/longhorn/node-disk-manager/pkg/controller/node"
-	ctldisk "github.com/longhorn/node-disk-manager/pkg/generated/controllers/harvesterhci.io"
-	ctllonghorn "github.com/longhorn/node-disk-manager/pkg/generated/controllers/longhorn.io"
-	"github.com/longhorn/node-disk-manager/pkg/option"
-	"github.com/longhorn/node-disk-manager/pkg/udev"
-	"github.com/longhorn/node-disk-manager/pkg/version"
+	"github.com/harvester/node-disk-manager/pkg/block"
+	blockdevicev1 "github.com/harvester/node-disk-manager/pkg/controller/blockdevice"
+	nodev1 "github.com/harvester/node-disk-manager/pkg/controller/node"
+	ctldisk "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io"
+	ctllonghorn "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io"
+	"github.com/harvester/node-disk-manager/pkg/option"
+	"github.com/harvester/node-disk-manager/pkg/udev"
+	"github.com/harvester/node-disk-manager/pkg/version"
 )
 
 func main() {

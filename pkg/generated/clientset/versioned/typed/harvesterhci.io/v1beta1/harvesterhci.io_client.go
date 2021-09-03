@@ -19,8 +19,8 @@ limitations under the License.
 package v1beta1
 
 import (
-	v1beta1 "github.com/longhorn/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
-	"github.com/longhorn/node-disk-manager/pkg/generated/clientset/versioned/scheme"
+	v1beta1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
+	"github.com/harvester/node-disk-manager/pkg/generated/clientset/versioned/scheme"
 	rest "k8s.io/client-go/rest"
 )
 

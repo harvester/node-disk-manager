@@ -3,7 +3,7 @@ package filter
 import (
 	"github.com/sirupsen/logrus"
 
-	"github.com/longhorn/node-disk-manager/pkg/block"
+	"github.com/harvester/node-disk-manager/pkg/block"
 )
 
 type Filter struct {

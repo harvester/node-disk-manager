@@ -7,10 +7,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
+	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
+	ctllonghornv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta1"
+	"github.com/harvester/node-disk-manager/pkg/option"
 	longhornv1 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta1"
-	ctldiskv1 "github.com/longhorn/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
-	ctllonghornv1 "github.com/longhorn/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta1"
-	"github.com/longhorn/node-disk-manager/pkg/option"
 )
 
 type Controller struct {
@@ -22,7 +22,7 @@ type Controller struct {
 }
 
 const (
-	blockDeviceNodeHandlerName = "longhorn-ndm-node-handler"
+	blockDeviceNodeHandlerName = "harvester-ndm-node-handler"
 )
 
 // Register register the longhorn node CRD controller

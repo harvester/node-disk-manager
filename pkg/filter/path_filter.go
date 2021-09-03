@@ -3,8 +3,8 @@ package filter
 import (
 	"strings"
 
-	"github.com/longhorn/node-disk-manager/pkg/block"
-	"github.com/longhorn/node-disk-manager/pkg/util"
+	"github.com/harvester/node-disk-manager/pkg/block"
+	"github.com/harvester/node-disk-manager/pkg/util"
 )
 
 const (

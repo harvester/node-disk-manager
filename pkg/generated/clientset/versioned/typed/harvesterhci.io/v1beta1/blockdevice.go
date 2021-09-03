@@ -22,8 +22,8 @@ import (
 	"context"
 	"time"
 
-	v1beta1 "github.com/longhorn/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
-	scheme "github.com/longhorn/node-disk-manager/pkg/generated/clientset/versioned/scheme"
+	v1beta1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
+	scheme "github.com/harvester/node-disk-manager/pkg/generated/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"

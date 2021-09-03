@@ -19,8 +19,8 @@ limitations under the License.
 package v1beta1
 
 import (
+	"github.com/harvester/node-disk-manager/pkg/generated/clientset/versioned/scheme"
 	v1beta1 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta1"
-	"github.com/longhorn/node-disk-manager/pkg/generated/clientset/versioned/scheme"
 	rest "k8s.io/client-go/rest"
 )
 

@@ -15,17 +15,17 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
-	diskv1 "github.com/longhorn/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
-	"github.com/longhorn/node-disk-manager/pkg/block"
-	"github.com/longhorn/node-disk-manager/pkg/disk"
-	"github.com/longhorn/node-disk-manager/pkg/filter"
-	ctldiskv1 "github.com/longhorn/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
-	ctllonghornv1 "github.com/longhorn/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta1"
-	"github.com/longhorn/node-disk-manager/pkg/option"
+	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
+	"github.com/harvester/node-disk-manager/pkg/block"
+	"github.com/harvester/node-disk-manager/pkg/disk"
+	"github.com/harvester/node-disk-manager/pkg/filter"
+	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
+	ctllonghornv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta1"
+	"github.com/harvester/node-disk-manager/pkg/option"
 )
 
 const (
-	blockDeviceHandlerName = "longhorn-block-device-handler"
+	blockDeviceHandlerName = "harvester-block-device-handler"
 )
 
 type Controller struct {
