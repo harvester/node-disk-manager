@@ -16,6 +16,9 @@ import (
 	"github.com/jaypipes/ghw/pkg/linuxpath"
 	"github.com/jaypipes/ghw/pkg/option"
 	"github.com/jaypipes/ghw/pkg/util"
+	iscsiutil "github.com/longhorn/go-iscsi-helper/util"
+
+	ndmutil "github.com/longhorn/node-disk-manager/pkg/util"
 )
 
 // borrowed from https://github.com/jaypipes/ghw/blob/master/pkg/block/block_linux.go
@@ -48,8 +51,19 @@ type infoImpl struct {
 
 // New returns a pointer to an Info implementation that describes the block
 // storage resources of the host system.
-func New(opts ...*option.Option) (Info, error) {
-	ctx := context.New(opts...)
+func New() (Info, error) {
+	isMounted, err := ndmutil.IsHostProcMounted()
+	if err != nil {
+		return nil, err
+	}
+	var ctx *context.Context
+	if isMounted {
+		ctx = context.New(option.WithPathOverrides(option.PathOverrides{
+			ndmutil.ProcPath: ndmutil.HostProcPath,
+		}))
+	} else {
+		ctx = context.New()
+	}
 	info := &infoImpl{ctx: ctx}
 	if err := ctx.Do(info.load); err != nil {
 		return nil, err
@@ -81,7 +95,7 @@ func (i *infoImpl) GetPartitionByDevPath(disk, part string) *Partition {
 	disk = strings.TrimPrefix(disk, "/dev/")
 	part = strings.TrimPrefix(part, "/dev/")
 	paths := linuxpath.New(i.ctx)
-	partition := diskPartition(paths, disk, part)
+	partition := diskPartition(i.ctx, paths, disk, part)
 	partition.Disk = getDisk(i.ctx, paths, disk)
 	return partition
 }
@@ -89,7 +103,7 @@ func (i *infoImpl) GetPartitionByDevPath(disk, part string) *Partition {
 func (i *infoImpl) GetFileSystemInfoByDevPath(dname string) *FileSystemInfo {
 	dname = strings.TrimPrefix(dname, "/dev/")
 	paths := linuxpath.New(i.ctx)
-	mp, pt, ro := partitionInfo(paths, dname)
+	mp, pt, ro := partitionInfo(i.ctx, paths, dname)
 	return &FileSystemInfo{
 		MountPoint: mp,
 		Type:       pt,
@@ -255,15 +269,15 @@ func diskPartitions(ctx *context.Context, paths *linuxpath.Paths, disk string) [
 		if !strings.HasPrefix(fname, disk) {
 			continue
 		}
-		p := diskPartition(paths, disk, fname)
+		p := diskPartition(ctx, paths, disk, fname)
 		out = append(out, p)
 	}
 	return out
 }
 
-func diskPartition(paths *linuxpath.Paths, disk, fname string) *Partition {
+func diskPartition(ctx *context.Context, paths *linuxpath.Paths, disk, fname string) *Partition {
 	size := partitionSizeBytes(paths, disk, fname)
-	mp, pt, ro := partitionInfo(paths, fname)
+	mp, pt, ro := partitionInfo(ctx, paths, fname)
 	du := GetDiskUUID(fname, string(PartUUID))
 	driveType, storageController := diskTypes(fname)
 	return &Partition{
@@ -311,7 +325,7 @@ func getDisk(ctx *context.Context, paths *linuxpath.Paths, dname string) *Disk {
 	removable := diskIsRemovable(paths, dname)
 	uuid := GetDiskUUID(dname, string(UUID))
 	ptuuid := GetDiskUUID(dname, string(PTUUID))
-	mp, pt, ro := partitionInfo(paths, dname)
+	mp, pt, ro := partitionInfo(ctx, paths, dname)
 	fs := FileSystemInfo{
 		MountPoint: mp,
 		Type:       pt,
@@ -433,7 +447,7 @@ func partitionSizeBytes(paths *linuxpath.Paths, disk string, part string) uint64
 
 // Given a full or short partition name, returns the mount point, the type of
 // the partition and whether it's readonly
-func partitionInfo(paths *linuxpath.Paths, part string) (string, string, bool) {
+func partitionInfo(ctx *context.Context, paths *linuxpath.Paths, part string) (string, string, bool) {
 	// Allow calling PartitionInfo with either the full partition name
 	// "/dev/sda1" or just "sda1"
 	if !strings.HasPrefix(part, "/dev") {
@@ -443,7 +457,7 @@ func partitionInfo(paths *linuxpath.Paths, part string) (string, string, bool) {
 	// mount entries for mounted partitions look like this:
 	// /dev/sda6 / ext4 rw,relatime,errors=remount-ro,data=ordered 0 0
 	var r io.ReadCloser
-	r, err := os.Open(paths.ProcMounts)
+	r, err := openProcMounts(ctx, paths)
 	if err != nil {
 		return "", "", true
 	}
@@ -467,6 +481,15 @@ func partitionInfo(paths *linuxpath.Paths, part string) (string, string, bool) {
 		return entry.Mountpoint, entry.FilesystemType, ro
 	}
 	return "", "", true
+}
+
+func openProcMounts(ctx *context.Context, paths *linuxpath.Paths) (*os.File, error) {
+	file := paths.ProcMounts
+	if path, ok := ctx.PathOverrides[ndmutil.ProcPath]; ok {
+		ns := iscsiutil.GetHostNamespacePath(path)
+		file = strings.TrimSuffix(ns, "ns/") + "mounts"
+	}
+	return os.Open(file)
 }
 
 type mountEntry struct {
