@@ -16,7 +16,8 @@ const (
 	DeviceTypeLabel = "ndm.longhorn.io/device-type"
 )
 
-func DeviceInfoFromDisk(disk *block.Disk, nodeName, namespace string) *diskv1.BlockDevice {
+// GetDiskBlockDevice gets a blockdevice from a given disk.
+func GetDiskBlockDevice(disk *block.Disk, nodeName, namespace string) *diskv1.BlockDevice {
 	fileSystemInfo := &diskv1.FilesystemStatus{
 		MountPoint: disk.FileSystemInfo.MountPoint,
 		Type:       disk.FileSystemInfo.Type,
@@ -74,7 +75,8 @@ func DeviceInfoFromDisk(disk *block.Disk, nodeName, namespace string) *diskv1.Bl
 	return bd
 }
 
-func DeviceInfoFromPartition(part *block.Partition, nodeName, namespace string) *diskv1.BlockDevice {
+// GetPartitionBlockDevice gets a blockdevice from a given partition.
+func GetPartitionBlockDevice(part *block.Partition, nodeName, namespace string) *diskv1.BlockDevice {
 	fileSystemInfo := &diskv1.FilesystemStatus{
 		Type:       part.FileSystemInfo.Type,
 		MountPoint: part.FileSystemInfo.MountPoint,
