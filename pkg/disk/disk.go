@@ -39,7 +39,7 @@ func MakeExt4DiskFormatting(devPath, label string) error {
 		// The maximum length of the volume label is 16 bytes.
 		label = label[0:16]
 	}
-	cmd := exec.Command("mkfs.ext4", "-F", devPath, "-L", label)
+	cmd := exec.Command("mkfs.ext4", "-L", label, "-F", devPath)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	err := cmd.Run()
