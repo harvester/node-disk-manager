@@ -33,13 +33,9 @@ func MakeGPTPartition(device string) error {
 }
 
 // MakeExt4DiskFormatting create ext4 filesystem formatting of the specified devPath
-func MakeExt4DiskFormatting(devPath, label string) error {
+func MakeExt4DiskFormatting(devPath string) error {
 	logrus.Infof("make ext4 format of the device %s", devPath)
-	if len(label) > 16 {
-		// The maximum length of the volume label is 16 bytes.
-		label = label[0:16]
-	}
-	cmd := exec.Command("mkfs.ext4", "-L", label, "-F", devPath)
+	cmd := exec.Command("mkfs.ext4", "-F", devPath)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	err := cmd.Run()
