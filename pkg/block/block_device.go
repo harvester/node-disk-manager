@@ -545,5 +545,5 @@ func makeHashGUID(payload string) string {
 }
 
 func valueExists(value string) bool {
-	return len(value) > 0 && value != Unknown
+	return len(value) > 0 && value != util.UNKNOWN
 }

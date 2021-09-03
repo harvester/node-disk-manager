@@ -2,15 +2,9 @@ package block
 
 import (
 	"github.com/jaypipes/ghw/pkg/block"
-	"github.com/jaypipes/ghw/pkg/util"
 )
 
 // borrowed from https://github.com/jaypipes/ghw/blob/master/pkg/block/block.go
-
-const (
-	// Unknown is re-exported from `github.com/jaypipes/ghw/pkg/util`
-	Unknown = util.UNKNOWN
-)
 
 // Disk describes a single disk drive on the host system. Disk drives provide
 // raw block storage resources.
