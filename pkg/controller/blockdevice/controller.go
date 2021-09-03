@@ -209,20 +209,20 @@ func ConvertBlockDevicesToMap(bds []*diskv1.BlockDevice) map[string]*diskv1.Bloc
 func (c *Controller) updateFileSystemStatus(device *diskv1.BlockDevice) error {
 	// fetch the latest device filesystem info
 	filesystem := c.BlockInfo.GetFileSystemInfoByDevPath(device.Spec.DevPath)
-	fs := *device.Spec.FileSystem
+	mountPoint := device.Spec.FileSystem.MountPoint
 	device.Status.DeviceStatus.FileSystem.Type = filesystem.Type
 	device.Status.DeviceStatus.FileSystem.IsReadOnly = filesystem.IsReadOnly
-	device.Status.DeviceStatus.FileSystem.MountPoint = fs.MountPoint
+	device.Status.DeviceStatus.FileSystem.MountPoint = mountPoint
 
 	if filesystem.MountPoint != "" && filesystem.Type != "" {
 		err := isValidFileSystem(device.Spec.FileSystem, device.Status.DeviceStatus.FileSystem)
 		mounted := err == nil && filesystem.MountPoint != ""
 		diskv1.DeviceMounted.SetError(device, "", err)
 		diskv1.DeviceMounted.SetStatusBool(device, mounted)
-	} else if fs.MountPoint != "" && device.Status.DeviceStatus.Partitioned {
+	} else if mountPoint != "" && device.Status.DeviceStatus.Partitioned {
 		diskv1.DeviceMounted.SetError(device, "", fmt.Errorf("cannot mount parent device with partitions"))
 		diskv1.DeviceMounted.SetStatusBool(device, false)
-	} else if fs.MountPoint == "" && fs.MountPoint == filesystem.MountPoint {
+	} else if mountPoint == "" && mountPoint == filesystem.MountPoint {
 		existingMount := device.Status.DeviceStatus.FileSystem.MountPoint
 		if existingMount != "" {
 			if err := disk.UmountDisk(existingMount); err != nil {
