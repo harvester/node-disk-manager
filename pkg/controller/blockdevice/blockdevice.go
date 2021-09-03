@@ -4,16 +4,16 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	diskv1 "github.com/longhorn/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
-	"github.com/longhorn/node-disk-manager/pkg/block"
-	"github.com/longhorn/node-disk-manager/pkg/util"
+	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
+	"github.com/harvester/node-disk-manager/pkg/block"
+	"github.com/harvester/node-disk-manager/pkg/util"
 )
 
 const (
 	// ParentDeviceLabel stores the parent device name of a device
-	ParentDeviceLabel = "ndm.longhorn.io/parent-device"
+	ParentDeviceLabel = "ndm.harvesterhci.io/parent-device"
 	// DeviceTypeLabel indicates whether the device is a disk or a partition
-	DeviceTypeLabel = "ndm.longhorn.io/device-type"
+	DeviceTypeLabel = "ndm.harvesterhci.io/device-type"
 )
 
 // GetDiskBlockDevice gets a blockdevice from a given disk.

@@ -19,11 +19,11 @@ limitations under the License.
 package fake
 
 import (
-	clientset "github.com/longhorn/node-disk-manager/pkg/generated/clientset/versioned"
-	harvesterhciv1beta1 "github.com/longhorn/node-disk-manager/pkg/generated/clientset/versioned/typed/harvesterhci.io/v1beta1"
-	fakeharvesterhciv1beta1 "github.com/longhorn/node-disk-manager/pkg/generated/clientset/versioned/typed/harvesterhci.io/v1beta1/fake"
-	longhornv1beta1 "github.com/longhorn/node-disk-manager/pkg/generated/clientset/versioned/typed/longhorn.io/v1beta1"
-	fakelonghornv1beta1 "github.com/longhorn/node-disk-manager/pkg/generated/clientset/versioned/typed/longhorn.io/v1beta1/fake"
+	clientset "github.com/harvester/node-disk-manager/pkg/generated/clientset/versioned"
+	harvesterhciv1beta1 "github.com/harvester/node-disk-manager/pkg/generated/clientset/versioned/typed/harvesterhci.io/v1beta1"
+	fakeharvesterhciv1beta1 "github.com/harvester/node-disk-manager/pkg/generated/clientset/versioned/typed/harvesterhci.io/v1beta1/fake"
+	longhornv1beta1 "github.com/harvester/node-disk-manager/pkg/generated/clientset/versioned/typed/longhorn.io/v1beta1"
+	fakelonghornv1beta1 "github.com/harvester/node-disk-manager/pkg/generated/clientset/versioned/typed/longhorn.io/v1beta1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"

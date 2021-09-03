@@ -5,8 +5,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/harvester/node-disk-manager/pkg/util"
 	iscsiutil "github.com/longhorn/go-iscsi-helper/util"
-	"github.com/longhorn/node-disk-manager/pkg/util"
 )
 
 var ext4MountOptions = strings.Join([]string{

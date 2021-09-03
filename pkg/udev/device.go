@@ -3,7 +3,7 @@ package udev
 import (
 	"strings"
 
-	"github.com/longhorn/node-disk-manager/pkg/block"
+	"github.com/harvester/node-disk-manager/pkg/block"
 )
 
 // key and env of udev uevent.

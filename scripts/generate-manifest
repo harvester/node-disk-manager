@@ -15,9 +15,6 @@ controller-gen crd \
 	paths="${ROOT_DIR}/pkg/apis/..." \
 	output:crd:dir="${out_dir}"
 
-# Clean up imported longhorn CRD manifest YAMLs
-rm -rf "${out_dir}/longhorn.io_nodes.yaml"
-
 # Remove controller-gen version info
 while read -r target_file; do
 	if [[ ! -f ${target_file} ]]; then

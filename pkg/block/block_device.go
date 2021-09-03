@@ -18,7 +18,7 @@ import (
 	"github.com/jaypipes/ghw/pkg/util"
 	iscsiutil "github.com/longhorn/go-iscsi-helper/util"
 
-	ndmutil "github.com/longhorn/node-disk-manager/pkg/util"
+	ndmutil "github.com/harvester/node-disk-manager/pkg/util"
 )
 
 // borrowed from https://github.com/jaypipes/ghw/blob/master/pkg/block/block_linux.go
