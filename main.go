@@ -103,6 +103,11 @@ func main() {
 			Usage:       "A string of comma-separated values that you want to exclude for block device path filter",
 			Destination: &opt.PathFilter,
 		},
+		&cli.Int64Flag{
+			Name:        "rescan-interval",
+			Usage:       "Specify the interval of device rescanning of the node (in seconds)",
+			Destination: &opt.RescanInterval,
+		},
 	}
 
 	app.Action = func(c *cli.Context) error {
