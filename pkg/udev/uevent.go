@@ -17,7 +17,6 @@ import (
 	"github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
 	"github.com/harvester/node-disk-manager/pkg/controller/blockdevice"
-	"github.com/harvester/node-disk-manager/pkg/disk"
 	"github.com/harvester/node-disk-manager/pkg/filter"
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/option"
@@ -131,16 +130,12 @@ func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, duration time.Duratio
 	devPath := device.Spec.DevPath
 	logrus.Debugf("uevent add block deivce %s", devPath)
 
-	if len(device.ObjectMeta.Name) == 0 &&
-		// No device.Name means no WWN nor filesystem UUID for this device.
-		// To identify this device uniquely, we create a GPT table for it.
-		device.Status.DeviceStatus.Details.DeviceType == v1beta1.DeviceTypeDisk {
-		if err := disk.MakeGPTPartition(devPath); err != nil {
-			logrus.Errorf("failed to make GPT parition table for block device %s, error: %v", devPath, err)
-			return
-		}
-		disk := u.controller.BlockInfo.GetDiskByDevPath(devPath)
-		device = blockdevice.GetDiskBlockDevice(disk, u.nodeName, u.namespace)
+	newDevice, err := u.controller.MakeGPTPartitionIfNeeded(device)
+	if err != nil {
+		return
+	}
+	if newDevice != nil {
+		device = newDevice
 	}
 
 	bdList, err := u.controller.BlockdeviceCache.List(u.namespace, labels.Everything())

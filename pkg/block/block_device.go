@@ -45,7 +45,6 @@ type Info interface {
 
 type infoImpl struct {
 	ctx        *context.Context
-	Disks      []*Disk      `json:"disks"`
 	Partitions []*Partition `json:"-"`
 }
 
@@ -65,20 +64,12 @@ func New() (Info, error) {
 		ctx = context.New()
 	}
 	info := &infoImpl{ctx: ctx}
-	if err := ctx.Do(info.load); err != nil {
-		return nil, err
-	}
 	return info, nil
 }
 
-func (i *infoImpl) load() error {
-	paths := linuxpath.New(i.ctx)
-	i.Disks = disks(i.ctx, paths)
-	return nil
-}
-
 func (i *infoImpl) GetDisks() []*Disk {
-	return i.Disks
+	paths := linuxpath.New(i.ctx)
+	return disks(i.ctx, paths)
 }
 
 func (i *infoImpl) GetPartitions() []*Partition {

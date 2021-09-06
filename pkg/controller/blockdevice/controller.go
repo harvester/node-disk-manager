@@ -98,7 +98,16 @@ func (c *Controller) ScanBlockDevicesOnNode() error {
 		}
 
 		logrus.Debugf("Found a disk block device /dev/%s", disk.Name)
+
 		bd := GetDiskBlockDevice(disk, c.nodeName, c.namespace)
+
+		if newBd, err := c.MakeGPTPartitionIfNeeded(bd); err != nil {
+			return err
+		} else if newBd != nil {
+			bd = newBd
+			disk = c.BlockInfo.GetDiskByDevPath(bd.Spec.DevPath)
+		}
+
 		newBds = append(newBds, bd)
 
 		for _, part := range disk.Partitions {
@@ -274,6 +283,25 @@ func updateDeviceMount(devPath, mountPoint, existingMount string) error {
 		}
 	}
 	return nil
+}
+
+// MakeGPTPartitionIfNeeded makes GPT partition on given device if needed.
+//
+// Currently only makeing GPT partition on devices without a name (GUID).
+func (c *Controller) MakeGPTPartitionIfNeeded(device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
+	devPath := device.Spec.DevPath
+	if len(device.ObjectMeta.Name) == 0 &&
+		// No device.Name means no WWN nor filesystem UUID for this device.
+		// To identify this device uniquely, we create a GPT table for it.
+		device.Status.DeviceStatus.Details.DeviceType == diskv1.DeviceTypeDisk {
+		if err := disk.MakeGPTPartition(devPath); err != nil {
+			logrus.Errorf("failed to make GPT parition table for block device %s, error: %v", devPath, err)
+			return nil, err
+		}
+	}
+	blockDisk := c.BlockInfo.GetDiskByDevPath(devPath)
+	newDevice := GetDiskBlockDevice(blockDisk, c.nodeName, c.namespace)
+	return newDevice, nil
 }
 
 // forceFormatDisk will be called when the user chooses to force formatting the block device, the block device can only be
