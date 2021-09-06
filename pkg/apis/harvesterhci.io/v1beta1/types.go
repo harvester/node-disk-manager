@@ -58,6 +58,9 @@ type FilesystemInfo struct {
 
 	// a bool indicating the device is force formatted to overwrite the existing one
 	ForceFormatted bool `json:"forceFormatted,omitempty"`
+
+	// a bool indicating whether the filesystem can be provisioned as a disk for the node to store data.
+	Provisioned bool `json:"provisioned,omitempty"`
 }
 
 type DeviceStatus struct {
