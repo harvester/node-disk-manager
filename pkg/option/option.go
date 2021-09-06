@@ -12,4 +12,5 @@ type Option struct {
 	ProfilerAddress string
 	VendorFilter    string
 	PathFilter      string
+	RescanInterval  int64
 }

@@ -26,6 +26,7 @@ import (
 
 const (
 	blockDeviceHandlerName = "harvester-block-device-handler"
+	defaultRescanInterval  = 1 * time.Minute
 )
 
 type Controller struct {
@@ -55,18 +56,38 @@ func Register(ctx context.Context, nodes ctllonghornv1.NodeController, bds ctldi
 		Filters:          filters,
 	}
 
-	if err := controller.RegisterNodeBlockDevices(); err != nil {
+	if err := controller.ScanBlockDevicesOnNode(); err != nil {
 		return err
 	}
+
+	// Rescan devices on the node periodically.
+	rescanInterval := defaultRescanInterval
+	if opt.RescanInterval > 0 {
+		rescanInterval = time.Duration(opt.RescanInterval) * time.Second
+	}
+	go func() {
+		ticker := time.NewTicker(rescanInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := controller.ScanBlockDevicesOnNode(); err != nil {
+					logrus.Errorf("Failed to rescan block devices on node %s: %v", controller.nodeName, err)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 
 	bds.OnChange(ctx, blockDeviceHandlerName, controller.OnBlockDeviceChange)
 	bds.OnRemove(ctx, blockDeviceHandlerName, controller.OnBlockDeviceDelete)
 	return nil
 }
 
-// RegisterNodeBlockDevices will scan the block devices on the node, and it will either create or update the block device
-func (c *Controller) RegisterNodeBlockDevices() error {
-	logrus.Infof("Register block devices of node: %s", c.nodeName)
+// ScanBlockDevicesOnNode scans block devices on the node, and it will either create or update them.
+func (c *Controller) ScanBlockDevicesOnNode() error {
+	logrus.Infof("Scan block devices of node: %s", c.nodeName)
 	newBds := make([]*diskv1.BlockDevice, 0)
 
 	// list all the block devices
@@ -76,11 +97,12 @@ func (c *Controller) RegisterNodeBlockDevices() error {
 			continue
 		}
 
-		logrus.Infof("Found a block device /dev/%s", disk.Name)
+		logrus.Debugf("Found a disk block device /dev/%s", disk.Name)
 		bd := GetDiskBlockDevice(disk, c.nodeName, c.namespace)
 		newBds = append(newBds, bd)
 
 		for _, part := range disk.Partitions {
+			logrus.Debugf("Found a partition block device /dev/%s", part.Name)
 			bd := GetPartitionBlockDevice(part, c.nodeName, c.namespace)
 			newBds = append(newBds, bd)
 		}
@@ -414,8 +436,8 @@ func isValidFileSystem(fs *diskv1.FilesystemInfo, fsStatus *diskv1.FilesystemSta
 // a new one.
 func (c *Controller) SaveBlockDevice(bd *diskv1.BlockDevice, oldBds map[string]*diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
 	if oldBd, ok := oldBds[bd.Name]; ok {
-		if !reflect.DeepEqual(oldBd, bd) {
-			logrus.Infof("Update existing block device %s with devPath: %s", oldBd.Name, oldBd.Spec.DevPath)
+		if !reflect.DeepEqual(oldBd.Status.DeviceStatus, bd.Status.DeviceStatus) {
+			logrus.Infof("Update existing block device status %s with devPath: %s", oldBd.Name, oldBd.Spec.DevPath)
 			toUpdate := oldBd.DeepCopy()
 			toUpdate.Status.DeviceStatus = bd.Status.DeviceStatus
 			lastFormatted := oldBd.Status.DeviceStatus.FileSystem.LastFormattedAt
