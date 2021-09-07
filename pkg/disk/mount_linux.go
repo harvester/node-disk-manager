@@ -18,20 +18,34 @@ var ext4MountOptions = strings.Join([]string{
 
 // MountDisk mounts the specified ext4 volume device to the specified path
 func MountDisk(devPath, mountPoint string) error {
+	var needMkdir bool
+	if _, err := os.Stat(mountPoint); err != nil && !os.IsNotExist(err) {
+		return err
+	} else if os.IsNotExist(err) {
+		needMkdir = true
+	}
+
 	isHostProcMounted, err := util.IsHostProcMounted()
 	if err != nil {
 		return err
 	}
-	if isHostProcMounted {
-		if _, err := executeOnHostNamespace("mkdir", []string{"-p", mountPoint}); err != nil {
-			return err
+
+	if needMkdir {
+		if isHostProcMounted {
+			if _, err := executeOnHostNamespace("mkdir", []string{"-p", mountPoint}); err != nil {
+				return err
+			}
+		} else {
+			if err := os.MkdirAll(mountPoint, os.ModeDir); err != nil {
+				return err
+			}
 		}
+	}
+
+	if isHostProcMounted {
 		return mountExt4OnHostNamespace(devPath, mountPoint, false)
 	}
 
-	if err := os.MkdirAll(mountPoint, os.ModeDir); err != nil {
-		return err
-	}
 	return mountExt4(devPath, mountPoint, false)
 }
 
