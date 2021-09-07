@@ -105,6 +105,7 @@ func main() {
 		},
 		&cli.Int64Flag{
 			Name:        "rescan-interval",
+			EnvVars:     []string{"NDM_RESCAN_INTERVAL"},
 			Usage:       "Specify the interval of device rescanning of the node (in seconds)",
 			Destination: &opt.RescanInterval,
 		},
