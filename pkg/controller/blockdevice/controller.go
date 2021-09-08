@@ -10,6 +10,7 @@ import (
 	lhtypes "github.com/longhorn/longhorn-manager/types"
 	lhutil "github.com/longhorn/longhorn-manager/util"
 	"github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -126,7 +127,9 @@ func (c *Controller) ScanBlockDevicesOnNode() error {
 		}
 	}
 
-	oldBdList, err := c.Blockdevices.List(c.namespace, v1.ListOptions{})
+	oldBdList, err := c.Blockdevices.List(c.namespace, v1.ListOptions{
+		LabelSelector: fmt.Sprintf("%s=%s", corev1.LabelHostname, c.nodeName),
+	})
 	if err != nil {
 		return err
 	}
@@ -509,7 +512,8 @@ func (c *Controller) OnBlockDeviceDelete(key string, device *diskv1.BlockDevice)
 	}
 
 	bds, err := c.BlockdeviceCache.List(c.namespace, labels.SelectorFromSet(map[string]string{
-		ParentDeviceLabel: device.Name,
+		corev1.LabelHostname: c.nodeName,
+		ParentDeviceLabel:    device.Name,
 	}))
 	if err != nil {
 		return device, err
