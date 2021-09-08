@@ -197,24 +197,26 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 		switch {
 		case fs.MountPoint != "" && fs.Provisioned:
 			if deviceCpy, err := c.addDeviceToNode(deviceCpy); err != nil {
-				err := fmt.Errorf("failed to provision device %s to node %s on path %s", device.Name, c.NodeName, device.Spec.FileSystem.MountPoint)
+				err := fmt.Errorf("failed to provision device %s to node %s on path %s: %w", device.Name, c.NodeName, device.Spec.FileSystem.MountPoint, err)
 				logrus.Error(err)
 				diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
 				diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
 				return c.Blockdevices.Update(deviceCpy)
 			}
 		case fs.MountPoint == "" || !fs.Provisioned:
-			if deviceCpy, err := c.removeDeviceFromNode(deviceCpy); err != nil {
-				err := fmt.Errorf("failed to stop provisioning device %s to node %s on path %s", device.Name, c.NodeName, device.Spec.FileSystem.MountPoint)
-				logrus.Error(err)
-				diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
+			if diskv1.DiskAddedToNode.IsTrue(device) {
+				if deviceCpy, err := c.removeDeviceFromNode(deviceCpy); err != nil {
+					err := fmt.Errorf("failed to stop provisioning device %s to node %s on path %s: %w", device.Name, c.NodeName, device.Spec.FileSystem.MountPoint, err)
+					logrus.Error(err)
+					diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
+					diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
+					return c.Blockdevices.Update(deviceCpy)
+				}
+				msg := fmt.Sprintf("Stop provisioning device %s to longhorn node `%s`", device.Name, c.NodeName)
+				diskv1.DiskAddedToNode.SetError(deviceCpy, "", nil)
 				diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
-				return c.Blockdevices.Update(deviceCpy)
+				diskv1.DiskAddedToNode.Message(deviceCpy, msg)
 			}
-			msg := fmt.Sprintf("Stop provisioning device %s to longhorn node `%s`", device.Name, c.NodeName)
-			diskv1.DiskAddedToNode.SetError(deviceCpy, "", nil)
-			diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
-			diskv1.DiskAddedToNode.Message(deviceCpy, msg)
 		}
 	}
 
