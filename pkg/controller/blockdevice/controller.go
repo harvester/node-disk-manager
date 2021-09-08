@@ -40,6 +40,8 @@ type Controller struct {
 	BlockdeviceCache ctldiskv1.BlockDeviceCache
 	BlockInfo        block.Info
 	Filters          []*filter.Filter
+
+	AutoGPTGenerate bool
 }
 
 // Register register the block device CRD controller
@@ -54,6 +56,7 @@ func Register(ctx context.Context, nodes ctllonghornv1.NodeController, bds ctldi
 		BlockdeviceCache: bds.Cache(),
 		BlockInfo:        block,
 		Filters:          filters,
+		AutoGPTGenerate:  opt.AutoGPTGenerate,
 	}
 
 	if err := controller.ScanBlockDevicesOnNode(); err != nil {
@@ -101,12 +104,18 @@ func (c *Controller) ScanBlockDevicesOnNode() error {
 
 		bd := GetDiskBlockDevice(disk, c.nodeName, c.namespace)
 
-		if newBd, err := c.MakeGPTPartitionIfNeeded(bd); err != nil {
+		var err error
+		devPath := bd.Spec.DevPath
+		bd, err = c.MakeGPTPartitionIfNeeded(bd)
+		if err != nil {
 			return err
-		} else if newBd != nil {
-			bd = newBd
-			disk = c.BlockInfo.GetDiskByDevPath(bd.Spec.DevPath)
 		}
+		if bd == nil {
+			logrus.Infof("Skip adding non-identifiable block device %s", devPath)
+			continue
+		}
+
+		disk = c.BlockInfo.GetDiskByDevPath(bd.Spec.DevPath)
 
 		newBds = append(newBds, bd)
 
@@ -287,13 +296,25 @@ func updateDeviceMount(devPath, mountPoint, existingMount string) error {
 
 // MakeGPTPartitionIfNeeded makes GPT partition on given device if needed.
 //
-// Currently only makeing GPT partition on devices without a name (GUID).
+// Currently only making GPT partition on devices without a name (GUID).
 func (c *Controller) MakeGPTPartitionIfNeeded(device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
 	devPath := device.Spec.DevPath
-	if len(device.ObjectMeta.Name) == 0 &&
+	guidMissing := len(device.ObjectMeta.Name) == 0
+
+	if !guidMissing {
+		// No need to generate new GPT partition if this device is identifiable.
+		return device, nil
+	}
+
+	if !c.AutoGPTGenerate {
+		// Return a nil blockdevice to let caller know that this device is
+		// non-identifiable under current settings.
+		return nil, nil
+	}
+
+	if device.Status.DeviceStatus.Details.DeviceType == diskv1.DeviceTypeDisk {
 		// No device.Name means no WWN nor filesystem UUID for this device.
 		// To identify this device uniquely, we create a GPT table for it.
-		device.Status.DeviceStatus.Details.DeviceType == diskv1.DeviceTypeDisk {
 		if err := disk.MakeGPTPartition(devPath); err != nil {
 			logrus.Errorf("failed to make GPT parition table for block device %s, error: %v", devPath, err)
 			return nil, err

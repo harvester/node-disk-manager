@@ -130,12 +130,15 @@ func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, duration time.Duratio
 	devPath := device.Spec.DevPath
 	logrus.Debugf("uevent add block deivce %s", devPath)
 
-	newDevice, err := u.controller.MakeGPTPartitionIfNeeded(device)
+	var err error
+	device, err = u.controller.MakeGPTPartitionIfNeeded(device)
 	if err != nil {
 		return
 	}
-	if newDevice != nil {
-		device = newDevice
+
+	if device == nil {
+		logrus.Infof("Skip adding non-identifiable block device %s", devPath)
+		return
 	}
 
 	bdList, err := u.controller.BlockdeviceCache.List(u.namespace, labels.Everything())
