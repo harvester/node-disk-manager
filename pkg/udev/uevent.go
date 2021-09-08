@@ -20,6 +20,7 @@ import (
 	"github.com/harvester/node-disk-manager/pkg/controller/blockdevice"
 	"github.com/harvester/node-disk-manager/pkg/filter"
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
+	ctllonghornv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/option"
 )
 
@@ -34,12 +35,17 @@ type Udev struct {
 	controller *blockdevice.Controller
 }
 
-func NewUdev(block block.Info, blockdevices ctldiskv1.BlockDeviceController, opt *option.Option, filters []*filter.Filter) *Udev {
+func NewUdev(nodes ctllonghornv1.NodeController, bds ctldiskv1.BlockDeviceController, block block.Info, opt *option.Option, filters []*filter.Filter) *Udev {
 	controller := &blockdevice.Controller{
+		Namespace:        opt.Namespace,
+		NodeName:         opt.NodeName,
+		NodeCache:        nodes.Cache(),
+		Nodes:            nodes,
+		Blockdevices:     bds,
+		BlockdeviceCache: bds.Cache(),
 		BlockInfo:        block,
-		Blockdevices:     blockdevices,
-		BlockdeviceCache: blockdevices.Cache(),
 		Filters:          filters,
+		AutoGPTGenerate:  opt.AutoGPTGenerate,
 	}
 	return &Udev{
 		startOnce:  sync.Once{},

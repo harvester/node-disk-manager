@@ -31,11 +31,11 @@ const (
 )
 
 type Controller struct {
-	namespace string
-	nodeName  string
+	Namespace string
+	NodeName  string
 
-	nodeCache ctllonghornv1.NodeCache
-	nodes     ctllonghornv1.NodeClient
+	NodeCache ctllonghornv1.NodeCache
+	Nodes     ctllonghornv1.NodeClient
 
 	Blockdevices     ctldiskv1.BlockDeviceClient
 	BlockdeviceCache ctldiskv1.BlockDeviceCache
@@ -49,10 +49,10 @@ type Controller struct {
 func Register(ctx context.Context, nodes ctllonghornv1.NodeController, bds ctldiskv1.BlockDeviceController, block block.Info,
 	opt *option.Option, filters []*filter.Filter) error {
 	controller := &Controller{
-		namespace:        opt.Namespace,
-		nodeName:         opt.NodeName,
-		nodeCache:        nodes.Cache(),
-		nodes:            nodes,
+		Namespace:        opt.Namespace,
+		NodeName:         opt.NodeName,
+		NodeCache:        nodes.Cache(),
+		Nodes:            nodes,
 		Blockdevices:     bds,
 		BlockdeviceCache: bds.Cache(),
 		BlockInfo:        block,
@@ -76,7 +76,7 @@ func Register(ctx context.Context, nodes ctllonghornv1.NodeController, bds ctldi
 			select {
 			case <-ticker.C:
 				if err := controller.ScanBlockDevicesOnNode(); err != nil {
-					logrus.Errorf("Failed to rescan block devices on node %s: %v", controller.nodeName, err)
+					logrus.Errorf("Failed to rescan block devices on node %s: %v", controller.NodeName, err)
 				}
 			case <-ctx.Done():
 				return
@@ -91,7 +91,7 @@ func Register(ctx context.Context, nodes ctllonghornv1.NodeController, bds ctldi
 
 // ScanBlockDevicesOnNode scans block devices on the node, and it will either create or update them.
 func (c *Controller) ScanBlockDevicesOnNode() error {
-	logrus.Infof("Scan block devices of node: %s", c.nodeName)
+	logrus.Infof("Scan block devices of node: %s", c.NodeName)
 	newBds := make([]*diskv1.BlockDevice, 0)
 
 	// list all the block devices
@@ -103,7 +103,7 @@ func (c *Controller) ScanBlockDevicesOnNode() error {
 
 		logrus.Debugf("Found a disk block device /dev/%s", disk.Name)
 
-		bd := GetDiskBlockDevice(disk, c.nodeName, c.namespace)
+		bd := GetDiskBlockDevice(disk, c.NodeName, c.Namespace)
 
 		var err error
 		devPath := bd.Spec.DevPath
@@ -122,13 +122,13 @@ func (c *Controller) ScanBlockDevicesOnNode() error {
 
 		for _, part := range disk.Partitions {
 			logrus.Debugf("Found a partition block device /dev/%s", part.Name)
-			bd := GetPartitionBlockDevice(part, c.nodeName, c.namespace)
+			bd := GetPartitionBlockDevice(part, c.NodeName, c.Namespace)
 			newBds = append(newBds, bd)
 		}
 	}
 
-	oldBdList, err := c.Blockdevices.List(c.namespace, v1.ListOptions{
-		LabelSelector: fmt.Sprintf("%s=%s", corev1.LabelHostname, c.nodeName),
+	oldBdList, err := c.Blockdevices.List(c.Namespace, v1.ListOptions{
+		LabelSelector: fmt.Sprintf("%s=%s", corev1.LabelHostname, c.NodeName),
 	})
 	if err != nil {
 		return err
@@ -197,7 +197,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 		switch {
 		case fs.MountPoint != "" && fs.Provisioned:
 			if deviceCpy, err := c.addDeviceToNode(deviceCpy); err != nil {
-				err := fmt.Errorf("failed to provision device %s to node %s on path %s", device.Name, c.nodeName, device.Spec.FileSystem.MountPoint)
+				err := fmt.Errorf("failed to provision device %s to node %s on path %s", device.Name, c.NodeName, device.Spec.FileSystem.MountPoint)
 				logrus.Error(err)
 				diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
 				diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
@@ -205,13 +205,13 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 			}
 		case fs.MountPoint == "" || !fs.Provisioned:
 			if deviceCpy, err := c.removeDeviceFromNode(deviceCpy); err != nil {
-				err := fmt.Errorf("failed to stop provisioning device %s to node %s on path %s", device.Name, c.nodeName, device.Spec.FileSystem.MountPoint)
+				err := fmt.Errorf("failed to stop provisioning device %s to node %s on path %s", device.Name, c.NodeName, device.Spec.FileSystem.MountPoint)
 				logrus.Error(err)
 				diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
 				diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
 				return c.Blockdevices.Update(deviceCpy)
 			}
-			msg := fmt.Sprintf("Stop provisioning device %s to longhorn node `%s`", device.Name, c.nodeName)
+			msg := fmt.Sprintf("Stop provisioning device %s to longhorn node `%s`", device.Name, c.NodeName)
 			diskv1.DiskAddedToNode.SetError(deviceCpy, "", nil)
 			diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
 			diskv1.DiskAddedToNode.Message(deviceCpy, msg)
@@ -324,7 +324,7 @@ func (c *Controller) MakeGPTPartitionIfNeeded(device *diskv1.BlockDevice) (*disk
 		}
 	}
 	blockDisk := c.BlockInfo.GetDiskByDevPath(devPath)
-	newDevice := GetDiskBlockDevice(blockDisk, c.nodeName, c.namespace)
+	newDevice := GetDiskBlockDevice(blockDisk, c.NodeName, c.Namespace)
 	return newDevice, nil
 }
 
@@ -355,7 +355,7 @@ func (c *Controller) forceFormatDisk(device *diskv1.BlockDevice) (*diskv1.BlockD
 
 		// create the single partition block device
 		part := c.BlockInfo.GetPartitionByDevPath(device.Spec.DevPath, device.Spec.DevPath+"1")
-		partitionBlockDevice := GetPartitionBlockDevice(part, c.nodeName, c.namespace)
+		partitionBlockDevice := GetPartitionBlockDevice(part, c.NodeName, c.Namespace)
 		partitionBlockDevice.Spec.FileSystem.MountPoint = filesystem.MountPoint
 		partitionBlockDevice.Spec.FileSystem.ForceFormatted = true
 		bd, err := c.BlockdeviceCache.Get(device.Namespace, partitionBlockDevice.Name)
@@ -409,7 +409,7 @@ func (c *Controller) addDeviceToNode(device *diskv1.BlockDevice) (*diskv1.BlockD
 		return device, nil
 	}
 
-	node, err := c.nodes.Get(c.namespace, c.nodeName, metav1.GetOptions{})
+	node, err := c.Nodes.Get(c.Namespace, c.NodeName, metav1.GetOptions{})
 	if err != nil {
 		return device, err
 	}
@@ -429,7 +429,7 @@ func (c *Controller) addDeviceToNode(device *diskv1.BlockDevice) (*diskv1.BlockD
 		Tags:              []string{},
 	}
 	nodeCpy.Spec.Disks[device.Name] = diskSpec
-	if _, err = c.nodes.Update(nodeCpy); err != nil {
+	if _, err = c.Nodes.Update(nodeCpy); err != nil {
 		return device, err
 	}
 
@@ -445,7 +445,7 @@ func (c *Controller) removeDeviceFromNode(device *diskv1.BlockDevice) (*diskv1.B
 	if !diskv1.DiskAddedToNode.IsTrue(device) {
 		return device, nil
 	}
-	node, err := c.nodes.Get(c.namespace, c.nodeName, metav1.GetOptions{})
+	node, err := c.Nodes.Get(c.Namespace, c.NodeName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Skip since the node is not there.
@@ -455,12 +455,12 @@ func (c *Controller) removeDeviceFromNode(device *diskv1.BlockDevice) (*diskv1.B
 	}
 
 	if _, ok := node.Spec.Disks[device.Name]; !ok {
-		logrus.Debugf("disk %s not found in disks of longhorn node %s/%s", device.Name, c.namespace, c.nodeName)
+		logrus.Debugf("disk %s not found in disks of longhorn node %s/%s", device.Name, c.Namespace, c.NodeName)
 		return device, nil
 	}
 	nodeCpy := node.DeepCopy()
 	delete(nodeCpy.Spec.Disks, device.Name)
-	if _, err := c.nodes.Update(nodeCpy); err != nil {
+	if _, err := c.Nodes.Update(nodeCpy); err != nil {
 		return device, err
 	}
 
@@ -511,8 +511,8 @@ func (c *Controller) OnBlockDeviceDelete(key string, device *diskv1.BlockDevice)
 		return nil, nil
 	}
 
-	bds, err := c.BlockdeviceCache.List(c.namespace, labels.SelectorFromSet(map[string]string{
-		corev1.LabelHostname: c.nodeName,
+	bds, err := c.BlockdeviceCache.List(c.Namespace, labels.SelectorFromSet(map[string]string{
+		corev1.LabelHostname: c.NodeName,
 		ParentDeviceLabel:    device.Name,
 	}))
 	if err != nil {
@@ -524,7 +524,7 @@ func (c *Controller) OnBlockDeviceDelete(key string, device *diskv1.BlockDevice)
 		if device, err := c.removeDeviceFromNode(bd); err != nil {
 			return device, err
 		}
-		if err := c.Blockdevices.Delete(c.namespace, bd.Name, &metav1.DeleteOptions{}); err != nil {
+		if err := c.Blockdevices.Delete(c.Namespace, bd.Name, &metav1.DeleteOptions{}); err != nil {
 			return device, err
 		}
 	}
