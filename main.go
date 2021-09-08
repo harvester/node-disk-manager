@@ -18,12 +18,10 @@ import (
 
 	"github.com/ehazlett/simplelog"
 	"github.com/rancher/wrangler/pkg/kubeconfig"
-	"github.com/rancher/wrangler/pkg/leader"
 	"github.com/rancher/wrangler/pkg/signals"
 	"github.com/rancher/wrangler/pkg/start"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
-	"k8s.io/client-go/kubernetes"
 
 	"github.com/harvester/node-disk-manager/pkg/block"
 	blockdevicev1 "github.com/harvester/node-disk-manager/pkg/controller/blockdevice"
@@ -186,11 +184,9 @@ func run(opt *option.Option) error {
 		return fmt.Errorf("error building node-disk-manager controllers: %s", err.Error())
 	}
 
-	client := kubernetes.NewForConfigOrDie(kubeConfig)
-
 	filters := filter.SetNDMFilters(opt.VendorFilter, opt.PathFilter)
 
-	leader.RunOrDie(ctx, "", "node-disk-manager", client, func(ctx context.Context) {
+	start := func(ctx context.Context) {
 		err = blockdevicev1.Register(ctx, lhs.Longhorn().V1beta1().Node(), disks.Harvesterhci().V1beta1().BlockDevice(), block, opt, filters)
 		if err != nil {
 			logrus.Fatalf("failed to register block device controller, %s", err.Error())
@@ -211,7 +207,9 @@ func run(opt *option.Option) error {
 
 		// register to monitor the UDEV events, similar to run `udevadm monitor -u`
 		go udev.NewUdev(lhs.Longhorn().V1beta1().Node(), disks.Harvesterhci().V1beta1().BlockDevice(), block, opt, filters).Monitor(ctx)
-	})
+	}
+
+	start(ctx)
 
 	<-ctx.Done()
 	return nil
