@@ -159,8 +159,8 @@ func (c *Controller) ScanBlockDevicesOnNode() error {
 // OnBlockDeviceChange watch the block device CR on change and performing disk operations
 // like mounting the disks to a desired path via ext4
 func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
-	if device == nil || device.DeletionTimestamp != nil {
-		return device, nil
+	if device == nil || device.DeletionTimestamp != nil || device.Spec.NodeName != c.NodeName {
+		return nil, nil
 	}
 
 	deviceCpy := device.DeepCopy()
