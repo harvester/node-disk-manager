@@ -210,7 +210,7 @@ func run(opt *option.Option) error {
 		// 2. add node actions, i.e. block device rescan
 
 		// register to monitor the UDEV events, similar to run `udevadm monitor -u`
-		go udev.NewUdev(block, disks.Harvesterhci().V1beta1().BlockDevice(), opt, filters).Monitor(ctx)
+		go udev.NewUdev(lhs.Longhorn().V1beta1().Node(), disks.Harvesterhci().V1beta1().BlockDevice(), block, opt, filters).Monitor(ctx)
 	})
 
 	<-ctx.Done()
