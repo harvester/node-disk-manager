@@ -13,4 +13,5 @@ type Option struct {
 	VendorFilter    string
 	PathFilter      string
 	RescanInterval  int64
+	AutoGPTGenerate bool
 }
