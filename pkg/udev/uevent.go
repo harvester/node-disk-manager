@@ -10,6 +10,7 @@ import (
 
 	"github.com/pilebones/go-udev/netlink"
 	"github.com/sirupsen/logrus"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -141,7 +142,9 @@ func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, duration time.Duratio
 		return
 	}
 
-	bdList, err := u.controller.BlockdeviceCache.List(u.namespace, labels.Everything())
+	bdList, err := u.controller.BlockdeviceCache.List(u.namespace, labels.SelectorFromSet(map[string]string{
+		v1.LabelHostname: u.nodeName,
+	}))
 	if err != nil {
 		logrus.Errorf("Failed to add block device via udev event, error: %s, retry in %s", err.Error(), 2*duration)
 		u.AddBlockDevice(device, 2*duration)
