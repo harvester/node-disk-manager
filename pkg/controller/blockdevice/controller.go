@@ -492,15 +492,17 @@ func isValidFileSystem(fs *diskv1.FilesystemInfo, fsStatus *diskv1.FilesystemSta
 // Note that this method also activate the device if it's previously inactive.
 func (c *Controller) SaveBlockDevice(bd *diskv1.BlockDevice, oldBds map[string]*diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
 	if oldBd, ok := oldBds[bd.Name]; ok {
-		if !reflect.DeepEqual(oldBd.Status.DeviceStatus, bd.Status.DeviceStatus) {
+		newStatus := bd.Status.DeviceStatus
+		oldStatus := oldBd.Status.DeviceStatus
+		lastFormatted := oldStatus.FileSystem.LastFormattedAt
+		if lastFormatted != nil && newStatus.FileSystem.LastFormattedAt == nil {
+			newStatus.FileSystem.LastFormattedAt = lastFormatted
+		}
+		if !reflect.DeepEqual(oldStatus, newStatus) {
 			logrus.Infof("Update existing block device status %s with devPath: %s", oldBd.Name, oldBd.Spec.DevPath)
 			toUpdate := oldBd.DeepCopy()
 			toUpdate.Status.State = diskv1.BlockDeviceActive
-			toUpdate.Status.DeviceStatus = bd.Status.DeviceStatus
-			lastFormatted := oldBd.Status.DeviceStatus.FileSystem.LastFormattedAt
-			if lastFormatted != nil {
-				toUpdate.Status.DeviceStatus.FileSystem.LastFormattedAt = lastFormatted
-			}
+			toUpdate.Status.DeviceStatus = newStatus
 			return c.Blockdevices.Update(toUpdate)
 		}
 		return oldBd, nil
