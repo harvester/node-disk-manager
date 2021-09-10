@@ -2,7 +2,6 @@ package block
 
 import (
 	"bufio"
-	"crypto/md5"
 	"encoding/hex"
 	"io"
 	"io/ioutil"
@@ -17,6 +16,7 @@ import (
 	"github.com/jaypipes/ghw/pkg/option"
 	"github.com/jaypipes/ghw/pkg/util"
 	iscsiutil "github.com/longhorn/go-iscsi-helper/util"
+	"golang.org/x/crypto/blake2b"
 
 	ndmutil "github.com/harvester/node-disk-manager/pkg/util"
 )
@@ -552,7 +552,7 @@ func GenerateDiskGUID(disk *Disk, nodeName string) string {
 }
 
 func makeHashGUID(payload string) string {
-	hasher := md5.New()
+	hasher, _ := blake2b.New(16, nil)
 	hasher.Write([]byte(payload))
 	return hex.EncodeToString(hasher.Sum(nil))
 }
