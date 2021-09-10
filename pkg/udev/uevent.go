@@ -174,7 +174,7 @@ func (u *Udev) RemoveBlockDevice(device *v1beta1.BlockDevice, udevDevice *Device
 	logrus.Debugf("uevent remove block deivce %s", device.Spec.DevPath)
 
 	udevDevice.updateDiskFromUdev(disk)
-	if guid := block.GenerateDiskGUID(disk); len(guid) > 0 {
+	if guid := block.GenerateDiskGUID(disk, u.nodeName); len(guid) > 0 {
 		device.ObjectMeta.Name = guid
 	}
 
