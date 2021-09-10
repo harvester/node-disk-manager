@@ -528,15 +528,15 @@ func parseMountEntry(line string) *mountEntry {
 }
 
 // GeneratePartitionGUID generates a GUID for partitions.
-func GeneratePartitionGUID(part *Partition) string {
+func GeneratePartitionGUID(part *Partition, nodeName string) string {
 	if valueExists(part.UUID) {
-		return makeHashGUID(part.UUID)
+		return makeHashGUID(nodeName + part.UUID)
 	}
 	return ""
 }
 
 // GenerateDiskGUID generates a GUID for disks.
-func GenerateDiskGUID(disk *Disk) string {
+func GenerateDiskGUID(disk *Disk, nodeName string) string {
 	var id string
 	if valueExists(disk.WWN) {
 		id = disk.WWN + disk.Vendor + disk.Model + disk.SerialNumber
@@ -546,7 +546,7 @@ func GenerateDiskGUID(disk *Disk) string {
 		id = disk.PtUUID
 	}
 	if valueExists(id) {
-		return makeHashGUID(id)
+		return makeHashGUID(nodeName + id)
 	}
 	return ""
 }

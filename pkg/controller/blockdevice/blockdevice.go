@@ -68,7 +68,7 @@ func GetDiskBlockDevice(disk *block.Disk, nodeName, namespace string) *diskv1.Bl
 		Status: status,
 	}
 
-	if guid := block.GenerateDiskGUID(disk); len(guid) > 0 {
+	if guid := block.GenerateDiskGUID(disk, nodeName); len(guid) > 0 {
 		bd.ObjectMeta.Name = guid
 	}
 
@@ -120,11 +120,11 @@ func GetPartitionBlockDevice(part *block.Partition, nodeName, namespace string) 
 		Status: status,
 	}
 
-	if parentDeviceName := block.GenerateDiskGUID(part.Disk); len(parentDeviceName) > 0 {
+	if parentDeviceName := block.GenerateDiskGUID(part.Disk, nodeName); len(parentDeviceName) > 0 {
 		bd.ObjectMeta.Labels[ParentDeviceLabel] = parentDeviceName
 	}
 
-	if guid := block.GeneratePartitionGUID(part); len(guid) > 0 {
+	if guid := block.GeneratePartitionGUID(part, nodeName); len(guid) > 0 {
 		bd.ObjectMeta.Name = guid
 	}
 
