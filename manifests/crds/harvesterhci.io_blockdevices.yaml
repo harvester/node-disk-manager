@@ -23,6 +23,9 @@ spec:
     - jsonPath: .status.deviceStatus.details.deviceType
       name: Type
       type: string
+    - jsonPath: .spec.devPath
+      name: DevPath
+      type: string
     - jsonPath: .status.deviceStatus.fileSystem.mountPoint
       name: MountPoint
       type: string
