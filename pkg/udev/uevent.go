@@ -100,6 +100,7 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 	}
 
 	var disk *block.Disk
+	var part *block.Partition
 	var bd *v1beta1.BlockDevice
 	if udevDevice.IsDisk() {
 		disk = u.controller.BlockInfo.GetDiskByDevPath(udevDevice.GetShortName())
@@ -110,12 +111,16 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 		if err != nil {
 			logrus.Errorf("failed to get parent dev name, %s", err.Error())
 		}
-		part := u.controller.BlockInfo.GetPartitionByDevPath(parentPath, udevDevice.GetDevName())
+		part = u.controller.BlockInfo.GetPartitionByDevPath(parentPath, udevDevice.GetDevName())
 		disk = part.Disk
 		bd = blockdevice.GetPartitionBlockDevice(part, u.nodeName, u.namespace)
 	}
 
 	if u.controller.ApplyDiskFilter(disk) {
+		return
+	}
+
+	if part != nil && u.controller.ApplyPartFilter(part) {
 		return
 	}
 

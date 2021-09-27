@@ -101,6 +101,12 @@ func main() {
 			Usage:       "A string of comma-separated values that you want to exclude for block device path filter",
 			Destination: &opt.PathFilter,
 		},
+		&cli.StringFlag{
+			Name:        "label-filter",
+			EnvVars:     []string{"NDM_LABEL_FILTER"},
+			Usage:       "A string of comma-separated glob pattern that you want to exclude for block device filesystem label filter",
+			Destination: &opt.LabelFilter,
+		},
 		&cli.Int64Flag{
 			Name:        "rescan-interval",
 			EnvVars:     []string{"NDM_RESCAN_INTERVAL"},
@@ -184,7 +190,7 @@ func run(opt *option.Option) error {
 		return fmt.Errorf("error building node-disk-manager controllers: %s", err.Error())
 	}
 
-	filters := filter.SetNDMFilters(opt.VendorFilter, opt.PathFilter)
+	filters := filter.SetNDMFilters(opt.VendorFilter, opt.PathFilter, opt.LabelFilter)
 
 	start := func(ctx context.Context) {
 		err = blockdevicev1.Register(ctx, lhs.Longhorn().V1beta1().Node(), disks.Harvesterhci().V1beta1().BlockDevice(), block, opt, filters)
