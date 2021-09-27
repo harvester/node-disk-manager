@@ -359,6 +359,7 @@ func (c *Controller) forceFormatDisk(device *diskv1.BlockDevice) (*diskv1.BlockD
 		part := c.BlockInfo.GetPartitionByDevPath(device.Spec.DevPath, device.Spec.DevPath+"1")
 		partitionBlockDevice := GetPartitionBlockDevice(part, c.NodeName, c.Namespace)
 		partitionBlockDevice.Spec.FileSystem.MountPoint = filesystem.MountPoint
+		partitionBlockDevice.Spec.FileSystem.Provisioned = filesystem.Provisioned
 		partitionBlockDevice.Spec.FileSystem.ForceFormatted = true
 		bd, err := c.BlockdeviceCache.Get(device.Namespace, partitionBlockDevice.Name)
 		diskv1.DeviceFormatting.SetStatusBool(partitionBlockDevice, true)
@@ -386,6 +387,7 @@ func (c *Controller) forceFormatDisk(device *diskv1.BlockDevice) (*diskv1.BlockD
 
 		}
 		device.Spec.FileSystem.MountPoint = ""
+		device.Spec.FileSystem.Provisioned = false
 		device.Status.DeviceStatus.Partitioned = true
 	}
 
