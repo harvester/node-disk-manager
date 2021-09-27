@@ -16,6 +16,7 @@ import (
 	"github.com/jaypipes/ghw/pkg/option"
 	"github.com/jaypipes/ghw/pkg/util"
 	iscsiutil "github.com/longhorn/go-iscsi-helper/util"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/blake2b"
 
 	ndmutil "github.com/harvester/node-disk-manager/pkg/util"
@@ -532,6 +533,7 @@ func GeneratePartitionGUID(part *Partition, nodeName string) string {
 	if valueExists(part.UUID) {
 		return makeHashGUID(nodeName + part.UUID)
 	}
+	logrus.Warnf("failed to generate GUID for device %s", part.Name)
 	return ""
 }
 
@@ -548,6 +550,7 @@ func GenerateDiskGUID(disk *Disk, nodeName string) string {
 	if valueExists(id) {
 		return makeHashGUID(nodeName + id)
 	}
+	logrus.Warnf("failed to generate GUID for device %s", disk.Name)
 	return ""
 }
 
