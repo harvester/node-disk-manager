@@ -12,13 +12,14 @@ type Filter struct {
 	PartFilter PartFilter
 }
 
-func SetNDMFilters(vendorString, pathString string) []*Filter {
+func SetNDMFilters(vendorString, pathString, labelString string) []*Filter {
 	logrus.Info("register ndm filters")
 	listFilter := make([]*Filter, 0)
 
 	vendorFilter := RegisterVendorFilter(vendorString)
 	pathFilter := RegisterPathFilter(pathString)
-	listFilter = append(listFilter, vendorFilter, pathFilter)
+	labelFilter := RegisterLabelFilter(labelString)
+	listFilter = append(listFilter, vendorFilter, pathFilter, labelFilter)
 
 	return listFilter
 }
@@ -39,6 +40,7 @@ func (f *Filter) ApplyDiskFilter(disk *block.Disk) bool {
 	}
 	return false
 }
+
 func (f *Filter) ApplyPartFilter(part *block.Partition) bool {
 	if f.PartFilter != nil {
 		return f.PartFilter.Exclude(part)

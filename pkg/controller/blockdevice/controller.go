@@ -124,6 +124,10 @@ func (c *Controller) ScanBlockDevicesOnNode() error {
 		newBds = append(newBds, bd)
 
 		for _, part := range disk.Partitions {
+			// ignore block device by filters
+			if c.ApplyPartFilter(part) {
+				continue
+			}
 			logrus.Debugf("Found a partition block device /dev/%s", part.Name)
 			bd := GetPartitionBlockDevice(part, c.NodeName, c.Namespace)
 			if bd.Name == "" {
@@ -644,6 +648,18 @@ func (c *Controller) ApplyDiskFilter(disk *block.Disk) bool {
 	for _, filter := range c.Filters {
 		if filter.ApplyDiskFilter(disk) {
 			logrus.Debugf("block device /dev/%s ignored by %s", disk.Name, filter.Name)
+			return true
+		}
+	}
+	return false
+}
+
+// ApplyPartFilter check the status of every register filters if the partition
+// meets the filter criteria it will return true else it will return false
+func (c *Controller) ApplyPartFilter(part *block.Partition) bool {
+	for _, filter := range c.Filters {
+		if filter.ApplyPartFilter(part) {
+			logrus.Debugf("block device /dev/%s ignored by %s", part.Name, filter.Name)
 			return true
 		}
 	}

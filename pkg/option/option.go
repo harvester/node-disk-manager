@@ -12,6 +12,7 @@ type Option struct {
 	ProfilerAddress string
 	VendorFilter    string
 	PathFilter      string
+	LabelFilter     string
 	RescanInterval  int64
 	AutoGPTGenerate bool
 }
