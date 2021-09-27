@@ -115,7 +115,7 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 		bd = blockdevice.GetPartitionBlockDevice(part, u.nodeName, u.namespace)
 	}
 
-	if u.controller.ApplyFilter(disk) {
+	if u.controller.ApplyDiskFilter(disk) {
 		return
 	}
 

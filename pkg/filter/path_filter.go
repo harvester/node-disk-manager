@@ -31,8 +31,8 @@ func RegisterPathFilter(filters string) *Filter {
 		vf.excludePaths = append(vf.excludePaths, strings.Split(filters, ",")...)
 	}
 	return &Filter{
-		Name:      pathFilterName,
-		Interface: vf,
+		Name:       pathFilterName,
+		DiskFilter: vf,
 	}
 }
 
