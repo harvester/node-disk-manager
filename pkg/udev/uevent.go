@@ -121,6 +121,10 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 
 	switch uevent.Action {
 	case netlink.ADD:
+		if len(bd.Name) == 0 {
+			logrus.Infof("Skip adding non-identifiable block device %s", bd.Spec.DevPath)
+			return
+		}
 		u.AddBlockDevice(bd, defaultDuration)
 	case netlink.REMOVE:
 		if udevDevice.IsDisk() {
@@ -176,6 +180,11 @@ func (u *Udev) RemoveBlockDevice(device *v1beta1.BlockDevice, udevDevice *Device
 	udevDevice.updateDiskFromUdev(disk)
 	if guid := block.GenerateDiskGUID(disk, u.nodeName); len(guid) > 0 {
 		device.ObjectMeta.Name = guid
+	}
+
+	if len(device.Name) == 0 {
+		logrus.Infof("Skip removing non-identifiable block device %s", disk.Name)
+		return
 	}
 
 	err := u.controller.Blockdevices.Delete(u.namespace, device.Name, &metav1.DeleteOptions{})

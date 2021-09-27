@@ -123,6 +123,10 @@ func (c *Controller) ScanBlockDevicesOnNode() error {
 		for _, part := range disk.Partitions {
 			logrus.Debugf("Found a partition block device /dev/%s", part.Name)
 			bd := GetPartitionBlockDevice(part, c.NodeName, c.Namespace)
+			if len(bd.Name) == 0 {
+				logrus.Infof("Skip adding non-identifiable block device %s", bd.Spec.DevPath)
+				continue
+			}
 			newBds = append(newBds, bd)
 		}
 	}
