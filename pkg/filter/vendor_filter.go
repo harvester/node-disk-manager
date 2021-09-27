@@ -32,8 +32,8 @@ func RegisterVendorFilter(filters string) *Filter {
 	}
 
 	return &Filter{
-		Name:      vendorFilterName,
-		Interface: vf,
+		Name:       vendorFilterName,
+		DiskFilter: vf,
 	}
 }
 

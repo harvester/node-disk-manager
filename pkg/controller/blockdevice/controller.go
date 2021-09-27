@@ -100,7 +100,7 @@ func (c *Controller) ScanBlockDevicesOnNode() error {
 	// list all the block devices
 	for _, disk := range c.BlockInfo.GetDisks() {
 		// ignore block device by filters
-		if c.ApplyFilter(disk) {
+		if c.ApplyDiskFilter(disk) {
 			continue
 		}
 
@@ -638,10 +638,11 @@ func (c *Controller) OnBlockDeviceDelete(key string, device *diskv1.BlockDevice)
 	return nil, nil
 }
 
-// ApplyFilter check the status of every register filters if the disk meets the filter criteria it will return true else it will return false
-func (c *Controller) ApplyFilter(disk *block.Disk) bool {
+// ApplyDiskFilter check the status of every register filters if the disk meets
+// the filter criteria it will return true else it will return false
+func (c *Controller) ApplyDiskFilter(disk *block.Disk) bool {
 	for _, filter := range c.Filters {
-		if filter.ApplyFilter(disk) {
+		if filter.ApplyDiskFilter(disk) {
 			logrus.Debugf("block device /dev/%s ignored by %s", disk.Name, filter.Name)
 			return true
 		}

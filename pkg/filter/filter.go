@@ -7,8 +7,9 @@ import (
 )
 
 type Filter struct {
-	Name      string
-	Interface Interface
+	Name       string
+	DiskFilter DiskFilter
+	PartFilter PartFilter
 }
 
 func SetNDMFilters(vendorString, pathString string) []*Filter {
@@ -22,14 +23,25 @@ func SetNDMFilters(vendorString, pathString string) []*Filter {
 	return listFilter
 }
 
-type Interface interface {
-	Filters
+type DiskFilter interface {
+	// Exclude returns true if passing disk does not match with exclude value
+	Exclude(disk *block.Disk) bool
 }
 
-type Filters interface {
-	Exclude(disk *block.Disk) bool // exclude returns true if passing disk does not match with exclude value
+type PartFilter interface {
+	// Exclude returns true if passing partition does not match with exclude value
+	Exclude(part *block.Partition) bool
 }
 
-func (f *Filter) ApplyFilter(disk *block.Disk) bool {
-	return f.Interface.Exclude(disk)
+func (f *Filter) ApplyDiskFilter(disk *block.Disk) bool {
+	if f.DiskFilter != nil {
+		return f.DiskFilter.Exclude(disk)
+	}
+	return false
+}
+func (f *Filter) ApplyPartFilter(part *block.Partition) bool {
+	if f.PartFilter != nil {
+		return f.PartFilter.Exclude(part)
+	}
+	return false
 }
