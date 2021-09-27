@@ -16,6 +16,7 @@ var (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:resource:shortName=bd;bds,scope=Namespaced
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=`.status.deviceStatus.details.deviceType`
+// +kubebuilder:printcolumn:name="DevPath",type="string",JSONPath=`.spec.devPath`
 // +kubebuilder:printcolumn:name="MountPoint",type="string",JSONPath=`.status.deviceStatus.fileSystem.mountPoint`
 // +kubebuilder:printcolumn:name="NodeName",type="string",JSONPath=`.spec.nodeName`
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=`.status.state`
