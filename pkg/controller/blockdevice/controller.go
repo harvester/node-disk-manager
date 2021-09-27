@@ -504,7 +504,7 @@ func (c *Controller) SaveBlockDevice(bd *diskv1.BlockDevice, oldBds map[string]*
 		if lastFormatted != nil && newStatus.FileSystem.LastFormattedAt == nil {
 			newStatus.FileSystem.LastFormattedAt = lastFormatted
 		}
-		if !reflect.DeepEqual(oldStatus, newStatus) {
+		if !reflect.DeepEqual(oldStatus, newStatus) || oldBd.Status.State != diskv1.BlockDeviceActive {
 			logrus.Infof("Update existing block device status %s with devPath: %s", oldBd.Name, oldBd.Spec.DevPath)
 			toUpdate := oldBd.DeepCopy()
 			toUpdate.Status.State = diskv1.BlockDeviceActive
