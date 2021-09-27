@@ -272,8 +272,10 @@ func diskPartition(ctx *context.Context, paths *linuxpath.Paths, disk, fname str
 	mp, pt, ro := partitionInfo(ctx, paths, fname)
 	du := GetDiskUUID(fname, string(PartUUID))
 	driveType, storageController := diskTypes(fname)
+	label := GetFileSystemLabel(fname)
 	return &Partition{
 		Name:      fname,
+		Label:     label,
 		SizeBytes: size,
 		FileSystemInfo: FileSystemInfo{
 			MountPoint: mp,
