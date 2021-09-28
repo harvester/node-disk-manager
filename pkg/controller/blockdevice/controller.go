@@ -126,7 +126,7 @@ func (c *Controller) ScanBlockDevicesOnNode() error {
 		for _, part := range disk.Partitions {
 			logrus.Debugf("Found a partition block device /dev/%s", part.Name)
 			bd := GetPartitionBlockDevice(part, c.NodeName, c.Namespace)
-			if len(bd.Name) == 0 {
+			if bd.Name == "" {
 				logrus.Infof("Skip adding non-identifiable block device %s", bd.Spec.DevPath)
 				continue
 			}
@@ -318,7 +318,7 @@ func updateDeviceMount(devPath, mountPoint, existingMount string) error {
 // Currently only making GPT partition on devices without a name (GUID).
 func (c *Controller) MakeGPTPartitionIfNeeded(device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
 	devPath := device.Spec.DevPath
-	guidMissing := len(device.ObjectMeta.Name) == 0
+	guidMissing := device.ObjectMeta.Name == ""
 
 	if !guidMissing {
 		// No need to generate new GPT partition if this device is identifiable.
