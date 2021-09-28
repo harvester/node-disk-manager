@@ -349,9 +349,6 @@ func (c *Controller) MakeGPTPartitionIfNeeded(device *diskv1.BlockDevice) (*disk
 // - umount the block device if it is mounted
 // - create ext4 filesystem formatting of the single partition
 func (c *Controller) forceFormatPartition(device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
-	if diskv1.DeviceFormatting.IsTrue(device) {
-		return device, fmt.Errorf("device %s is already under formatting process ", device.Name)
-	}
 	if device.Status.DeviceStatus.Details.DeviceType != diskv1.DeviceTypePart {
 		return device, fmt.Errorf("device %s is not a partition", device.Name)
 	}
