@@ -28,7 +28,7 @@ import (
 
 const (
 	blockDeviceHandlerName  = "harvester-block-device-handler"
-	defaultRescanInterval   = 1 * time.Minute
+	defaultRescanInterval   = 30 * time.Second
 	forceFormatPollInterval = 3 * time.Second
 	forceFormatPollTimeout  = 30 * time.Second
 )
