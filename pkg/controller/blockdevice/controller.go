@@ -219,10 +219,6 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 					diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
 					return c.Blockdevices.Update(deviceCpy)
 				}
-				msg := fmt.Sprintf("Stop provisioning device %s to longhorn node `%s`", device.Name, c.NodeName)
-				diskv1.DiskAddedToNode.SetError(deviceCpy, "", nil)
-				diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
-				diskv1.DiskAddedToNode.Message(deviceCpy, msg)
 			}
 		}
 	}
@@ -424,9 +420,17 @@ func (c *Controller) addDeviceToNode(device *diskv1.BlockDevice) (*diskv1.BlockD
 		return device, err
 	}
 
+	updateDeviceCondition := func() {
+		msg := fmt.Sprintf("Added disk %s to longhorn node `%s` as an additional disk", device.Name, node.Name)
+		diskv1.DiskAddedToNode.SetError(device, "", nil)
+		diskv1.DiskAddedToNode.SetStatusBool(device, true)
+		diskv1.DiskAddedToNode.Message(device, msg)
+	}
+
 	mountPoint := device.Spec.FileSystem.MountPoint
 	if disk, ok := node.Spec.Disks[device.Name]; ok && disk.Path == mountPoint {
-		// Device exists and with the same mount point. No need to update.
+		// Device exists and with the same mount point. No need to update the node.
+		updateDeviceCondition()
 		return device, nil
 	}
 
@@ -443,18 +447,12 @@ func (c *Controller) addDeviceToNode(device *diskv1.BlockDevice) (*diskv1.BlockD
 		return device, err
 	}
 
-	msg := fmt.Sprintf("Added disk %s to longhorn node `%s` as an additional disk", device.Name, nodeCpy.Name)
-	diskv1.DiskAddedToNode.SetError(device, "", nil)
-	diskv1.DiskAddedToNode.SetStatusBool(device, true)
-	diskv1.DiskAddedToNode.Message(device, msg)
+	updateDeviceCondition()
 	return device, nil
 }
 
 // removeDeviceFromNode removes a device from a longhorn node.
 func (c *Controller) removeDeviceFromNode(device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
-	if !diskv1.DiskAddedToNode.IsTrue(device) {
-		return device, nil
-	}
 	node, err := c.Nodes.Get(c.Namespace, c.NodeName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -466,6 +464,10 @@ func (c *Controller) removeDeviceFromNode(device *diskv1.BlockDevice) (*diskv1.B
 
 	if _, ok := node.Spec.Disks[device.Name]; !ok {
 		logrus.Debugf("disk %s not found in disks of longhorn node %s/%s", device.Name, c.Namespace, c.NodeName)
+		msg := fmt.Sprintf("Disk not found in longhorn node `%s`", c.NodeName)
+		diskv1.DiskAddedToNode.SetError(device, "", nil)
+		diskv1.DiskAddedToNode.SetStatusBool(device, false)
+		diskv1.DiskAddedToNode.Message(device, msg)
 		return device, nil
 	}
 	nodeCpy := node.DeepCopy()
@@ -474,6 +476,10 @@ func (c *Controller) removeDeviceFromNode(device *diskv1.BlockDevice) (*diskv1.B
 		return device, err
 	}
 
+	msg := fmt.Sprintf("Stop provisioning device %s to longhorn node `%s`", device.Name, c.NodeName)
+	diskv1.DiskAddedToNode.SetError(device, "", nil)
+	diskv1.DiskAddedToNode.SetStatusBool(device, false)
+	diskv1.DiskAddedToNode.Message(device, msg)
 	return device, nil
 }
 
@@ -534,15 +540,38 @@ func (c *Controller) OnBlockDeviceDelete(key string, device *diskv1.BlockDevice)
 		return device, err
 	}
 
+	if len(bds) == 0 {
+		return nil, nil
+	}
+
+	// Remove dangling blockdevice partitions
 	for _, bd := range bds {
-		// Remove disk from related node if needed
-		if device, err := c.removeDeviceFromNode(bd); err != nil {
-			return device, err
-		}
 		if err := c.Blockdevices.Delete(c.Namespace, bd.Name, &metav1.DeleteOptions{}); err != nil {
 			return device, err
 		}
 	}
+
+	// Clean disk from related longhorn node
+	node, err := c.Nodes.Get(c.Namespace, c.NodeName, metav1.GetOptions{})
+	if err != nil && !errors.IsNotFound(err) {
+		return device, err
+	}
+	if node == nil {
+		logrus.Debugf("node %s is not there. Skip disk deletion from node", c.NodeName)
+		return nil, nil
+	}
+	nodeCpy := node.DeepCopy()
+	for _, bd := range bds {
+		if _, ok := nodeCpy.Spec.Disks[bd.Name]; !ok {
+			logrus.Debugf("disk %s not found in disks of longhorn node %s/%s", bd.Name, c.Namespace, c.NodeName)
+			continue
+		}
+		delete(nodeCpy.Spec.Disks, bd.Name)
+	}
+	if _, err := c.Nodes.Update(nodeCpy); err != nil {
+		return device, err
+	}
+
 	return nil, nil
 }
 
