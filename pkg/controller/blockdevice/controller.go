@@ -528,6 +528,15 @@ func (c *Controller) removeDeviceFromNode(device *diskv1.BlockDevice) (*diskv1.B
 	if _, err := c.Nodes.Update(nodeCpy); err != nil {
 		return device, err
 	}
+	// To prevent user from mistaking unprovisioning from umount, NDM umount
+	// for the device as well while unprovisioning it.
+	device.Spec.FileSystem.MountPoint = ""
+	existingMount := device.Status.DeviceStatus.FileSystem.MountPoint
+	if existingMount != "" {
+		if err := disk.UmountDisk(existingMount); err != nil {
+			return device, err
+		}
+	}
 
 	msg := fmt.Sprintf("Stop provisioning device %s to longhorn node `%s`", device.Name, c.NodeName)
 	diskv1.DiskAddedToNode.SetError(device, "", nil)
@@ -618,6 +627,12 @@ func (c *Controller) OnBlockDeviceDelete(key string, device *diskv1.BlockDevice)
 		if _, ok := nodeCpy.Spec.Disks[bd.Name]; !ok {
 			logrus.Debugf("disk %s not found in disks of longhorn node %s/%s", bd.Name, c.Namespace, c.NodeName)
 			continue
+		}
+		existingMount := bd.Status.DeviceStatus.FileSystem.MountPoint
+		if existingMount != "" {
+			if err := disk.UmountDisk(existingMount); err != nil {
+				logrus.Warnf("cannot umount disk %s from mount point %s, err: %s", bd.Name, existingMount, err.Error())
+			}
 		}
 		delete(nodeCpy.Spec.Disks, bd.Name)
 	}
