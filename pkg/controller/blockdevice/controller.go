@@ -335,8 +335,7 @@ func (c *Controller) MakeGPTPartitionIfNeeded(device *diskv1.BlockDevice) (*disk
 		// No device.Name means no WWN nor filesystem UUID for this device.
 		// To identify this device uniquely, we create a GPT table for it.
 		if err := disk.MakeGPTPartition(devPath); err != nil {
-			logrus.Errorf("failed to make GPT parition table for block device %s, error: %v", devPath, err)
-			return nil, err
+			return nil, fmt.Errorf("failed to make GPT partition table for block device %s, error: %v", devPath, err)
 		}
 	}
 	blockDisk := c.BlockInfo.GetDiskByDevPath(devPath)
@@ -430,7 +429,6 @@ func (c *Controller) forceFormatDisk(device *diskv1.BlockDevice) (*diskv1.BlockD
 	diskv1.DeviceFormatting.SetStatusBool(toUpdate, true)
 	diskv1.DeviceFormatting.Message(toUpdate, fmt.Sprintf("formatting disk partition %s with ext4 filesystem", toUpdate.Spec.DevPath))
 	if _, err := c.Blockdevices.Update(toUpdate); err != nil {
-		logrus.Errorf("failed to update partition block device %s, %s", bd.Name, err.Error())
 		return device, err
 	}
 
