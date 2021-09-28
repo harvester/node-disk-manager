@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
@@ -26,8 +27,10 @@ import (
 )
 
 const (
-	blockDeviceHandlerName = "harvester-block-device-handler"
-	defaultRescanInterval  = 1 * time.Minute
+	blockDeviceHandlerName  = "harvester-block-device-handler"
+	defaultRescanInterval   = 1 * time.Minute
+	forceFormatPollInterval = 3 * time.Second
+	forceFormatPollTimeout  = 30 * time.Second
 )
 
 type Controller struct {
@@ -171,7 +174,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 	fs := *deviceCpy.Spec.FileSystem
 	fsStatus := *deviceCpy.Status.DeviceStatus.FileSystem
 
-	if fs.ForceFormatted && fsStatus.LastFormattedAt == nil {
+	if fs.ForceFormatted && fsStatus.LastFormattedAt == nil && !diskv1.DeviceFormatting.IsTrue(device) {
 		// perform disk force-format operation
 		if deviceCpy, err := c.forceFormatDisk(deviceCpy); err != nil {
 			error := fmt.Errorf("failed to force format the device %s, %s", device.Spec.DevPath, err.Error())
@@ -359,37 +362,36 @@ func (c *Controller) forceFormatDisk(device *diskv1.BlockDevice) (*diskv1.BlockD
 			return device, err
 		}
 
-		// create the single partition block device
-		part := c.BlockInfo.GetPartitionByDevPath(device.Spec.DevPath, device.Spec.DevPath+"1")
-		partitionBlockDevice := GetPartitionBlockDevice(part, c.NodeName, c.Namespace)
-		partitionBlockDevice.Spec.FileSystem.MountPoint = filesystem.MountPoint
-		partitionBlockDevice.Spec.FileSystem.Provisioned = filesystem.Provisioned
-		partitionBlockDevice.Spec.FileSystem.ForceFormatted = true
-		bd, err := c.BlockdeviceCache.Get(device.Namespace, partitionBlockDevice.Name)
-		diskv1.DeviceFormatting.SetStatusBool(partitionBlockDevice, true)
-		diskv1.DeviceFormatting.Message(partitionBlockDevice, fmt.Sprintf("formatting disk partition %s with ext4 filesystem", partitionBlockDevice.Spec.DevPath))
-		if err != nil && !errors.IsNotFound(err) {
+		// Polling for newly added partition block device (from udev monitoring)
+		var bd *diskv1.BlockDevice
+		poll := func() (bool, error) {
+			var err error
+			devPath := device.Spec.DevPath + "1"
+			part := c.BlockInfo.GetPartitionByDevPath(device.Spec.DevPath, devPath)
+			name := block.GeneratePartitionGUID(part, c.NodeName)
+			bd, err = c.BlockdeviceCache.Get(device.Namespace, name)
+			if err != nil && !errors.IsNotFound(err) {
+				return false, err
+			}
+			logrus.Debugf("polling for single partition %s, found: %t", devPath, bd != nil)
+			return bd != nil, nil
+		}
+		if err := wait.PollImmediate(forceFormatPollInterval, forceFormatPollTimeout, poll); err != nil {
 			return device, err
 		}
 
-		if bd == nil {
-			if _, err := c.Blockdevices.Create(partitionBlockDevice); err != nil {
-				logrus.Errorf("failed to create partition block device %s, %s", bd.Name, err.Error())
-				return device, err
-			}
-		} else {
-			toUpdate := bd.DeepCopy()
-			toUpdate.Spec = partitionBlockDevice.Spec
-			toUpdate.Status = partitionBlockDevice.Status
-			diskv1.DeviceFormatting.SetStatusBool(toUpdate, true)
-			diskv1.DeviceFormatting.Message(partitionBlockDevice, fmt.Sprintf("formatting disk partition %s with ext4 filesystem", toUpdate.Spec.DevPath))
-			fmt.Printf("debug to update %s: %+v\n", bd.Name, bd.Spec.FileSystem)
-			if _, err := c.Blockdevices.Update(toUpdate); err != nil {
-				logrus.Errorf("failed to update partition block device %s, %s", bd.Name, err.Error())
-				return device, err
-			}
-
+		// Update the single partition block device to start force formatting
+		toUpdate := bd.DeepCopy()
+		toUpdate.Spec.FileSystem.Provisioned = filesystem.Provisioned
+		toUpdate.Spec.FileSystem.MountPoint = filesystem.MountPoint
+		toUpdate.Spec.FileSystem.ForceFormatted = true
+		diskv1.DeviceFormatting.SetStatusBool(toUpdate, true)
+		diskv1.DeviceFormatting.Message(toUpdate, fmt.Sprintf("formatting disk partition %s with ext4 filesystem", toUpdate.Spec.DevPath))
+		if _, err := c.Blockdevices.Update(toUpdate); err != nil {
+			logrus.Errorf("failed to update partition block device %s, %s", bd.Name, err.Error())
+			return device, err
 		}
+
 		device.Spec.FileSystem.MountPoint = ""
 		device.Spec.FileSystem.Provisioned = false
 		device.Status.DeviceStatus.Partitioned = true
