@@ -12,29 +12,35 @@ const (
 	labelFilterName = "label filter"
 )
 
-// labelFilter filters disk based on given filesystem label patterns
-type labelFilter struct {
+// partLabelFilter filters disk based on given filesystem label patterns
+type partLabelFilter struct {
 	excludeLabels []string
 }
 
-func RegisterLabelFilter(filters string) *Filter {
-	vf := &labelFilter{}
+// diskLabelFilter filters disk if all its partitions are excluded.
+type diskLabelFilter struct {
+	filter *partLabelFilter
+}
 
-	vf.excludeLabels = []string{}
+func RegisterLabelFilter(filters string) *Filter {
+	f := &partLabelFilter{}
+
+	f.excludeLabels = []string{}
 
 	if filters != "" {
-		vf.excludeLabels = append(vf.excludeLabels, strings.Split(filters, ",")...)
+		f.excludeLabels = append(f.excludeLabels, strings.Split(filters, ",")...)
 	}
 
 	return &Filter{
 		Name:       labelFilterName,
-		PartFilter: vf,
+		PartFilter: f,
+		DiskFilter: &diskLabelFilter{filter: f},
 	}
 }
 
 // Exclude returns true if filesystem label matches the pattern
-func (vf *labelFilter) Exclude(part *block.Partition) bool {
-	for _, pattern := range vf.excludeLabels {
+func (f *partLabelFilter) Exclude(part *block.Partition) bool {
+	for _, pattern := range f.excludeLabels {
 		if pattern == "" || part.Label == "" {
 			return false
 		}
@@ -46,6 +52,19 @@ func (vf *labelFilter) Exclude(part *block.Partition) bool {
 		if ok {
 			return true
 		}
+	}
+	return false
+}
+
+// Exclude returns true if all partitions of the disk are excluded.
+func (f *diskLabelFilter) Exclude(disk *block.Disk) bool {
+	if len(disk.Partitions) > 0 {
+		for _, part := range disk.Partitions {
+			if !f.filter.Exclude(part) {
+				return false
+			}
+		}
+		return true
 	}
 	return false
 }
