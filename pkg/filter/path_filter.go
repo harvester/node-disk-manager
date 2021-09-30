@@ -17,39 +17,52 @@ var (
 	defaultExcludedPaths = []string{pathFilterDefaultRoot}
 )
 
-type pathFilter struct {
+type partPathFilter struct {
+	excludePaths []string
+}
+
+type diskPathFilter struct {
 	excludePaths []string
 }
 
 func RegisterPathFilter(filters string) *Filter {
-	vf := &pathFilter{}
+	f := &partPathFilter{}
 
 	// add default exclude paths
-	vf.excludePaths = append(vf.excludePaths, defaultExcludedPaths...)
+	f.excludePaths = append(f.excludePaths, defaultExcludedPaths...)
 
 	if filters != "" {
-		vf.excludePaths = append(vf.excludePaths, strings.Split(filters, ",")...)
+		f.excludePaths = append(f.excludePaths, strings.Split(filters, ",")...)
 	}
+
 	return &Filter{
 		Name:       pathFilterName,
-		DiskFilter: vf,
+		PartFilter: f,
+		DiskFilter: &diskPathFilter{excludePaths: f.excludePaths},
 	}
 }
 
-// Exclude returns true if mount path of the disk or partitions is matched
-func (pf *pathFilter) Exclude(disk *block.Disk) bool {
-	if len(pf.excludePaths) == 0 {
+// Exclude returns true if mount path of the partition is matched
+func (f *partPathFilter) Exclude(part *block.Partition) bool {
+	if len(f.excludePaths) == 0 {
 		return true
 	}
 
-	if util.ContainsIgnoredCase(pf.excludePaths, disk.FileSystemInfo.MountPoint) {
+	if util.ContainsIgnoredCase(f.excludePaths, part.FileSystemInfo.MountPoint) {
 		return true
 	}
 
-	for _, part := range disk.Partitions {
-		if util.ContainsIgnoredCase(pf.excludePaths, part.FileSystemInfo.MountPoint) {
-			return true
-		}
+	return false
+}
+
+// Exclude returns true if mount path of the disk is matched
+func (f *diskPathFilter) Exclude(disk *block.Disk) bool {
+	if len(f.excludePaths) == 0 {
+		return true
+	}
+
+	if util.ContainsIgnoredCase(f.excludePaths, disk.FileSystemInfo.MountPoint) {
+		return true
 	}
 
 	return false
