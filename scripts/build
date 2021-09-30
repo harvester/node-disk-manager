@@ -9,8 +9,10 @@ mkdir -p bin
 if [ "$(uname)" = "Linux" ]; then
     OTHER_LINKFLAGS="-extldflags -static -s"
 fi
-LINKFLAGS="-X github.com/rancher/node-disk-manager/pkg/version.Version=$VERSION"
-LINKFLAGS="-X github.com/rancher/node-disk-manager/pkg/version.GitCommit=$COMMIT $LINKFLAGS"
+
+LINKFLAGS="-X github.com/harvester/node-disk-manager/pkg/version.Version=$VERSION
+           -X github.com/harvester/node-disk-manager/pkg/version.GitCommit=$COMMIT $LINKFLAGS"
+
 CGO_ENABLED=0 go build -ldflags "$LINKFLAGS $OTHER_LINKFLAGS" -o bin/node-disk-manager
 if [ "$CROSS" = "true" ] && [ "$ARCH" = "amd64" ]; then
     GOOS=darwin go build -ldflags "$LINKFLAGS" -o bin/node-disk-manager-darwin

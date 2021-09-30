@@ -145,6 +145,7 @@ func initLogs(opt *option.Option) {
 		logrus.SetFormatter(&logrus.TextFormatter{})
 	}
 	logrus.SetOutput(os.Stdout)
+	logrus.Infof("Node Disk Manager %s is starting", version.FriendlyVersion())
 	if opt.Debug {
 		logrus.SetLevel(logrus.DebugLevel)
 		logrus.Debugf("Loglevel set to [%v]", logrus.DebugLevel)
