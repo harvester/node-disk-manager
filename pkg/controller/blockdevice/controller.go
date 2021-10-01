@@ -271,7 +271,7 @@ func (c *Controller) updateFileSystemStatus(device *diskv1.BlockDevice) error {
 	mountPoint := device.Spec.FileSystem.MountPoint
 	device.Status.DeviceStatus.FileSystem.Type = filesystem.Type
 	device.Status.DeviceStatus.FileSystem.IsReadOnly = filesystem.IsReadOnly
-	device.Status.DeviceStatus.FileSystem.MountPoint = mountPoint
+	device.Status.DeviceStatus.FileSystem.MountPoint = filesystem.MountPoint
 
 	if filesystem.MountPoint != "" && filesystem.Type != "" {
 		err := isValidFileSystem(device.Spec.FileSystem, device.Status.DeviceStatus.FileSystem)
