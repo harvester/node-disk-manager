@@ -24,6 +24,7 @@ import (
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	ctllonghornv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/option"
+	"github.com/harvester/node-disk-manager/pkg/util"
 )
 
 const (
@@ -411,7 +412,7 @@ func (c *Controller) forceFormatDisk(device *diskv1.BlockDevice) (*diskv1.BlockD
 	var bd *diskv1.BlockDevice
 	poll := func() (bool, error) {
 		var err error
-		devPath := device.Spec.DevPath + "1"
+		devPath := util.GetDiskPartitionPath(device.Spec.DevPath, 1)
 		part := c.BlockInfo.GetPartitionByDevPath(device.Spec.DevPath, devPath)
 		name := block.GeneratePartitionGUID(part, c.NodeName)
 		bd, err = c.BlockdeviceCache.Get(device.Namespace, name)
