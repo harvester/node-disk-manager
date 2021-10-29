@@ -2,7 +2,6 @@ package filter
 
 import (
 	"path/filepath"
-	"strings"
 
 	"github.com/harvester/node-disk-manager/pkg/block"
 	"github.com/sirupsen/logrus"
@@ -14,23 +13,21 @@ const (
 
 // partLabelFilter filters disk based on given filesystem label patterns
 type partLabelFilter struct {
-	excludeLabels []string
+	labels []string
 }
 
-// diskLabelFilter filters disk if all its partitions are excluded.
+// diskLabelFilter filters disk if all its partitions match.
 type diskLabelFilter struct {
 	filter *partLabelFilter
 }
 
-func RegisterLabelFilter(filters string) *Filter {
+func RegisterLabelFilter(filters ...string) *Filter {
 	f := &partLabelFilter{}
-
-	f.excludeLabels = []string{}
-
-	if filters != "" {
-		f.excludeLabels = append(f.excludeLabels, strings.Split(filters, ",")...)
+	for _, filter := range filters {
+		if filter != "" {
+			f.labels = append(f.labels, filter)
+		}
 	}
-
 	return &Filter{
 		Name:       labelFilterName,
 		PartFilter: f,
@@ -38,16 +35,16 @@ func RegisterLabelFilter(filters string) *Filter {
 	}
 }
 
-// Exclude returns true if filesystem label matches the pattern
-func (f *partLabelFilter) Exclude(part *block.Partition) bool {
-	for _, pattern := range f.excludeLabels {
+// Match returns true if filesystem label matches the pattern
+func (f *partLabelFilter) Match(part *block.Partition) bool {
+	for _, pattern := range f.labels {
 		if pattern == "" || part.Label == "" {
 			return false
 		}
 		ok, err := filepath.Match(pattern, part.Label)
 		if err != nil {
 			logrus.Errorf("failed to perform filesystem label matching on disk %s for pattern %s: %s", part.Name, pattern, err.Error())
-			return true
+			return false
 		}
 		if ok {
 			return true
@@ -56,11 +53,11 @@ func (f *partLabelFilter) Exclude(part *block.Partition) bool {
 	return false
 }
 
-// Exclude returns true if all partitions of the disk are excluded.
-func (f *diskLabelFilter) Exclude(disk *block.Disk) bool {
+// Match returns true if all partitions of the disk match.
+func (f *diskLabelFilter) Match(disk *block.Disk) bool {
 	if len(disk.Partitions) > 0 {
 		for _, part := range disk.Partitions {
-			if !f.filter.Exclude(part) {
+			if !f.filter.Match(part) {
 				return false
 			}
 		}

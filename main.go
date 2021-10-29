@@ -191,7 +191,7 @@ func run(opt *option.Option) error {
 		return fmt.Errorf("error building node-disk-manager controllers: %s", err.Error())
 	}
 
-	filters := filter.SetNDMFilters(opt.VendorFilter, opt.PathFilter, opt.LabelFilter)
+	filters := filter.SetExcludeFilters(opt.VendorFilter, opt.PathFilter, opt.LabelFilter)
 
 	start := func(ctx context.Context) {
 		err = blockdevicev1.Register(ctx, lhs.Longhorn().V1beta1().Node(), disks.Harvesterhci().V1beta1().BlockDevice(), block, opt, filters)
