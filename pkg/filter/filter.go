@@ -1,6 +1,8 @@
 package filter
 
 import (
+	"strings"
+
 	"github.com/sirupsen/logrus"
 
 	"github.com/harvester/node-disk-manager/pkg/block"
@@ -12,38 +14,43 @@ type Filter struct {
 	PartFilter PartFilter
 }
 
-func SetNDMFilters(vendorString, pathString, labelString string) []*Filter {
-	logrus.Info("register ndm filters")
-	listFilter := make([]*Filter, 0)
+func SetExcludeFilters(vendorString, pathString, labelString string) []*Filter {
+	logrus.Info("register exclude filters")
 
-	vendorFilter := RegisterVendorFilter(vendorString)
-	pathFilter := RegisterPathFilter(pathString)
-	labelFilter := RegisterLabelFilter(labelString)
-	listFilter = append(listFilter, vendorFilter, pathFilter, labelFilter)
+	vendors := strings.Split(vendorString, ",")
+	vendors = append(vendors, defaultExcludedVendors...)
+	vendorFilter := RegisterVendorFilter(vendors...)
 
-	return listFilter
+	paths := strings.Split(pathString, ",")
+	paths = append(paths, defaultExcludedPaths...)
+	pathFilter := RegisterPathFilter(paths...)
+
+	labels := strings.Split(labelString, ",")
+	labelFilter := RegisterLabelFilter(labels...)
+
+	return []*Filter{vendorFilter, pathFilter, labelFilter}
 }
 
 type DiskFilter interface {
-	// Exclude returns true if passing disk does not match with exclude value
-	Exclude(disk *block.Disk) bool
+	// Match returns true if passing disk matches with the value
+	Match(disk *block.Disk) bool
 }
 
 type PartFilter interface {
-	// Exclude returns true if passing partition does not match with exclude value
-	Exclude(part *block.Partition) bool
+	// Match returns true if passing partition matches with the value
+	Match(part *block.Partition) bool
 }
 
 func (f *Filter) ApplyDiskFilter(disk *block.Disk) bool {
 	if f.DiskFilter != nil {
-		return f.DiskFilter.Exclude(disk)
+		return f.DiskFilter.Match(disk)
 	}
 	return false
 }
 
 func (f *Filter) ApplyPartFilter(part *block.Partition) bool {
 	if f.PartFilter != nil {
-		return f.PartFilter.Exclude(part)
+		return f.PartFilter.Match(part)
 	}
 	return false
 }

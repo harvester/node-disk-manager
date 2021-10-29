@@ -1,8 +1,6 @@
 package filter
 
 import (
-	"strings"
-
 	"github.com/harvester/node-disk-manager/pkg/block"
 	"github.com/harvester/node-disk-manager/pkg/util"
 )
@@ -13,57 +11,43 @@ const (
 )
 
 var (
-	excludePaths         = ""
 	defaultExcludedPaths = []string{pathFilterDefaultRoot}
 )
 
 type partPathFilter struct {
-	excludePaths []string
+	mountPaths []string
 }
 
 type diskPathFilter struct {
-	excludePaths []string
+	mountPaths []string
 }
 
-func RegisterPathFilter(filters string) *Filter {
+func RegisterPathFilter(filters ...string) *Filter {
 	f := &partPathFilter{}
-
-	// add default exclude paths
-	f.excludePaths = append(f.excludePaths, defaultExcludedPaths...)
-
-	if filters != "" {
-		f.excludePaths = append(f.excludePaths, strings.Split(filters, ",")...)
+	for _, filter := range filters {
+		if filter != "" {
+			f.mountPaths = append(f.mountPaths, filter)
+		}
 	}
-
 	return &Filter{
 		Name:       pathFilterName,
 		PartFilter: f,
-		DiskFilter: &diskPathFilter{excludePaths: f.excludePaths},
+		DiskFilter: &diskPathFilter{mountPaths: f.mountPaths},
 	}
 }
 
-// Exclude returns true if mount path of the partition is matched
-func (f *partPathFilter) Exclude(part *block.Partition) bool {
-	if len(f.excludePaths) == 0 {
-		return true
+// Match returns true if mount path of the partition is matched
+func (f *partPathFilter) Match(part *block.Partition) bool {
+	if part.FileSystemInfo.MountPoint == "" {
+		return false
 	}
-
-	if util.ContainsIgnoredCase(f.excludePaths, part.FileSystemInfo.MountPoint) {
-		return true
-	}
-
-	return false
+	return util.ContainsIgnoredCase(f.mountPaths, part.FileSystemInfo.MountPoint)
 }
 
-// Exclude returns true if mount path of the disk is matched
-func (f *diskPathFilter) Exclude(disk *block.Disk) bool {
-	if len(f.excludePaths) == 0 {
-		return true
+// Match returns true if mount path of the disk is matched
+func (f *diskPathFilter) Match(disk *block.Disk) bool {
+	if disk.FileSystemInfo.MountPoint == "" {
+		return false
 	}
-
-	if util.ContainsIgnoredCase(f.excludePaths, disk.FileSystemInfo.MountPoint) {
-		return true
-	}
-
-	return false
+	return util.ContainsIgnoredCase(f.mountPaths, disk.FileSystemInfo.MountPoint)
 }
