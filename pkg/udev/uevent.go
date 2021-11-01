@@ -35,17 +35,25 @@ type Udev struct {
 	controller *blockdevice.Controller
 }
 
-func NewUdev(nodes ctllonghornv1.NodeController, bds ctldiskv1.BlockDeviceController, block block.Info, opt *option.Option, filters []*filter.Filter) *Udev {
+func NewUdev(
+	nodes ctllonghornv1.NodeController,
+	bds ctldiskv1.BlockDeviceController,
+	block block.Info,
+	opt *option.Option,
+	excludeFilters []*filter.Filter,
+	autoProvisionFilters []*filter.Filter,
+) *Udev {
 	controller := &blockdevice.Controller{
-		Namespace:        opt.Namespace,
-		NodeName:         opt.NodeName,
-		NodeCache:        nodes.Cache(),
-		Nodes:            nodes,
-		Blockdevices:     bds,
-		BlockdeviceCache: bds.Cache(),
-		BlockInfo:        block,
-		Filters:          filters,
-		AutoGPTGenerate:  opt.AutoGPTGenerate,
+		Namespace:            opt.Namespace,
+		NodeName:             opt.NodeName,
+		NodeCache:            nodes.Cache(),
+		Nodes:                nodes,
+		Blockdevices:         bds,
+		BlockdeviceCache:     bds.Cache(),
+		BlockInfo:            block,
+		ExcludeFilters:       excludeFilters,
+		AutoGPTGenerate:      opt.AutoGPTGenerate,
+		AutoProvisionFilters: autoProvisionFilters,
 	}
 	return &Udev{
 		startOnce:  sync.Once{},
@@ -116,11 +124,11 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 		bd = blockdevice.GetPartitionBlockDevice(part, u.nodeName, u.namespace)
 	}
 
-	if u.controller.ApplyDiskFilter(disk) {
+	if u.controller.ApplyExcludeFiltersForDisk(disk) {
 		return
 	}
 
-	if part != nil && u.controller.ApplyPartFilter(part) {
+	if part != nil && u.controller.ApplyExcludeFiltersForPartition(part) {
 		return
 	}
 
@@ -130,7 +138,8 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 			logrus.Infof("Skip adding non-identifiable block device %s", bd.Spec.DevPath)
 			return
 		}
-		u.AddBlockDevice(bd, defaultDuration)
+		autoProvisioned := udevDevice.IsDisk() && u.controller.ApplyAutoProvisionFiltersForDisk(disk)
+		u.AddBlockDevice(bd, defaultDuration, autoProvisioned)
 	case netlink.REMOVE:
 		if udevDevice.IsDisk() {
 			u.RemoveBlockDevice(bd, &udevDevice, disk, defaultDuration)
@@ -141,7 +150,7 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 }
 
 // AddBlockDevice add new block device and partitions by watching the udev add action
-func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, duration time.Duration) {
+func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, duration time.Duration, autoProvisioned bool) {
 	if duration > defaultDuration {
 		time.Sleep(duration)
 	}
@@ -164,11 +173,12 @@ func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, duration time.Duratio
 	}))
 	if err != nil {
 		logrus.Errorf("Failed to add block device via udev event, error: %s, retry in %s", err.Error(), 2*duration)
-		u.AddBlockDevice(device, 2*duration)
+		u.AddBlockDevice(device, 2*duration, autoProvisioned)
+		return
 	}
 	oldBds := blockdevice.ConvertBlockDevicesToMap(bdList)
 
-	if _, err := u.controller.SaveBlockDevice(device, oldBds); err != nil {
+	if _, err := u.controller.SaveBlockDevice(device, oldBds, autoProvisioned); err != nil {
 		logrus.Errorf("failed to save block device %s, error: %s", device.Name, err.Error())
 		//u.AddBlockDevice(device, 2*defaultDuration)
 	}

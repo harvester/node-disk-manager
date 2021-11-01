@@ -14,6 +14,14 @@ type Filter struct {
 	PartFilter PartFilter
 }
 
+func SetAutoProvisionFilters(devPathString string) []*Filter {
+	logrus.Info("register auto provision filters")
+
+	devPaths := strings.Split(devPathString, ",")
+	devPathFilter := RegisterDevicePathFilter(devPaths...)
+	return []*Filter{devPathFilter}
+}
+
 func SetExcludeFilters(vendorString, pathString, labelString string) []*Filter {
 	logrus.Info("register exclude filters")
 

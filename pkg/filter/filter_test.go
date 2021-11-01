@@ -7,6 +7,75 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func Test_devicePathFilter(t *testing.T) {
+	type input struct {
+		disk     *block.Disk
+		devPaths []string
+	}
+	var testCases = []struct {
+		name     string
+		given    input
+		expected bool
+	}{
+		{
+			name: "valid disk and matched device path",
+			given: input{
+				disk: &block.Disk{
+					Name: "sda",
+				},
+				devPaths: []string{"/dev/sda"},
+			},
+			expected: true,
+		},
+		{
+			name: "empty disk and matched device path",
+			given: input{
+				disk:     &block.Disk{},
+				devPaths: []string{"/dev/sda"},
+			},
+			expected: false,
+		},
+		{
+			name: "valid disk and empty device path",
+			given: input{
+				disk: &block.Disk{
+					Name: "sda",
+				},
+				devPaths: nil,
+			},
+			expected: false,
+		},
+		{
+			name: "valid disk and valid device path but mismatch",
+			given: input{
+				disk: &block.Disk{
+					Name: "sda",
+				},
+				devPaths: []string{"/dev/nvme0n1"},
+			},
+			expected: false,
+		},
+		{
+			name: "glob",
+			given: input{
+				disk: &block.Disk{
+					Name: "sda",
+				},
+				devPaths: []string{"/dev/sd*"},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			filter := RegisterDevicePathFilter(tc.given.devPaths...)
+			result := filter.ApplyDiskFilter(tc.given.disk)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
 func Test_labelFilter(t *testing.T) {
 	type input struct {
 		part   *block.Partition
