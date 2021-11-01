@@ -119,6 +119,12 @@ func main() {
 			Usage:       "Enable auto GPT partition generating if a disk can not be globally identified",
 			Destination: &opt.AutoGPTGenerate,
 		},
+		&cli.StringFlag{
+			Name:        "auto-provision-filter",
+			EnvVars:     []string{"NDM_AUTO_PROVISION_FILTER"},
+			Usage:       "A string of comma-separated values that auto-provisions devices matching provided device path",
+			Destination: &opt.AutoProvisionFilter,
+		},
 	}
 
 	app.Action = func(c *cli.Context) error {
@@ -191,16 +197,27 @@ func run(opt *option.Option) error {
 		return fmt.Errorf("error building node-disk-manager controllers: %s", err.Error())
 	}
 
-	filters := filter.SetExcludeFilters(opt.VendorFilter, opt.PathFilter, opt.LabelFilter)
+	excludeFilters := filter.SetExcludeFilters(opt.VendorFilter, opt.PathFilter, opt.LabelFilter)
+	autoProvisionFilters := filter.SetAutoProvisionFilters(opt.AutoProvisionFilter)
 
 	start := func(ctx context.Context) {
-		err = blockdevicev1.Register(ctx, lhs.Longhorn().V1beta1().Node(), disks.Harvesterhci().V1beta1().BlockDevice(), block, opt, filters)
-		if err != nil {
+		if err := blockdevicev1.Register(
+			ctx, lhs.Longhorn().V1beta1().Node(),
+			disks.Harvesterhci().V1beta1().BlockDevice(),
+			block,
+			opt,
+			excludeFilters,
+			autoProvisionFilters,
+		); err != nil {
 			logrus.Fatalf("failed to register block device controller, %s", err.Error())
 		}
 
-		err = nodev1.Register(ctx, lhs.Longhorn().V1beta1().Node(), disks.Harvesterhci().V1beta1().BlockDevice(), opt)
-		if err != nil {
+		if err := nodev1.Register(
+			ctx,
+			lhs.Longhorn().V1beta1().Node(),
+			disks.Harvesterhci().V1beta1().BlockDevice(),
+			opt,
+		); err != nil {
 			logrus.Fatalf("failed to register ndm node controller, %s", err.Error())
 		}
 
@@ -213,7 +230,14 @@ func run(opt *option.Option) error {
 		// 2. add node actions, i.e. block device rescan
 
 		// register to monitor the UDEV events, similar to run `udevadm monitor -u`
-		go udev.NewUdev(lhs.Longhorn().V1beta1().Node(), disks.Harvesterhci().V1beta1().BlockDevice(), block, opt, filters).Monitor(ctx)
+		go udev.NewUdev(
+			lhs.Longhorn().V1beta1().Node(),
+			disks.Harvesterhci().V1beta1().BlockDevice(),
+			block,
+			opt,
+			excludeFilters,
+			autoProvisionFilters,
+		).Monitor(ctx)
 	}
 
 	start(ctx)
