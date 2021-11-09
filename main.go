@@ -104,7 +104,7 @@ func main() {
 		&cli.StringFlag{
 			Name:        "label-filter",
 			EnvVars:     []string{"NDM_LABEL_FILTER"},
-			Usage:       "A string of comma-separated glob pattern that you want to exclude for block device filesystem label filter",
+			Usage:       "A string of comma-separated glob patterns that you want to exclude for block device filesystem label filter",
 			Destination: &opt.LabelFilter,
 		},
 		&cli.Int64Flag{
@@ -122,7 +122,7 @@ func main() {
 		&cli.StringFlag{
 			Name:        "auto-provision-filter",
 			EnvVars:     []string{"NDM_AUTO_PROVISION_FILTER"},
-			Usage:       "A string of comma-separated values that auto-provisions devices matching provided device path",
+			Usage:       "A string of comma-separated glob patterns that auto-provisions devices matching provided device path",
 			Destination: &opt.AutoProvisionFilter,
 		},
 	}
