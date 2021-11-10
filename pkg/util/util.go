@@ -42,9 +42,19 @@ func GetDiskPartitionPath(devicePath string, partitionNum int) string {
 	return fmt.Sprintf("%s%s%d", devicePath, partitionSep, partitionNum)
 }
 
-func ContainsIgnoredCase(s []string, k string) bool {
+func MatchesIgnoredCase(s []string, k string) bool {
 	for _, e := range s {
 		if strings.EqualFold(e, k) {
+			return true
+		}
+	}
+	return false
+}
+
+func ContainsIgnoredCase(s []string, k string) bool {
+	k = strings.ToLower(k)
+	for _, e := range s {
+		if strings.Contains(k, strings.ToLower(e)) {
 			return true
 		}
 	}

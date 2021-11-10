@@ -275,8 +275,8 @@ func Test_vendorFilter(t *testing.T) {
 		{
 			name: "longhorn bus path",
 			given: input{
-				disk:    &block.Disk{Vendor: "yourvendor", BusPath: "longhorn"},
-				vendors: []string{"longhorn"},
+				disk:    &block.Disk{BusPath: "ip-10.52.0.122:3260-iscsi-iqn.2019-10.io.longhorn:pvc-ab9af96e-60ef-400f-84f7-2f6eab68ab56-lun-1"},
+				vendors: []string{"LongHorN"},
 			},
 			expected: true,
 		},

@@ -33,9 +33,8 @@ func RegisterVendorFilter(filters ...string) *Filter {
 
 // Match returns true if vendor of the disk is matched
 func (vf *vendorFilter) Match(blockDevice *block.Disk) bool {
-	if blockDevice.Vendor == "" && blockDevice.BusPath == "" {
-		return false
+	if blockDevice.Vendor != "" && util.MatchesIgnoredCase(vf.vendors, blockDevice.Vendor) {
+		return true
 	}
-	return util.ContainsIgnoredCase(vf.vendors, blockDevice.Vendor) ||
-		util.ContainsIgnoredCase(vf.vendors, blockDevice.BusPath)
+	return blockDevice.BusPath != "" && util.ContainsIgnoredCase(vf.vendors, blockDevice.BusPath)
 }
