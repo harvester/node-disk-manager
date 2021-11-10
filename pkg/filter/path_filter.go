@@ -41,7 +41,7 @@ func (f *partPathFilter) Match(part *block.Partition) bool {
 	if part.FileSystemInfo.MountPoint == "" {
 		return false
 	}
-	return util.ContainsIgnoredCase(f.mountPaths, part.FileSystemInfo.MountPoint)
+	return util.MatchesIgnoredCase(f.mountPaths, part.FileSystemInfo.MountPoint)
 }
 
 // Match returns true if mount path of the disk is matched
@@ -49,5 +49,5 @@ func (f *diskPathFilter) Match(disk *block.Disk) bool {
 	if disk.FileSystemInfo.MountPoint == "" {
 		return false
 	}
-	return util.ContainsIgnoredCase(f.mountPaths, disk.FileSystemInfo.MountPoint)
+	return util.MatchesIgnoredCase(f.mountPaths, disk.FileSystemInfo.MountPoint)
 }
