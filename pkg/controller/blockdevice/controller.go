@@ -610,7 +610,7 @@ func (c *Controller) SaveBlockDevice(
 			toUpdate.Status.State = diskv1.BlockDeviceActive
 			toUpdate.Status.DeviceStatus = newStatus
 			if autoProvisioned {
-				provision(bd)
+				provision(toUpdate)
 			}
 			return c.Blockdevices.Update(toUpdate)
 		}
