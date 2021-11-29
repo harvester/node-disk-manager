@@ -30,7 +30,7 @@ func RegisterPathFilter(filters ...string) *Filter {
 		}
 	}
 	return &Filter{
-		Name:       pathFilterName,
+		Name:       partTypeFilterName,
 		PartFilter: f,
 		DiskFilter: &diskPathFilter{mountPaths: f.mountPaths},
 	}
