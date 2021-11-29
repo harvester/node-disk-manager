@@ -34,6 +34,7 @@ type Partition struct {
 	Label             string                  `json:"label"`
 	SizeBytes         uint64                  `json:"size_bytes"`
 	UUID              string                  `json:"uuid"` // This would be volume UUID on macOS, PartUUID on linux, empty on Windows
+	PartType          string                  `json:"part_type"`
 	DriveType         block.DriveType         `json:"drive_type"`
 	StorageController block.StorageController `json:"storage_controller"`
 	FileSystemInfo    FileSystemInfo          `json:"file_system_info"`

@@ -9,21 +9,7 @@ import (
 )
 
 func GetParentDevName(devPath string) (string, error) {
-	if !strings.HasPrefix(devPath, "/dev") {
-		devPath = "/dev/" + devPath
-	}
-	args := []string{
-		"lsblk",
-		"-no",
-		"pkname",
-		devPath,
-	}
-	out, err := exec.Command(args[0], args[1:]...).Output()
-	if err != nil {
-		return "", fmt.Errorf("failed to get parent disk, %s", err.Error())
-	}
-
-	return strings.TrimSuffix(string(out), "\n"), nil
+	return lsblk(devPath, "pkname")
 }
 
 func HasPartitions(disk *Disk) bool {
@@ -31,23 +17,35 @@ func HasPartitions(disk *Disk) bool {
 }
 
 func GetFileSystemLabel(devPath string) string {
+	result, err := lsblk(devPath, "label")
+	if err != nil {
+		logrus.Warnf(err.Error())
+	}
+	return result
+}
+
+func GetPartType(devPath string) string {
+	result, err := lsblk(devPath, "parttype")
+	if err != nil {
+		logrus.Warnf(err.Error())
+	}
+	return result
+}
+
+func lsblk(devPath, output string) (string, error) {
 	if !strings.HasPrefix(devPath, "/dev") {
 		devPath = "/dev/" + devPath
 	}
 	args := []string{
 		"lsblk",
-		"-no",
-		"label",
+		"-dno",
+		output,
 		devPath,
 	}
 	out, err := exec.Command(args[0], args[1:]...).Output()
 	if err != nil {
-		logrus.Warnf("failed to get filesystem label for device %s, %s", devPath, err.Error())
-		return ""
+		return "", fmt.Errorf("failed to execute `%s`: %s", strings.Join(args, " "), err.Error())
 	}
-	splited := strings.SplitN(string(out), "\n", 2)
-	if len(splited) > 0 {
-		return splited[0]
-	}
-	return ""
+
+	return strings.TrimSuffix(string(out), "\n"), nil
 }
