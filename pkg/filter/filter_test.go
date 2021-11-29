@@ -290,3 +290,84 @@ func Test_vendorFilter(t *testing.T) {
 		})
 	}
 }
+func Test_partTypeFilter(t *testing.T) {
+	type input struct {
+		part      *block.Partition
+		disk      *block.Disk
+		partTypes []string
+	}
+	var testCases = []struct {
+		name     string
+		given    input
+		expected bool
+	}{
+		{
+			name: "valid partition and matched parttype",
+			given: input{
+				part: &block.Partition{
+					PartType: "match",
+				},
+				partTypes: []string{"match"},
+			},
+			expected: true,
+		},
+		{
+			name: "empty partition and matched parttype",
+			given: input{
+				part:      &block.Partition{},
+				partTypes: []string{"match"},
+			},
+			expected: false,
+		},
+		{
+			name: "valid partition and empty parttype",
+			given: input{
+				part: &block.Partition{
+					PartType: "match",
+				},
+				partTypes: nil,
+			},
+			expected: false,
+		},
+		{
+			name: "valid partition and valid parttype but mismatch",
+			given: input{
+				part: &block.Partition{
+					PartType: "match",
+				},
+				partTypes: []string{"mismatch"},
+			},
+			expected: false,
+		},
+		{
+			name: "valid disk with partition that matches parttype",
+			given: input{
+				disk:      &block.Disk{Partitions: []*block.Partition{{PartType: "match"}}},
+				partTypes: []string{"match"},
+			},
+			expected: true,
+		},
+		{
+			name: "valid disk with partition that mismatches parttype",
+			given: input{
+				disk:      &block.Disk{Partitions: []*block.Partition{{PartType: "match"}}},
+				partTypes: []string{"mismatch"},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			filter := RegisterPartTypeFilter(tc.given.partTypes...)
+			if tc.given.part != nil {
+				result := filter.ApplyPartFilter(tc.given.part)
+				assert.Equal(t, tc.expected, result)
+			}
+			if tc.given.disk != nil {
+				result := filter.ApplyDiskFilter(tc.given.disk)
+				assert.Equal(t, tc.expected, result)
+			}
+		})
+	}
+}
