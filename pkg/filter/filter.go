@@ -36,7 +36,9 @@ func SetExcludeFilters(vendorString, pathString, labelString string) []*Filter {
 	labels := strings.Split(labelString, ",")
 	labelFilter := RegisterLabelFilter(labels...)
 
-	return []*Filter{vendorFilter, pathFilter, labelFilter}
+	partTypeFilters := RegisterPartTypeFilter(defaultExcludedPartTypes...)
+
+	return []*Filter{vendorFilter, pathFilter, labelFilter, partTypeFilters}
 }
 
 type DiskFilter interface {
