@@ -232,6 +232,10 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 		}
 	}
 
+	if err := c.updateFileSystemStatus(deviceCpy); err != nil {
+		return device, err
+	}
+
 	if device.Status.DeviceStatus.Details.DeviceType == diskv1.DeviceTypePart {
 		switch {
 		case fs.MountPoint != "" && fs.Provisioned:
@@ -253,10 +257,6 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 				}
 			}
 		}
-	}
-
-	if err := c.updateFileSystemStatus(deviceCpy); err != nil {
-		return device, err
 	}
 
 	if !reflect.DeepEqual(device, deviceCpy) {
