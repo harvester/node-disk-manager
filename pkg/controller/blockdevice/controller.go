@@ -32,6 +32,7 @@ const (
 	defaultRescanInterval   = 30 * time.Second
 	forceFormatPollInterval = 3 * time.Second
 	forceFormatPollTimeout  = 30 * time.Second
+	enqueueDelay            = 10 * time.Second
 )
 
 type Controller struct {
@@ -41,7 +42,7 @@ type Controller struct {
 	NodeCache ctllonghornv1.NodeCache
 	Nodes     ctllonghornv1.NodeClient
 
-	Blockdevices     ctldiskv1.BlockDeviceClient
+	Blockdevices     ctldiskv1.BlockDeviceController
 	BlockdeviceCache ctldiskv1.BlockDeviceCache
 	BlockInfo        block.Info
 	ExcludeFilters   []*filter.Filter
@@ -191,6 +192,8 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 		return nil, nil
 	}
 
+	var shouldEnqueue bool
+
 	deviceCpy := device.DeepCopy()
 	fs := *deviceCpy.Spec.FileSystem
 	fsStatus := *deviceCpy.Status.DeviceStatus.FileSystem
@@ -239,21 +242,21 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 	if device.Status.DeviceStatus.Details.DeviceType == diskv1.DeviceTypePart {
 		switch {
 		case fs.MountPoint != "" && fs.Provisioned:
-			if deviceCpy, err := c.addDeviceToNode(deviceCpy); err != nil {
+			if err := c.addDeviceToNode(deviceCpy); err != nil {
 				err := fmt.Errorf("failed to provision device %s to node %s on path %s: %w", device.Name, c.NodeName, device.Spec.FileSystem.MountPoint, err)
 				logrus.Error(err)
 				diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
 				diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
-				return c.Blockdevices.Update(deviceCpy)
+				shouldEnqueue = true
 			}
 		case fs.MountPoint == "" || !fs.Provisioned:
 			if diskv1.DiskAddedToNode.IsTrue(device) {
-				if deviceCpy, err := c.removeDeviceFromNode(deviceCpy); err != nil {
+				if err := c.removeDeviceFromNode(deviceCpy); err != nil {
 					err := fmt.Errorf("failed to stop provisioning device %s to node %s on path %s: %w", device.Name, c.NodeName, device.Spec.FileSystem.MountPoint, err)
 					logrus.Error(err)
 					diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
 					diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
-					return c.Blockdevices.Update(deviceCpy)
+					shouldEnqueue = true
 				}
 			}
 		}
@@ -263,6 +266,9 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 		if _, err := c.Blockdevices.Update(deviceCpy); err != nil {
 			return device, err
 		}
+	}
+	if shouldEnqueue {
+		c.Blockdevices.EnqueueAfter(c.Namespace, device.Name, enqueueDelay)
 	}
 
 	return nil, nil
@@ -477,16 +483,16 @@ func (c *Controller) forceFormatDisk(device *diskv1.BlockDevice) (*diskv1.BlockD
 }
 
 // addDeviceToNode adds a device to longhorn node as an additional disk.
-func (c *Controller) addDeviceToNode(device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
+func (c *Controller) addDeviceToNode(device *diskv1.BlockDevice) error {
 	filesystem := c.BlockInfo.GetFileSystemInfoByDevPath(device.Spec.DevPath)
 	if filesystem == nil || filesystem.MountPoint == "" {
 		// No mount point. Skipping...
-		return device, nil
+		return nil
 	}
 
 	node, err := c.Nodes.Get(c.Namespace, c.NodeName, metav1.GetOptions{})
 	if err != nil {
-		return device, err
+		return err
 	}
 
 	updateDeviceCondition := func() {
@@ -500,7 +506,7 @@ func (c *Controller) addDeviceToNode(device *diskv1.BlockDevice) (*diskv1.BlockD
 	if disk, ok := node.Spec.Disks[device.Name]; ok && disk.Path == mountPoint {
 		// Device exists and with the same mount point. No need to update the node.
 		updateDeviceCondition()
-		return device, nil
+		return nil
 	}
 
 	nodeCpy := node.DeepCopy()
@@ -513,22 +519,22 @@ func (c *Controller) addDeviceToNode(device *diskv1.BlockDevice) (*diskv1.BlockD
 	}
 	nodeCpy.Spec.Disks[device.Name] = diskSpec
 	if _, err = c.Nodes.Update(nodeCpy); err != nil {
-		return device, err
+		return err
 	}
 
 	updateDeviceCondition()
-	return device, nil
+	return nil
 }
 
 // removeDeviceFromNode removes a device from a longhorn node.
-func (c *Controller) removeDeviceFromNode(device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
+func (c *Controller) removeDeviceFromNode(device *diskv1.BlockDevice) error {
 	node, err := c.Nodes.Get(c.Namespace, c.NodeName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Skip since the node is not there.
-			return device, nil
+			return nil
 		}
-		return device, err
+		return err
 	}
 
 	if _, ok := node.Spec.Disks[device.Name]; !ok {
@@ -537,12 +543,12 @@ func (c *Controller) removeDeviceFromNode(device *diskv1.BlockDevice) (*diskv1.B
 		diskv1.DiskAddedToNode.SetError(device, "", nil)
 		diskv1.DiskAddedToNode.SetStatusBool(device, false)
 		diskv1.DiskAddedToNode.Message(device, msg)
-		return device, nil
+		return nil
 	}
 	nodeCpy := node.DeepCopy()
 	delete(nodeCpy.Spec.Disks, device.Name)
 	if _, err := c.Nodes.Update(nodeCpy); err != nil {
-		return device, err
+		return err
 	}
 	// To prevent user from mistaking unprovisioning from umount, NDM umount
 	// for the device as well while unprovisioning it.
@@ -550,7 +556,7 @@ func (c *Controller) removeDeviceFromNode(device *diskv1.BlockDevice) (*diskv1.B
 	existingMount := device.Status.DeviceStatus.FileSystem.MountPoint
 	if existingMount != "" {
 		if err := disk.UmountDisk(existingMount); err != nil {
-			return device, err
+			return err
 		}
 	}
 
@@ -558,7 +564,7 @@ func (c *Controller) removeDeviceFromNode(device *diskv1.BlockDevice) (*diskv1.B
 	diskv1.DiskAddedToNode.SetError(device, "", nil)
 	diskv1.DiskAddedToNode.SetStatusBool(device, false)
 	diskv1.DiskAddedToNode.Message(device, msg)
-	return device, nil
+	return nil
 }
 
 func isValidFileSystem(fs *diskv1.FilesystemInfo, fsStatus *diskv1.FilesystemStatus) error {
