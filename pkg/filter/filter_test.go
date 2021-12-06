@@ -3,8 +3,10 @@ package filter
 import (
 	"testing"
 
-	"github.com/harvester/node-disk-manager/pkg/block"
+	ghwblock "github.com/jaypipes/ghw/pkg/block"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/harvester/node-disk-manager/pkg/block"
 )
 
 func Test_devicePathFilter(t *testing.T) {
@@ -290,6 +292,7 @@ func Test_vendorFilter(t *testing.T) {
 		})
 	}
 }
+
 func Test_partTypeFilter(t *testing.T) {
 	type input struct {
 		part      *block.Partition
@@ -368,6 +371,50 @@ func Test_partTypeFilter(t *testing.T) {
 				result := filter.ApplyDiskFilter(tc.given.disk)
 				assert.Equal(t, tc.expected, result)
 			}
+		})
+	}
+}
+
+func Test_driveTypeFilter(t *testing.T) {
+	var testCases = []struct {
+		name     string
+		given    ghwblock.DriveType
+		expected bool
+	}{
+		{
+			name:     "HDD",
+			given:    ghwblock.DRIVE_TYPE_HDD,
+			expected: false,
+		},
+		{
+			name:     "SSD",
+			given:    ghwblock.DRIVE_TYPE_SSD,
+			expected: false,
+		},
+		{
+			name:     "Floppy",
+			given:    ghwblock.DRIVE_TYPE_FDD,
+			expected: true,
+		},
+		{
+			name:     "Optical",
+			given:    ghwblock.DRIVE_TYPE_ODD,
+			expected: true,
+		},
+		{
+			name:     "Unknown",
+			given:    ghwblock.DRIVE_TYPE_UNKNOWN,
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			filter := RegisterDriveTypeFilter()
+			result := filter.ApplyPartFilter(&block.Partition{DriveType: tc.given})
+			assert.Equal(t, tc.expected, result)
+			result = filter.ApplyDiskFilter(&block.Disk{DriveType: tc.given})
+			assert.Equal(t, tc.expected, result)
 		})
 	}
 }
