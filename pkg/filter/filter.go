@@ -25,6 +25,8 @@ func SetAutoProvisionFilters(devPathString string) []*Filter {
 func SetExcludeFilters(vendorString, pathString, labelString string) []*Filter {
 	logrus.Info("register exclude filters")
 
+	driveTypeFilter := RegisterDriveTypeFilter()
+
 	vendors := strings.Split(vendorString, ",")
 	vendors = append(vendors, defaultExcludedVendors...)
 	vendorFilter := RegisterVendorFilter(vendors...)
@@ -38,7 +40,7 @@ func SetExcludeFilters(vendorString, pathString, labelString string) []*Filter {
 
 	partTypeFilters := RegisterPartTypeFilter(defaultExcludedPartTypes...)
 
-	return []*Filter{vendorFilter, pathFilter, labelFilter, partTypeFilters}
+	return []*Filter{driveTypeFilter, vendorFilter, pathFilter, labelFilter, partTypeFilters}
 }
 
 type DiskFilter interface {
