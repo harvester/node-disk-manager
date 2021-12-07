@@ -241,8 +241,8 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 
 	if device.Status.DeviceStatus.Details.DeviceType == diskv1.DeviceTypePart {
 		switch {
-		case fs.MountPoint != "" && fs.Provisioned:
-			if err := c.addDeviceToNode(deviceCpy); err != nil {
+		case fs.MountPoint != "" && fs.Provisioned && device.Status.ProvisionPhase == diskv1.ProvisionPhaseUnprovisioned:
+			if err := c.provisionDeviceToNode(deviceCpy); err != nil {
 				err := fmt.Errorf("failed to provision device %s to node %s on path %s: %w", device.Name, c.NodeName, device.Spec.FileSystem.MountPoint, err)
 				logrus.Error(err)
 				diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
@@ -250,8 +250,8 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 				shouldEnqueue = true
 			}
 		case fs.MountPoint == "" || !fs.Provisioned:
-			if diskv1.DiskAddedToNode.IsTrue(device) {
-				if err := c.removeDeviceFromNode(deviceCpy); err != nil {
+			if device.Status.ProvisionPhase != diskv1.ProvisionPhaseUnprovisioned {
+				if err := c.unprovisionDeviceFromNode(deviceCpy); err != nil {
 					err := fmt.Errorf("failed to stop provisioning device %s to node %s on path %s: %w", device.Name, c.NodeName, device.Spec.FileSystem.MountPoint, err)
 					logrus.Error(err)
 					diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
@@ -482,8 +482,8 @@ func (c *Controller) forceFormatDisk(device *diskv1.BlockDevice) (*diskv1.BlockD
 	return c.Blockdevices.Create(newDiskDevice)
 }
 
-// addDeviceToNode adds a device to longhorn node as an additional disk.
-func (c *Controller) addDeviceToNode(device *diskv1.BlockDevice) error {
+// provisionDeviceToNode adds a device to longhorn node as an additional disk.
+func (c *Controller) provisionDeviceToNode(device *diskv1.BlockDevice) error {
 	filesystem := c.BlockInfo.GetFileSystemInfoByDevPath(device.Spec.DevPath)
 	if filesystem == nil || filesystem.MountPoint == "" {
 		// No mount point. Skipping...
@@ -495,8 +495,9 @@ func (c *Controller) addDeviceToNode(device *diskv1.BlockDevice) error {
 		return err
 	}
 
-	updateDeviceCondition := func() {
+	updateDeviceStatus := func() {
 		msg := fmt.Sprintf("Added disk %s to longhorn node `%s` as an additional disk", device.Name, node.Name)
+		device.Status.ProvisionPhase = diskv1.ProvisionPhaseProvisioned
 		diskv1.DiskAddedToNode.SetError(device, "", nil)
 		diskv1.DiskAddedToNode.SetStatusBool(device, true)
 		diskv1.DiskAddedToNode.Message(device, msg)
@@ -505,7 +506,7 @@ func (c *Controller) addDeviceToNode(device *diskv1.BlockDevice) error {
 	mountPoint := device.Spec.FileSystem.MountPoint
 	if disk, ok := node.Spec.Disks[device.Name]; ok && disk.Path == mountPoint {
 		// Device exists and with the same mount point. No need to update the node.
-		updateDeviceCondition()
+		updateDeviceStatus()
 		return nil
 	}
 
@@ -522,12 +523,12 @@ func (c *Controller) addDeviceToNode(device *diskv1.BlockDevice) error {
 		return err
 	}
 
-	updateDeviceCondition()
+	updateDeviceStatus()
 	return nil
 }
 
-// removeDeviceFromNode removes a device from a longhorn node.
-func (c *Controller) removeDeviceFromNode(device *diskv1.BlockDevice) error {
+// unprovisionDeviceFromNode removes a device from a longhorn node.
+func (c *Controller) unprovisionDeviceFromNode(device *diskv1.BlockDevice) error {
 	node, err := c.Nodes.Get(c.Namespace, c.NodeName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -537,30 +538,40 @@ func (c *Controller) removeDeviceFromNode(device *diskv1.BlockDevice) error {
 		return err
 	}
 
-	if _, ok := node.Spec.Disks[device.Name]; !ok {
-		logrus.Debugf("disk %s not found in disks of longhorn node %s/%s", device.Name, c.Namespace, c.NodeName)
-		msg := fmt.Sprintf("Disk not found in longhorn node `%s`", c.NodeName)
+	diskToRemove, ok := node.Spec.Disks[device.Name]
+	if !ok {
+		logrus.Debugf("disk %s not in disks of longhorn node %s/%s", device.Name, c.Namespace, c.NodeName)
+		msg := fmt.Sprintf("Disk not in longhorn node `%s`", c.NodeName)
+		// To prevent user from mistaking unprovisioning from umount, NDM umount
+		// for the device as well while unprovisioning it.
+		device.Spec.FileSystem.MountPoint = ""
+		device.Status.ProvisionPhase = diskv1.ProvisionPhaseUnprovisioned
 		diskv1.DiskAddedToNode.SetError(device, "", nil)
 		diskv1.DiskAddedToNode.SetStatusBool(device, false)
 		diskv1.DiskAddedToNode.Message(device, msg)
 		return nil
 	}
-	nodeCpy := node.DeepCopy()
-	delete(nodeCpy.Spec.Disks, device.Name)
-	if _, err := c.Nodes.Update(nodeCpy); err != nil {
-		return err
+
+	removePending := false
+	for _, tag := range diskToRemove.Tags {
+		if tag == util.DiskRemoveTag {
+			removePending = true
+			break
+		}
 	}
-	// To prevent user from mistaking unprovisioning from umount, NDM umount
-	// for the device as well while unprovisioning it.
-	device.Spec.FileSystem.MountPoint = ""
-	existingMount := device.Status.DeviceStatus.FileSystem.MountPoint
-	if existingMount != "" {
-		if err := disk.UmountDisk(existingMount); err != nil {
+	if !removePending {
+		diskToRemove.AllowScheduling = false
+		diskToRemove.EvictionRequested = true
+		diskToRemove.Tags = append(diskToRemove.Tags, util.DiskRemoveTag)
+		nodeCpy := node.DeepCopy()
+		nodeCpy.Spec.Disks[device.Name] = diskToRemove
+		if _, err := c.Nodes.Update(nodeCpy); err != nil {
 			return err
 		}
 	}
 
 	msg := fmt.Sprintf("Stop provisioning device %s to longhorn node `%s`", device.Name, c.NodeName)
+	device.Status.ProvisionPhase = diskv1.ProvisionPhaseUnprovisioning
 	diskv1.DiskAddedToNode.SetError(device, "", nil)
 	diskv1.DiskAddedToNode.SetStatusBool(device, false)
 	diskv1.DiskAddedToNode.Message(device, msg)
