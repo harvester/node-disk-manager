@@ -12,6 +12,8 @@ const (
 	ProcPath = "/proc"
 	// HostProcPath is the convention path where host `/proc` is mounted.
 	HostProcPath = "/host/proc"
+	// DiskRemoveTag indicates a Longhorn is pending to remove.
+	DiskRemoveTag = "harvester-ndm-disk-remove"
 )
 
 // IsHostProcMounted checks if host's proc info `/proc` is mounted on `/host/proc`
