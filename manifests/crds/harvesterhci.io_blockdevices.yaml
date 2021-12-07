@@ -248,6 +248,14 @@ spec:
                 - fileSystem
                 - partitioned
                 type: object
+              provisionPhase:
+                default: Unprovisioned
+                description: The current phase of the block device being provisioned.
+                enum:
+                - Provisioned
+                - Unprovisioned
+                - Unprovisioning
+                type: string
               state:
                 description: the current state of the block device, options are "Active",
                   "Inactive", or "Unknown"
@@ -257,6 +265,7 @@ spec:
                 - Unknown
                 type: string
             required:
+            - provisionPhase
             - state
             type: object
         required:

@@ -46,6 +46,11 @@ type BlockDeviceStatus struct {
 	// +kubebuilder:validation:Enum:=Active;Inactive;Unknown
 	State BlockDeviceState `json:"state"`
 
+	// The current phase of the block device being provisioned.
+	// +kubebuilder:validation:Enum:=Provisioned;Unprovisioned;Unprovisioning
+	// +kubebuilder:default:=Unprovisioned
+	ProvisionPhase BlockDeviceProvisionPhase `json:"provisionPhase"`
+
 	// +optional
 	Conditions []Condition `json:"conditions,omitempty"`
 
@@ -201,6 +206,17 @@ const (
 
 	// DeviceTypePart indicates the device type is partition
 	DeviceTypePart BlockDeviceType = "part"
+)
+
+type BlockDeviceProvisionPhase string
+
+const (
+	// ProvisionPhaseProvisioned indicates the block device is in provision.
+	ProvisionPhaseProvisioned BlockDeviceProvisionPhase = "Provisioned"
+	// ProvisionPhaseUnprovisioning indicates the block device is being unprovisioned.
+	ProvisionPhaseUnprovisioning BlockDeviceProvisionPhase = "Unprovisioning"
+	// ProvisionPhaseUnprovisioned indicates the block device is not in provision.
+	ProvisionPhaseUnprovisioned BlockDeviceProvisionPhase = "Unprovisioned"
 )
 
 type Condition struct {
