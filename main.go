@@ -221,7 +221,7 @@ func run(opt *option.Option) error {
 			logrus.Fatalf("failed to register ndm node controller, %s", err.Error())
 		}
 
-		if err := start.All(ctx, opt.Threadiness, disks); err != nil {
+		if err := start.All(ctx, opt.Threadiness, disks, lhs); err != nil {
 			logrus.Fatalf("error starting, %s", err.Error())
 		}
 
