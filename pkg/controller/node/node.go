@@ -10,9 +10,7 @@ import (
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	ctllonghornv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/option"
-	"github.com/harvester/node-disk-manager/pkg/util"
 	longhornv1 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta1"
-	"github.com/sirupsen/logrus"
 )
 
 type Controller struct {
@@ -37,46 +35,8 @@ func Register(ctx context.Context, nodes ctllonghornv1.NodeController, bds ctldi
 		BlockDeviceCache: bds.Cache(),
 	}
 
-	nodes.OnChange(ctx, blockDeviceNodeHandlerName, c.OnNodeChange)
 	nodes.OnRemove(ctx, blockDeviceNodeHandlerName, c.OnNodeDelete)
 	return nil
-}
-
-func (c *Controller) OnNodeChange(key string, node *longhornv1.Node) (*longhornv1.Node, error) {
-	if node == nil || node.DeletionTimestamp != nil {
-		return nil, nil
-	}
-
-	toRemove := make([]string, 0)
-	nodeCpy := node.DeepCopy()
-	for name, disk := range node.Spec.Disks {
-		needRemove := false
-		for _, tag := range disk.Tags {
-			if tag == util.DiskRemoveTag {
-				needRemove = true
-				break
-			}
-		}
-		if needRemove {
-			if status, ok := node.Status.DiskStatus[name]; ok && len(status.ScheduledReplica) == 0 {
-				delete(nodeCpy.Spec.Disks, name)
-				toRemove = append(toRemove, name)
-			}
-		}
-	}
-
-	if len(toRemove) > 0 {
-		if _, err := c.Nodes.Update(nodeCpy); err != nil {
-			return nil, err
-		}
-
-		for _, name := range toRemove {
-			logrus.Debugf("Disk %s was removed from node %s", name, node.Name)
-			c.BlockDevices.Enqueue(c.namespace, name)
-		}
-	}
-
-	return node, nil
 }
 
 // OnNodeDelete watch the node CR on remove and delete node related block devices

@@ -552,14 +552,31 @@ func (c *Controller) unprovisionDeviceFromNode(device *diskv1.BlockDevice) error
 		return nil
 	}
 
-	removePending := false
+	isUnprovisioning := false
 	for _, tag := range diskToRemove.Tags {
 		if tag == util.DiskRemoveTag {
-			removePending = true
+			isUnprovisioning = true
 			break
 		}
 	}
-	if !removePending {
+
+	if isUnprovisioning {
+		if status, ok := node.Status.DiskStatus[device.Name]; ok && len(status.ScheduledReplica) == 0 {
+			// Unprovision finished. Remove the disk.
+			nodeCpy := node.DeepCopy()
+			delete(nodeCpy.Spec.Disks, device.Name)
+			if _, err := c.Nodes.Update(nodeCpy); err != nil {
+				return err
+			}
+			device.Status.ProvisionPhase = diskv1.ProvisionPhaseUnprovisioned
+			logrus.Debugf("device %s is unprovisioned", device.Name)
+		} else {
+			// Still unprovisioning
+			c.Blockdevices.EnqueueAfter(c.Namespace, device.Name, enqueueDelay)
+			logrus.Debugf("device %s is unprovisioning", device.Name)
+		}
+	} else {
+		// Start unprovisioing
 		diskToRemove.AllowScheduling = false
 		diskToRemove.EvictionRequested = true
 		diskToRemove.Tags = append(diskToRemove.Tags, util.DiskRemoveTag)
@@ -568,13 +585,13 @@ func (c *Controller) unprovisionDeviceFromNode(device *diskv1.BlockDevice) error
 		if _, err := c.Nodes.Update(nodeCpy); err != nil {
 			return err
 		}
+		msg := fmt.Sprintf("Stop provisioning device %s to longhorn node `%s`", device.Name, c.NodeName)
+		device.Status.ProvisionPhase = diskv1.ProvisionPhaseUnprovisioning
+		diskv1.DiskAddedToNode.SetError(device, "", nil)
+		diskv1.DiskAddedToNode.SetStatusBool(device, false)
+		diskv1.DiskAddedToNode.Message(device, msg)
 	}
 
-	msg := fmt.Sprintf("Stop provisioning device %s to longhorn node `%s`", device.Name, c.NodeName)
-	device.Status.ProvisionPhase = diskv1.ProvisionPhaseUnprovisioning
-	diskv1.DiskAddedToNode.SetError(device, "", nil)
-	diskv1.DiskAddedToNode.SetStatusBool(device, false)
-	diskv1.DiskAddedToNode.Message(device, msg)
 	return nil
 }
 
