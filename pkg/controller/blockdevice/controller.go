@@ -538,9 +538,7 @@ func (c *Controller) unprovisionDeviceFromNode(device *diskv1.BlockDevice) error
 		return err
 	}
 
-	diskToRemove, ok := node.Spec.Disks[device.Name]
-	if !ok {
-		logrus.Debugf("disk %s not in disks of longhorn node %s/%s", device.Name, c.Namespace, c.NodeName)
+	updateProvisionPhaseUnprovisioned := func() {
 		msg := fmt.Sprintf("Disk not in longhorn node `%s`", c.NodeName)
 		// To prevent user from mistaking unprovisioning from umount, NDM umount
 		// for the device as well while unprovisioning it.
@@ -549,6 +547,12 @@ func (c *Controller) unprovisionDeviceFromNode(device *diskv1.BlockDevice) error
 		diskv1.DiskAddedToNode.SetError(device, "", nil)
 		diskv1.DiskAddedToNode.SetStatusBool(device, false)
 		diskv1.DiskAddedToNode.Message(device, msg)
+	}
+
+	diskToRemove, ok := node.Spec.Disks[device.Name]
+	if !ok {
+		logrus.Errorf("disk %s not in disks of longhorn node %s/%s", device.Name, c.Namespace, c.NodeName)
+		updateProvisionPhaseUnprovisioned()
 		return nil
 	}
 
@@ -568,7 +572,7 @@ func (c *Controller) unprovisionDeviceFromNode(device *diskv1.BlockDevice) error
 			if _, err := c.Nodes.Update(nodeCpy); err != nil {
 				return err
 			}
-			device.Status.ProvisionPhase = diskv1.ProvisionPhaseUnprovisioned
+			updateProvisionPhaseUnprovisioned()
 			logrus.Debugf("device %s is unprovisioned", device.Name)
 		} else {
 			// Still unprovisioning
