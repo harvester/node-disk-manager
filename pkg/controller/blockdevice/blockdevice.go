@@ -25,8 +25,7 @@ func GetDiskBlockDevice(disk *block.Disk, nodeName, namespace string) *diskv1.Bl
 	}
 
 	status := diskv1.BlockDeviceStatus{
-		State:          diskv1.BlockDeviceActive,
-		ProvisionPhase: diskv1.ProvisionPhaseUnprovisioned,
+		State: diskv1.BlockDeviceActive,
 		DeviceStatus: diskv1.DeviceStatus{
 			Partitioned: block.HasPartitions(disk),
 			Capacity: diskv1.DeviceCapcity{
@@ -84,8 +83,7 @@ func GetPartitionBlockDevice(part *block.Partition, nodeName, namespace string) 
 		IsReadOnly: part.FileSystemInfo.IsReadOnly,
 	}
 	status := diskv1.BlockDeviceStatus{
-		State:          diskv1.BlockDeviceActive,
-		ProvisionPhase: diskv1.ProvisionPhaseUnprovisioned,
+		State: diskv1.BlockDeviceActive,
 		DeviceStatus: diskv1.DeviceStatus{
 			Capacity: diskv1.DeviceCapcity{
 				SizeBytes:              part.SizeBytes,

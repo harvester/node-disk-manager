@@ -69,10 +69,6 @@ spec:
                     description: a string with the partition's mount point, or ""
                       if no mount point was discovered
                     type: string
-                  provisioned:
-                    description: a bool indicating whether the filesystem can be provisioned
-                      as a disk for the node to store data.
-                    type: boolean
                 required:
                 - mountPoint
                 type: object
@@ -248,14 +244,6 @@ spec:
                 - fileSystem
                 - partitioned
                 type: object
-              provisionPhase:
-                default: Unprovisioned
-                description: The current phase of the block device being provisioned.
-                enum:
-                - Provisioned
-                - Unprovisioned
-                - Unprovisioning
-                type: string
               state:
                 description: the current state of the block device, options are "Active",
                   "Inactive", or "Unknown"
@@ -265,7 +253,6 @@ spec:
                 - Unknown
                 type: string
             required:
-            - provisionPhase
             - state
             type: object
         required:

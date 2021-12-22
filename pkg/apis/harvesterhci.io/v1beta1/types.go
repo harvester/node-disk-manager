@@ -7,9 +7,15 @@ import (
 )
 
 var (
-	DeviceMounted    condition.Cond = "Mounted"
-	DeviceFormatting condition.Cond = "Formatting"
-	DiskAddedToNode  condition.Cond = "AddedToNode"
+	DevicePartitioning   condition.Cond = "Partitioning"
+	DevicePartitioned    condition.Cond = "Partitioned"
+	DeviceFormatting     condition.Cond = "Formatting"
+	DeviceFormatted      condition.Cond = "Formatted"
+	DeviceMounting       condition.Cond = "Mounting"
+	DeviceMounted        condition.Cond = "Mounted"
+	DeviceUnmounting     condition.Cond = "Unmounting"
+	DeviceProvisioned    condition.Cond = "Provisioned"
+	DeviceUnprovisioning condition.Cond = "Unprovisioning"
 )
 
 // +genclient
@@ -46,11 +52,6 @@ type BlockDeviceStatus struct {
 	// +kubebuilder:validation:Enum:=Active;Inactive;Unknown
 	State BlockDeviceState `json:"state"`
 
-	// The current phase of the block device being provisioned.
-	// +kubebuilder:validation:Enum:=Provisioned;Unprovisioned;Unprovisioning
-	// +kubebuilder:default:=Unprovisioned
-	ProvisionPhase BlockDeviceProvisionPhase `json:"provisionPhase"`
-
 	// +optional
 	Conditions []Condition `json:"conditions,omitempty"`
 
@@ -64,9 +65,6 @@ type FilesystemInfo struct {
 
 	// a bool indicating the device is force formatted to overwrite the existing one
 	ForceFormatted bool `json:"forceFormatted,omitempty"`
-
-	// a bool indicating whether the filesystem can be provisioned as a disk for the node to store data.
-	Provisioned bool `json:"provisioned,omitempty"`
 }
 
 type DeviceStatus struct {
@@ -206,17 +204,6 @@ const (
 
 	// DeviceTypePart indicates the device type is partition
 	DeviceTypePart BlockDeviceType = "part"
-)
-
-type BlockDeviceProvisionPhase string
-
-const (
-	// ProvisionPhaseProvisioned indicates the block device is in provision.
-	ProvisionPhaseProvisioned BlockDeviceProvisionPhase = "Provisioned"
-	// ProvisionPhaseUnprovisioning indicates the block device is being unprovisioned.
-	ProvisionPhaseUnprovisioning BlockDeviceProvisionPhase = "Unprovisioning"
-	// ProvisionPhaseUnprovisioned indicates the block device is not in provision.
-	ProvisionPhaseUnprovisioned BlockDeviceProvisionPhase = "Unprovisioned"
 )
 
 type Condition struct {
