@@ -47,7 +47,6 @@ type Controller struct {
 	BlockInfo        block.Info
 	ExcludeFilters   []*filter.Filter
 
-	AutoGPTGenerate      bool
 	AutoProvisionFilters []*filter.Filter
 }
 
