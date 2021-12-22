@@ -546,8 +546,6 @@ func GenerateDiskGUID(disk *Disk, nodeName string) string {
 	var id string
 	if valueExists(disk.WWN) {
 		id = disk.WWN + disk.Vendor + disk.Model + disk.SerialNumber
-	} else if valueExists(disk.UUID) {
-		id = disk.UUID
 	} else if valueExists(disk.PtUUID) {
 		id = disk.PtUUID
 	}
