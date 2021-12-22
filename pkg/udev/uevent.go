@@ -18,9 +18,6 @@ import (
 	"github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
 	"github.com/harvester/node-disk-manager/pkg/controller/blockdevice"
-	"github.com/harvester/node-disk-manager/pkg/filter"
-	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
-	ctllonghornv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/option"
 )
 
@@ -29,36 +26,18 @@ const (
 )
 
 type Udev struct {
-	namespace  string
-	nodeName   string
-	startOnce  sync.Once
-	controller *blockdevice.Controller
+	namespace string
+	nodeName  string
+	startOnce sync.Once
+	scanner   *blockdevice.Scanner
 }
 
-func NewUdev(
-	nodes ctllonghornv1.NodeController,
-	bds ctldiskv1.BlockDeviceController,
-	block block.Info,
-	opt *option.Option,
-	excludeFilters []*filter.Filter,
-	autoProvisionFilters []*filter.Filter,
-) *Udev {
-	controller := &blockdevice.Controller{
-		Namespace:            opt.Namespace,
-		NodeName:             opt.NodeName,
-		NodeCache:            nodes.Cache(),
-		Nodes:                nodes,
-		Blockdevices:         bds,
-		BlockdeviceCache:     bds.Cache(),
-		BlockInfo:            block,
-		ExcludeFilters:       excludeFilters,
-		AutoProvisionFilters: autoProvisionFilters,
-	}
+func NewUdev(opt *option.Option, scanner *blockdevice.Scanner) *Udev {
 	return &Udev{
-		startOnce:  sync.Once{},
-		namespace:  opt.Namespace,
-		nodeName:   opt.NodeName,
-		controller: controller,
+		startOnce: sync.Once{},
+		namespace: opt.Namespace,
+		nodeName:  opt.NodeName,
+		scanner:   scanner,
 	}
 }
 
@@ -110,7 +89,7 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 	var part *block.Partition
 	var bd *v1beta1.BlockDevice
 	if udevDevice.IsDisk() {
-		disk = u.controller.BlockInfo.GetDiskByDevPath(udevDevice.GetShortName())
+		disk = u.scanner.BlockInfo.GetDiskByDevPath(udevDevice.GetShortName())
 		bd = blockdevice.GetDiskBlockDevice(disk, u.nodeName, u.namespace)
 	} else {
 		parentPath, err := block.GetParentDevName(udevDevice.GetDevName())
@@ -118,16 +97,16 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 		if err != nil {
 			logrus.Errorf("failed to get parent dev name, %s", err.Error())
 		}
-		part = u.controller.BlockInfo.GetPartitionByDevPath(parentPath, udevDevice.GetDevName())
+		part = u.scanner.BlockInfo.GetPartitionByDevPath(parentPath, udevDevice.GetDevName())
 		disk = part.Disk
 		bd = blockdevice.GetPartitionBlockDevice(part, u.nodeName, u.namespace)
 	}
 
-	if u.controller.ApplyExcludeFiltersForDisk(disk) {
+	if u.scanner.ApplyExcludeFiltersForDisk(disk) {
 		return
 	}
 
-	if part != nil && u.controller.ApplyExcludeFiltersForPartition(part) {
+	if part != nil && u.scanner.ApplyExcludeFiltersForPartition(part) {
 		return
 	}
 
@@ -137,7 +116,7 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 			logrus.Infof("Skip adding non-identifiable block device %s", bd.Spec.DevPath)
 			return
 		}
-		autoProvisioned := udevDevice.IsDisk() && u.controller.ApplyAutoProvisionFiltersForDisk(disk)
+		autoProvisioned := udevDevice.IsDisk() && u.scanner.ApplyAutoProvisionFiltersForDisk(disk)
 		u.AddBlockDevice(bd, defaultDuration, autoProvisioned)
 	case netlink.REMOVE:
 		if udevDevice.IsDisk() {
@@ -160,7 +139,7 @@ func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, duration time.Duratio
 		return
 	}
 
-	bdList, err := u.controller.BlockdeviceCache.List(u.namespace, labels.SelectorFromSet(map[string]string{
+	bdList, err := u.scanner.BlockdeviceCache.List(u.namespace, labels.SelectorFromSet(map[string]string{
 		v1.LabelHostname: u.nodeName,
 	}))
 	if err != nil {
@@ -170,7 +149,7 @@ func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, duration time.Duratio
 	}
 	oldBds := blockdevice.ConvertBlockDevicesToMap(bdList)
 
-	if _, err := u.controller.SaveBlockDevice(device, oldBds, autoProvisioned); err != nil {
+	if _, err := u.scanner.SaveBlockDevice(device, oldBds, autoProvisioned); err != nil {
 		logrus.Errorf("failed to save block device %s, error: %s", device.Name, err.Error())
 		//u.AddBlockDevice(device, 2*defaultDuration)
 	}
@@ -194,7 +173,7 @@ func (u *Udev) RemoveBlockDevice(device *v1beta1.BlockDevice, udevDevice *Device
 		return
 	}
 
-	err := u.controller.Blockdevices.Delete(u.namespace, device.Name, &metav1.DeleteOptions{})
+	err := u.scanner.Blockdevices.Delete(u.namespace, device.Name, &metav1.DeleteOptions{})
 	if err != nil && errors.IsNotFound(err) {
 		logrus.Errorf("failed to delete block device, %s is not found", device.Name)
 	} else if err != nil {
@@ -204,7 +183,7 @@ func (u *Udev) RemoveBlockDevice(device *v1beta1.BlockDevice, udevDevice *Device
 }
 
 func (u *Udev) deactivateBlockDevice(device *v1beta1.BlockDevice) {
-	bd, err := u.controller.BlockdeviceCache.Get(u.namespace, device.Name)
+	bd, err := u.scanner.BlockdeviceCache.Get(u.namespace, device.Name)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Do nothing since the device has already be deleted.
@@ -223,7 +202,7 @@ func (u *Udev) deactivateBlockDevice(device *v1beta1.BlockDevice) {
 
 	deviceCpy := bd.DeepCopy()
 	deviceCpy.Status.State = v1beta1.BlockDeviceInactive
-	if _, err := u.controller.Blockdevices.Update(deviceCpy); err != nil && !errors.IsNotFound(err) {
+	if _, err := u.scanner.Blockdevices.Update(deviceCpy); err != nil && !errors.IsNotFound(err) {
 		logrus.Errorf("failed to deactivate block device %s, error: %s", device.Name, err.Error())
 	}
 }
