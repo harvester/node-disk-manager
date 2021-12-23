@@ -93,7 +93,7 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 		bd = blockdevice.GetDiskBlockDevice(disk, u.nodeName, u.namespace)
 	} else {
 		parentPath, err := block.GetParentDevName(udevDevice.GetDevName())
-		logrus.Infof("debug: parent path %s", parentPath)
+		logrus.Debugf("debug: parent path %s", parentPath)
 		if err != nil {
 			logrus.Errorf("failed to get parent dev name, %s", err.Error())
 		}

@@ -2,6 +2,7 @@ package blockdevice
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"time"
 
@@ -98,14 +99,16 @@ func (c *Controller) onDiskChange(device *diskv1.BlockDevice) (*diskv1.BlockDevi
 	}
 
 	if diskv1.DevicePartitioned.IsTrue(device) {
-		logrus.Infof("Finsihed GPT partition for %s", device.Name)
 		devPath := util.GetDiskPartitionPath(device.Spec.DevPath, 1)
 		part := c.scanner.BlockInfo.GetPartitionByDevPath(device.Spec.DevPath, devPath)
 		name := block.GeneratePartitionGUID(part, c.nodeName)
 		bd, err := c.blockdeviceCache.Get(device.Namespace, name)
 		if err != nil {
-			// TODO: Should consider not found??
-			return nil, err
+			return nil, fmt.Errorf("Error occurred after GPT partitioned: %v", err)
+		}
+		if diskv1.DeviceFormatting.IsTrue(bd) || diskv1.DeviceFormatted.IsTrue(bd) {
+			logrus.Debugf("device %s is either under formating or already formatted, skip...", bd.Name)
+			return nil, nil
 		}
 		bdCpy := bd.DeepCopy()
 		bdCpy.Spec.FileSystem.MountPoint = device.Spec.FileSystem.MountPoint
@@ -135,19 +138,19 @@ func (c *Controller) onPartitionChange(device *diskv1.BlockDevice) (*diskv1.Bloc
 	var err error
 
 	if diskv1.DeviceFormatting.IsTrue(device) {
-		logrus.Infof("Await partition formating for %s", device.Name)
+		logrus.Infof("Await formating for %s", device.Name)
 		return nil, nil
 	}
 	if diskv1.DeviceMounting.IsTrue(device) {
-		logrus.Infof("Await partition mounting for %s", device.Name)
+		logrus.Infof("Await mounting %s on %s", device.Name, device.Spec.FileSystem.MountPoint)
 		return nil, nil
 	}
 	if diskv1.DeviceUnmounting.IsTrue(device) {
-		logrus.Infof("Await partition unmounting for %s", device.Name)
+		logrus.Infof("Await unmounting %s", device.Name)
 		return nil, nil
 	}
 	if diskv1.DeviceUnprovisioning.IsTrue(device) {
-		logrus.Infof("Await partition unprovisioning for %s", device.Name)
+		logrus.Infof("Await unprovisioning for %s", device.Name)
 		// May enqueue device if disk on longhorn node haven't yet evicted all replicas
 		c.unprovisionDevice(device.DeepCopy())
 		return nil, nil
@@ -180,8 +183,8 @@ func (c *Controller) onPartitionChange(device *diskv1.BlockDevice) (*diskv1.Bloc
 			go c.updateFilesystemMount(device, filesystem)
 			return nil, nil
 		}
-		if diskv1.DeviceProvisioned.IsTrue(device) {
-			logrus.Infof("Start unprovisioing %s from %s", device.Name, fs.MountPoint)
+		if diskv1.DeviceProvisioned.IsTrue(device) && !diskv1.DeviceUnprovisioning.IsTrue(device) {
+			logrus.Infof("Start unprovisioing %s from %s", device.Name, filesystem.MountPoint)
 			setDeviceUnprovisioningCondition(deviceCpy, corev1.ConditionTrue, "")
 			device, err = c.blockdevices.Update(deviceCpy)
 			if err != nil {
@@ -191,13 +194,15 @@ func (c *Controller) onPartitionChange(device *diskv1.BlockDevice) (*diskv1.Bloc
 			return nil, err
 		}
 
-		logrus.Infof("Start unmounting %s on %s", device.Name, fs.MountPoint)
-		setDeviceUnmountingCondition(deviceCpy, corev1.ConditionTrue, "")
-		device, err = c.blockdevices.Update(deviceCpy)
-		if err != nil {
-			return nil, err
+		if !diskv1.DeviceUnmounting.IsTrue(device) {
+			logrus.Infof("Start unmounting %s from %s", device.Name, filesystem.MountPoint)
+			setDeviceUnmountingCondition(deviceCpy, corev1.ConditionTrue, "")
+			device, err = c.blockdevices.Update(deviceCpy)
+			if err != nil {
+				return nil, err
+			}
+			go c.unmountFilesystem(device, filesystem)
 		}
-		go c.unmountFilesystem(device, filesystem)
 		return nil, nil
 	}
 
@@ -207,6 +212,7 @@ func (c *Controller) onPartitionChange(device *diskv1.BlockDevice) (*diskv1.Bloc
 		if err := c.provisionDevice(device, filesystem); err != nil {
 			return nil, err
 		}
+		logrus.Infof("Finished provisioning %s on %s", device.Name, fs.MountPoint)
 		setDeviceProvisionedCondition(deviceCpy, corev1.ConditionTrue, "")
 		_, err = c.blockdevices.Update(deviceCpy)
 		if err != nil {
@@ -218,95 +224,105 @@ func (c *Controller) onPartitionChange(device *diskv1.BlockDevice) (*diskv1.Bloc
 }
 
 // Run as goroutiune
-func (c *Controller) makeGPTPartition(device *diskv1.BlockDevice) {
-	cmdErr := disk.MakeGPTPartition(device.Spec.DevPath)
-	device, err := c.blockdeviceCache.Get(device.Namespace, device.Name)
+func (c *Controller) makeGPTPartition(bd *diskv1.BlockDevice) {
+	cmdErr := disk.MakeGPTPartition(bd.Spec.DevPath)
+	device, err := c.blockdeviceCache.Get(bd.Namespace, bd.Name)
 	if err != nil {
-		logrus.Error(err)
+		logrus.Errorf("Failed to retrieve updated device after excuting GPT partition on %s: %v", bd.Name, err)
+		return
 	}
 	deviceCpy := device.DeepCopy()
 	if cmdErr == nil {
+		logrus.Infof("Finished GPT partitioning for %s", device.Name)
 		// Backwards compatible for LastFormattedAt
 		deviceCpy.Status.DeviceStatus.FileSystem.LastFormattedAt = &metav1.Time{Time: time.Now()}
 		setDevicePartitioningCondition(deviceCpy, corev1.ConditionFalse, "")
 		setDevicePartitionedCondition(deviceCpy, corev1.ConditionTrue, "")
 	} else {
+		logrus.Infof("Failed to GPT partition for %s: %v", device.Name, cmdErr)
 		setDevicePartitioningCondition(deviceCpy, corev1.ConditionFalse, cmdErr.Error())
 		setDevicePartitionedCondition(deviceCpy, corev1.ConditionFalse, cmdErr.Error())
 	}
 	if _, err := c.blockdevices.Update(deviceCpy); err != nil {
-		logrus.Error(err)
+		logrus.Errorf("Failed to update partitioning condition on %s: %v", deviceCpy.Name, err)
+		return
 	}
 }
 
-func (c *Controller) formatPartition(device *diskv1.BlockDevice) {
-	cmdErr := disk.MakeExt4DiskFormatting(device.Spec.DevPath)
-	device, err := c.blockdeviceCache.Get(device.Namespace, device.Name)
+func (c *Controller) formatPartition(bd *diskv1.BlockDevice) {
+	cmdErr := disk.MakeExt4DiskFormatting(bd.Spec.DevPath)
+	device, err := c.blockdeviceCache.Get(bd.Namespace, bd.Name)
 	if err != nil {
-		logrus.Error(err)
+		logrus.Errorf("Failed to retrieve updated device after formatting on %s: %v", bd.Name, err)
 		return
 	}
 	deviceCpy := device.DeepCopy()
 	if cmdErr == nil {
+		logrus.Infof("Finished formatting %s", device.Name)
 		// Backwards compatible for LastFormattedAt
 		deviceCpy.Status.DeviceStatus.FileSystem.LastFormattedAt = &metav1.Time{Time: time.Now()}
 		setDeviceFormattingCondition(deviceCpy, corev1.ConditionFalse, "")
 		setDeviceFormattedCondition(deviceCpy, corev1.ConditionTrue, "")
 	} else {
+		logrus.Infof("Failed to format %s: %v", device.Name, cmdErr)
 		setDeviceFormattingCondition(deviceCpy, corev1.ConditionFalse, cmdErr.Error())
 		setDeviceFormattedCondition(deviceCpy, corev1.ConditionFalse, cmdErr.Error())
 	}
 	if _, err := c.blockdevices.Update(deviceCpy); err != nil {
-		logrus.Error(err)
+		logrus.Errorf("Failed to update formatting condition on %s: %v", deviceCpy.Name, err)
 		return
 	}
 }
 
-func (c *Controller) updateFilesystemMount(device *diskv1.BlockDevice, fs *block.FileSystemInfo) {
+func (c *Controller) updateFilesystemMount(bd *diskv1.BlockDevice, fs *block.FileSystemInfo) {
 	if fs.MountPoint == "" {
-		c.mountFilesystem(device, fs)
+		c.mountFilesystem(bd, fs)
 	} else {
-		c.unmountFilesystem(device, fs)
+		c.unmountFilesystem(bd, fs)
 	}
 }
 
-func (c *Controller) unmountFilesystem(device *diskv1.BlockDevice, fs *block.FileSystemInfo) {
-	cmdErr := disk.UmountDisk(device.Spec.FileSystem.MountPoint)
-	device, err := c.blockdeviceCache.Get(device.Namespace, device.Name)
+func (c *Controller) unmountFilesystem(bd *diskv1.BlockDevice, fs *block.FileSystemInfo) {
+	cmdErr := disk.UmountDisk(fs.MountPoint)
+	device, err := c.blockdeviceCache.Get(bd.Namespace, bd.Name)
 	if err != nil {
-		logrus.Error(err)
+		logrus.Errorf("Failed to retrieve updated device after unmounting on %s: %v", bd.Name, err)
 		return
 	}
 	deviceCpy := device.DeepCopy()
 	if cmdErr == nil {
+		logrus.Infof("Finished unmounting %s from %s", device.Name, fs.MountPoint)
 		setDeviceUnmountingCondition(deviceCpy, corev1.ConditionFalse, "")
 		setDeviceMountedCondition(deviceCpy, corev1.ConditionFalse, "")
 	} else {
+		logrus.Infof("Failed to unmount %s from %s: %v", device.Name, fs.MountPoint, cmdErr)
 		setDeviceUnmountingCondition(deviceCpy, corev1.ConditionFalse, cmdErr.Error())
 	}
 	if _, err := c.blockdevices.Update(deviceCpy); err != nil {
-		logrus.Error(err)
+		logrus.Errorf("Failed to update unmounting condition on %s: %v", deviceCpy.Name, err)
 		return
 	}
 }
 
-func (c *Controller) mountFilesystem(device *diskv1.BlockDevice, fs *block.FileSystemInfo) {
-	cmdErr := disk.MountDisk(device.Spec.DevPath, device.Spec.FileSystem.MountPoint)
-	device, err := c.blockdeviceCache.Get(device.Namespace, device.Name)
+func (c *Controller) mountFilesystem(bd *diskv1.BlockDevice, fs *block.FileSystemInfo) {
+	cmdErr := disk.MountDisk(bd.Spec.DevPath, bd.Spec.FileSystem.MountPoint)
+	device, err := c.blockdeviceCache.Get(bd.Namespace, bd.Name)
 	if err != nil {
-		logrus.Error(err)
+		logrus.Errorf("Failed to retrieve updated device after mounting on %s: %v", bd.Name, err)
 		return
 	}
 	deviceCpy := device.DeepCopy()
 	if cmdErr == nil {
+		logrus.Infof("Finished mounting %s", device.Name)
 		setDeviceMountingCondition(deviceCpy, corev1.ConditionFalse, "")
 		setDeviceMountedCondition(deviceCpy, corev1.ConditionTrue, "")
 	} else {
+		logrus.Infof("Failed to mount %s: %v", device.Name, cmdErr)
 		setDeviceMountingCondition(deviceCpy, corev1.ConditionFalse, cmdErr.Error())
 		setDeviceMountedCondition(deviceCpy, corev1.ConditionFalse, cmdErr.Error())
 	}
 	if _, err := c.blockdevices.Update(deviceCpy); err != nil {
-		logrus.Error(err)
+		logrus.Errorf("Failed to update mounting condition on %s: %v", deviceCpy.Name, err)
 		return
 	}
 }
@@ -346,8 +362,9 @@ func (c *Controller) unprovisionDevice(device *diskv1.BlockDevice) error {
 	}
 
 	updateDeviceCondition := func(device *diskv1.BlockDevice) error {
+		logrus.Infof("Finished unprovisioing %s", device.Name)
 		setDeviceProvisionedCondition(device, corev1.ConditionFalse, "")
-		setDeviceUnprovisioningCondition(device, corev1.ConditionTrue, "")
+		setDeviceUnprovisioningCondition(device, corev1.ConditionFalse, "")
 		_, err := c.blockdevices.Update(device)
 		return err
 	}
@@ -447,7 +464,7 @@ func (c *Controller) OnBlockDeviceDelete(key string, device *diskv1.BlockDevice)
 		filesystem := c.scanner.BlockInfo.GetFileSystemInfoByDevPath(bd.Spec.DevPath)
 		if filesystem.MountPoint != "" {
 			if err := disk.UmountDisk(filesystem.MountPoint); err != nil {
-				logrus.Warnf("cannot umount disk %s from mount point %s, err: %s", bd.Name, filesystem.MountPoint, err.Error())
+				logrus.Warnf("cannot unmount disk %s from mount point %s, err: %s", bd.Name, filesystem.MountPoint, err.Error())
 			}
 		}
 		delete(nodeCpy.Spec.Disks, bd.Name)
