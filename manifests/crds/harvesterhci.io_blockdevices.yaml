@@ -32,8 +32,8 @@ spec:
     - jsonPath: .spec.nodeName
       name: NodeName
       type: string
-    - jsonPath: .status.state
-      name: Status
+    - jsonPath: .status.provisionPhase
+      name: Phase
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
@@ -244,6 +244,23 @@ spec:
                 - fileSystem
                 - partitioned
                 type: object
+              provisionPhase:
+                default: Unprovisioned
+                description: The current phase of the block device being provisioned.
+                enum:
+                - Unprovisioned
+                - Partitioning
+                - Partitioned
+                - Formatting
+                - Formatted
+                - Mounting
+                - Mounted
+                - Umounting
+                - Provisioning
+                - Provisioned
+                - Unprovisioning
+                - Failed
+                type: string
               state:
                 description: the current state of the block device, options are "Active",
                   "Inactive", or "Unknown"
@@ -253,6 +270,7 @@ spec:
                 - Unknown
                 type: string
             required:
+            - provisionPhase
             - state
             type: object
         required:

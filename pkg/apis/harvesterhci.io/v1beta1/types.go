@@ -6,16 +6,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var (
-	DevicePartitioning   condition.Cond = "Partitioning"
-	DevicePartitioned    condition.Cond = "Partitioned"
-	DeviceFormatting     condition.Cond = "Formatting"
-	DeviceFormatted      condition.Cond = "Formatted"
-	DeviceMounting       condition.Cond = "Mounting"
-	DeviceMounted        condition.Cond = "Mounted"
-	DeviceUnmounting     condition.Cond = "Unmounting"
-	DeviceProvisioned    condition.Cond = "Provisioned"
-	DeviceUnprovisioning condition.Cond = "Unprovisioning"
+const (
+	DevicePartitioned condition.Cond = "Partitioned"
+	DeviceFormatted   condition.Cond = "Formatted"
+	DeviceMounted     condition.Cond = "Mounted"
+	DeviceProvisioned condition.Cond = "Provisioned"
+	DeviceFailed      condition.Cond = "Failed"
 )
 
 // +genclient
@@ -25,7 +21,7 @@ var (
 // +kubebuilder:printcolumn:name="DevPath",type="string",JSONPath=`.spec.devPath`
 // +kubebuilder:printcolumn:name="MountPoint",type="string",JSONPath=`.status.deviceStatus.fileSystem.mountPoint`
 // +kubebuilder:printcolumn:name="NodeName",type="string",JSONPath=`.spec.nodeName`
-// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=`.status.state`
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=`.status.provisionPhase`
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=`.metadata.creationTimestamp`
 
 type BlockDevice struct {
@@ -51,6 +47,11 @@ type BlockDeviceStatus struct {
 	// the current state of the block device, options are "Active", "Inactive", or "Unknown"
 	// +kubebuilder:validation:Enum:=Active;Inactive;Unknown
 	State BlockDeviceState `json:"state"`
+
+	// The current phase of the block device being provisioned.
+	// +kubebuilder:validation:Enum:=Unprovisioned;Partitioning;Partitioned;Formatting;Formatted;Mounting;Mounted;Umounting;Provisioning;Provisioned;Unprovisioning;Failed
+	// +kubebuilder:default:=Unprovisioned
+	ProvisionPhase BlockDeviceProvisionPhase `json:"provisionPhase"`
 
 	// +optional
 	Conditions []Condition `json:"conditions,omitempty"`
@@ -224,4 +225,31 @@ type Condition struct {
 
 	// Human-readable message indicating details about last transition
 	Message string `json:"message,omitempty"`
+}
+
+type BlockDeviceProvisionPhase string
+
+const (
+	ProvisionPhaseUnprovisioned  BlockDeviceProvisionPhase = "Unprovisioned"
+	ProvisionPhasePartitioning   BlockDeviceProvisionPhase = "Partitioning"
+	ProvisionPhasePartitioned    BlockDeviceProvisionPhase = "Partitioned"
+	ProvisionPhaseFormatting     BlockDeviceProvisionPhase = "Formatting"
+	ProvisionPhaseFormatted      BlockDeviceProvisionPhase = "Formatted"
+	ProvisionPhaseMounting       BlockDeviceProvisionPhase = "Mounting"
+	ProvisionPhaseMounted        BlockDeviceProvisionPhase = "Mounted"
+	ProvisionPhaseUnmounting     BlockDeviceProvisionPhase = "Umounting"
+	ProvisionPhaseProvisioning   BlockDeviceProvisionPhase = "Provisioning"
+	ProvisionPhaseProvisioned    BlockDeviceProvisionPhase = "Provisioned"
+	ProvisionPhaseUnprovisioning BlockDeviceProvisionPhase = "Unprovisioning"
+	ProvisionPhaseFailed         BlockDeviceProvisionPhase = "Failed"
+)
+
+func (phase BlockDeviceProvisionPhase) Matches(device *BlockDevice) bool {
+	return device != nil && device.Status.ProvisionPhase == phase
+}
+
+func (phase BlockDeviceProvisionPhase) Set(device *BlockDevice) {
+	if device != nil {
+		device.Status.ProvisionPhase = phase
+	}
 }
