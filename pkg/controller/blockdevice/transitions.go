@@ -2,6 +2,7 @@ package blockdevice
 
 import (
 	"fmt"
+	"reflect"
 
 	longhornv1 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta1"
 	"github.com/sirupsen/logrus"
@@ -47,38 +48,25 @@ func newTransitionTable(
 // next deduces the next phase from current blockdevice status
 func (p transitionTable) next(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
-	switch currentPhase {
-	case diskv1.ProvisionPhaseUnprovisioned:
-		return p.phaseUnprovisioned(bd)
-	case diskv1.ProvisionPhasePartitioning:
-		return p.phasePartitioning(bd)
-	case diskv1.ProvisionPhasePartitioned:
-		return p.phasePartitioned(bd)
-	case diskv1.ProvisionPhaseFormatting:
-		return p.phaseFormatting(bd)
-	case diskv1.ProvisionPhaseFormatted:
-		return p.phaseFormatted(bd)
-	case diskv1.ProvisionPhaseMounting:
-		return p.phaseMounting(bd)
-	case diskv1.ProvisionPhaseMounted:
-		return p.phaseMounted(bd)
-	case diskv1.ProvisionPhaseUnmounting:
-		return p.phaseUnmounting(bd)
-	case diskv1.ProvisionPhaseProvisioning:
-		return p.phaseProvisioning(bd)
-	case diskv1.ProvisionPhaseProvisioned:
-		return p.phaseProvisioned(bd)
-	case diskv1.ProvisionPhaseUnprovisioning:
-		return p.phaseUnprovisioning(bd)
-	case diskv1.ProvisionPhaseFailed:
-		return p.phaseFailed(bd)
-	default:
+	methodName := fmt.Sprintf("Phase%s", currentPhase)
+	args := []reflect.Value{reflect.ValueOf(bd)}
+	method := reflect.ValueOf(p).MethodByName(methodName)
+	if !method.IsValid() {
 		err := fmt.Errorf("Unrecognizable phase %s for block device %s", currentPhase, bd.Name)
 		return diskv1.ProvisionPhaseUnprovisioned, noop, err
 	}
+	logrus.Debugf("[Transition] calling %s with device %s", methodName, bd.Name)
+	ret := method.Call(args)
+	phase := ret[0].Interface().(diskv1.BlockDeviceProvisionPhase)
+	effect := ret[1].Interface().(effect)
+	var err error
+	if !ret[2].IsNil() {
+		err = ret[2].Interface().(error)
+	}
+	return phase, effect, err
 }
 
-func (p transitionTable) phaseUnprovisioned(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
+func (p transitionTable) PhaseUnprovisioned(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
 	// Disk only cares about force formatting itself to a single root partition.
 	if !bd.Spec.FileSystem.ForceFormatted {
@@ -102,12 +90,12 @@ func (p transitionTable) phaseUnprovisioned(bd *diskv1.BlockDevice) (diskv1.Bloc
 	}
 }
 
-func (p transitionTable) phasePartitioning(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
+func (p transitionTable) PhasePartitioning(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
 	return currentPhase, noop, nil
 }
 
-func (p transitionTable) phasePartitioned(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
+func (p transitionTable) PhasePartitioned(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
 	devPath := util.GetDiskPartitionPath(bd.Spec.DevPath, 1)
 	part := p.scanner.BlockInfo.GetPartitionByDevPath(bd.Spec.DevPath, devPath)
@@ -126,12 +114,12 @@ func (p transitionTable) phasePartitioned(bd *diskv1.BlockDevice) (diskv1.BlockD
 	return currentPhase, effectPrepareFormatPartition(partBd), nil
 }
 
-func (p transitionTable) phaseFormatting(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
+func (p transitionTable) PhaseFormatting(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
 	return currentPhase, noop, nil
 }
 
-func (p transitionTable) phaseFormatted(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
+func (p transitionTable) PhaseFormatted(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
 	filesystem := p.scanner.BlockInfo.GetFileSystemInfoByDevPath(bd.Spec.DevPath)
 	fs := *bd.Spec.FileSystem
@@ -158,12 +146,12 @@ func (p transitionTable) phaseFormatted(bd *diskv1.BlockDevice) (diskv1.BlockDev
 	return diskv1.ProvisionPhaseMounting, effectMountFilesystem, nil
 }
 
-func (p transitionTable) phaseMounting(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
+func (p transitionTable) PhaseMounting(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
 	return currentPhase, noop, nil
 }
 
-func (p transitionTable) phaseMounted(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
+func (p transitionTable) PhaseMounted(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
 	node, err := p.getNode()
 	if err != nil {
@@ -178,17 +166,17 @@ func (p transitionTable) phaseMounted(bd *diskv1.BlockDevice) (diskv1.BlockDevic
 	return diskv1.ProvisionPhaseProvisioning, effectProvisionDevice(node), nil
 }
 
-func (p transitionTable) phaseUnmounting(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
+func (p transitionTable) PhaseUnmounting(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
 	return currentPhase, noop, nil
 }
 
-func (p transitionTable) phaseProvisioning(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
+func (p transitionTable) PhaseProvisioning(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
 	return currentPhase, noop, nil
 }
 
-func (p transitionTable) phaseProvisioned(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
+func (p transitionTable) PhaseProvisioned(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
 	mountPoint := bd.Spec.FileSystem.MountPoint
 	if mountPoint == "" {
@@ -201,7 +189,7 @@ func (p transitionTable) phaseProvisioned(bd *diskv1.BlockDevice) (diskv1.BlockD
 	return currentPhase, noop, nil
 }
 
-func (p transitionTable) phaseUnprovisioning(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
+func (p transitionTable) PhaseUnprovisioning(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
 	node, err := p.getNode()
 	if err != nil {
@@ -213,7 +201,7 @@ func (p transitionTable) phaseUnprovisioning(bd *diskv1.BlockDevice) (diskv1.Blo
 	return currentPhase, noop, nil
 }
 
-func (p transitionTable) phaseFailed(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
+func (p transitionTable) PhaseFailed(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
 	return currentPhase, noop, nil
 }
