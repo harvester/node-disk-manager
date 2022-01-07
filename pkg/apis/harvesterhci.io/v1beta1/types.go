@@ -7,11 +7,12 @@ import (
 )
 
 const (
-	DevicePartitioned condition.Cond = "Partitioned"
-	DeviceFormatted   condition.Cond = "Formatted"
-	DeviceMounted     condition.Cond = "Mounted"
-	DeviceProvisioned condition.Cond = "Provisioned"
-	DeviceFailed      condition.Cond = "Failed"
+	DevicePartitioned           condition.Cond = "Partitioned"
+	DeviceFormatted             condition.Cond = "Formatted"
+	DeviceMounted               condition.Cond = "Mounted"
+	DeviceProvisioned           condition.Cond = "Provisioned"
+	DeviceFailed                condition.Cond = "Failed"
+	DeviceAutoProvisionDetected condition.Cond = "AutoProvisionDetected"
 )
 
 // +genclient

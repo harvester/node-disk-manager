@@ -171,6 +171,8 @@ func (s *Scanner) SaveBlockDevice(
 	autoProvisioned bool,
 ) (*diskv1.BlockDevice, error) {
 	provision := func(bd *diskv1.BlockDevice) {
+		logrus.Infof("Block device %s with devPath %s will be auto-provisioned", bd.Name, bd.Spec.DevPath)
+		setDeviceAutoProvisionDetectedCondition(bd, corev1.ConditionTrue, "")
 		bd.Spec.FileSystem.ForceFormatted = true
 		bd.Spec.FileSystem.MountPoint = fmt.Sprintf("/var/lib/harvester/extra-disks/%s", bd.Name)
 	}

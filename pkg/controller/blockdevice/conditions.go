@@ -30,3 +30,8 @@ func setDeviceFailedCondition(device *diskv1.BlockDevice, status corev1.Conditio
 	diskv1.DeviceFailed.SetStatus(device, string(status))
 	diskv1.DeviceFailed.Message(device, message)
 }
+
+func setDeviceAutoProvisionDetectedCondition(device *diskv1.BlockDevice, status corev1.ConditionStatus, message string) {
+	diskv1.DeviceAutoProvisionDetected.SetStatus(device, string(status))
+	diskv1.DeviceAutoProvisionDetected.Message(device, message)
+}
