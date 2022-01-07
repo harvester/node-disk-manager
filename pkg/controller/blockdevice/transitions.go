@@ -163,6 +163,16 @@ func (p transitionTable) PhaseMounted(bd *diskv1.BlockDevice) (diskv1.BlockDevic
 	if ok && disk.Path != mountPoint {
 		return diskv1.ProvisionPhaseUnprovisioning, effectUnprovisionDeviceFactory(node, disk), nil
 	}
+
+	if !ok && mountPoint == "" {
+		filesystem := p.scanner.BlockInfo.GetFileSystemInfoByDevPath(bd.Spec.DevPath)
+		if filesystem.MountPoint != "" {
+			// If there is old mount point, umount first
+			return diskv1.ProvisionPhaseUnmounting, effectUnmountFilesystemFactory(filesystem), nil
+		}
+		return diskv1.ProvisionPhaseFormatted, noop, nil
+	}
+
 	return diskv1.ProvisionPhaseProvisioning, effectProvisionDeviceFactory(node), nil
 }
 

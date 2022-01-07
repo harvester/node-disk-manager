@@ -244,9 +244,9 @@ func effectUnprovisionDeviceFactory(node *longhornv1.Node, diskToRemove lhtypes.
 		if _, err := e.Nodes().Update(nodeCpy); err != nil {
 			return onUnprovisionFailed(bd.DeepCopy(), err)
 		}
-		// Finish. Set phase to ProvisionPhaseFormatted
+		// Finish. The device is back to mounted.
 		bdCpy := bd.DeepCopy()
-		diskv1.ProvisionPhaseFormatted.Set(bdCpy)
+		diskv1.ProvisionPhaseMounted.Set(bdCpy)
 		setDeviceProvisionedCondition(bdCpy, corev1.ConditionFalse, "")
 		if !reflect.DeepEqual(bd.Status, bdCpy.Status) {
 			_, err := e.Blockdevices().Update(bdCpy)
