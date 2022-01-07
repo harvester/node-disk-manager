@@ -90,7 +90,7 @@ func (s *Scanner) StartScanning() error {
 
 // scanBlockDevicesOnNode scans block devices on the node, and it will either create or update them.
 func (s *Scanner) scanBlockDevicesOnNode() error {
-	logrus.Infof("Scan block devices of node: %s", s.nodeName)
+	logrus.Debugf("Scan block devices of node: %s", s.nodeName)
 	newBds := make([]*diskv1.BlockDevice, 0)
 
 	autoProvisionedMap := make(map[string]bool, 0)

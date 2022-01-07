@@ -233,12 +233,12 @@ func effectUnprovisionDevice(node *longhornv1.Node, diskToRemove lhtypes.DiskSpe
 		}
 
 		if status, ok := node.Status.DiskStatus[bd.Name]; !ok && len(status.ScheduledReplica) > 0 {
-			logEffect(bd).Infof("Still unprovisioing from %s. Enqueuing...", node.Name)
+			logEffect(bd).Infof("Still unprovisioning from %s. Enqueuing...", node.Name)
 			e.Blockdevices().EnqueueAfter(bd.Namespace, bd.Name, enqueueDelay)
 			return nil
 		}
 
-		logEffect(bd).Infof("Finish unprovisioing from %s", node.Name)
+		logEffect(bd).Infof("Finish unprovisioning from %s", node.Name)
 		nodeCpy := node.DeepCopy()
 		delete(nodeCpy.Spec.Disks, bd.Name)
 		if _, err := e.Nodes().Update(nodeCpy); err != nil {
