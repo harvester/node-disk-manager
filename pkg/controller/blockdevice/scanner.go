@@ -178,10 +178,9 @@ func (s *Scanner) SaveBlockDevice(
 	if oldBd, ok := oldBds[bd.Name]; ok {
 		newStatus := bd.Status.DeviceStatus
 		oldStatus := oldBd.Status.DeviceStatus
-		lastFormatted := oldStatus.FileSystem.LastFormattedAt
 
-		// Only disk hasn't yet been formatted can be auto-provisioned.
-		autoProvisioned = autoProvisioned && lastFormatted == nil && !diskv1.DeviceFormatted.IsTrue(oldBd)
+		// Only disk hasn't yet been formatted/partitioned can be auto-provisioned.
+		autoProvisioned = autoProvisioned && diskv1.ProvisionPhaseUnprovisioned.Matches(oldBd)
 
 		if autoProvisioned || !reflect.DeepEqual(oldStatus, newStatus) || oldBd.Status.State != diskv1.BlockDeviceActive {
 			logrus.Infof("Update existing block device status %s with devPath: %s", oldBd.Name, oldBd.Spec.DevPath)

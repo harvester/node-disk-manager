@@ -3,14 +3,12 @@ package blockdevice
 import (
 	"fmt"
 	"reflect"
-	"time"
 
 	longhornv1 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta1"
 	lhtypes "github.com/longhorn/longhorn-manager/types"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
@@ -45,8 +43,6 @@ func effectGptPartition(e effectController, bd *diskv1.BlockDevice) error {
 				diskv1.ProvisionPhaseFailed.Set(bd)
 				setDevicePartitionedCondition(bd, corev1.ConditionFalse, cmdErr.Error())
 			} else {
-				// Backwards compatible for LastFormattedAt
-				bd.Status.DeviceStatus.FileSystem.LastFormattedAt = &metav1.Time{Time: time.Now()}
 				diskv1.ProvisionPhasePartitioned.Set(bd)
 				setDevicePartitionedCondition(bd, corev1.ConditionTrue, "")
 			}
@@ -106,8 +102,6 @@ func effectFormatPartition(e effectController, bd *diskv1.BlockDevice) error {
 				diskv1.ProvisionPhaseFailed.Set(bd)
 				setDeviceFormattedCondition(bd, corev1.ConditionFalse, cmdErr.Error())
 			} else {
-				// Backwards compatible for LastFormattedAt
-				bd.Status.DeviceStatus.FileSystem.LastFormattedAt = &metav1.Time{Time: time.Now()}
 				diskv1.ProvisionPhaseFormatted.Set(bd)
 				setDeviceFormattedCondition(bd, corev1.ConditionTrue, "")
 			}

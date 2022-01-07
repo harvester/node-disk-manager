@@ -49,7 +49,7 @@ type BlockDeviceStatus struct {
 	State BlockDeviceState `json:"state"`
 
 	// The current phase of the block device being provisioned.
-	// +kubebuilder:validation:Enum:=Unprovisioned;Partitioning;Partitioned;Formatting;Formatted;Mounting;Mounted;Umounting;Provisioning;Provisioned;Unprovisioning;Failed
+	// +kubebuilder:validation:Enum:=Unprovisioned;Partitioning;Partitioned;Formatting;Formatted;Mounting;Mounted;Unmounting;Provisioning;Provisioned;Unprovisioning;Failed
 	// +kubebuilder:default:=Unprovisioned
 	ProvisionPhase BlockDeviceProvisionPhase `json:"provisionPhase"`
 
@@ -151,9 +151,6 @@ type FilesystemStatus struct {
 
 	// a string with the partition's mount point, or "" if no mount point was discovered
 	MountPoint string `json:"mountPoint"`
-
-	// the last force formatted timestamp, only exist when user operate device formatting through the CRD controller
-	LastFormattedAt *metav1.Time `json:"LastFormattedAt,omitempty"`
 }
 
 type StorageController string
@@ -237,7 +234,7 @@ const (
 	ProvisionPhaseFormatted      BlockDeviceProvisionPhase = "Formatted"
 	ProvisionPhaseMounting       BlockDeviceProvisionPhase = "Mounting"
 	ProvisionPhaseMounted        BlockDeviceProvisionPhase = "Mounted"
-	ProvisionPhaseUnmounting     BlockDeviceProvisionPhase = "Umounting"
+	ProvisionPhaseUnmounting     BlockDeviceProvisionPhase = "Unmounting"
 	ProvisionPhaseProvisioning   BlockDeviceProvisionPhase = "Provisioning"
 	ProvisionPhaseProvisioned    BlockDeviceProvisionPhase = "Provisioned"
 	ProvisionPhaseUnprovisioning BlockDeviceProvisionPhase = "Unprovisioning"

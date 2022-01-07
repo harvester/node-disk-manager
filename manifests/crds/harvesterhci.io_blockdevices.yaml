@@ -211,11 +211,6 @@ spec:
                     type: object
                   fileSystem:
                     properties:
-                      LastFormattedAt:
-                        description: the last force formatted timestamp, only exist
-                          when user operate device formatting through the CRD controller
-                        format: date-time
-                        type: string
                       isReadOnly:
                         description: a bool indicating the partition is read-only
                         type: boolean
@@ -255,7 +250,7 @@ spec:
                 - Formatted
                 - Mounting
                 - Mounted
-                - Umounting
+                - Unmounting
                 - Provisioning
                 - Provisioned
                 - Unprovisioning
