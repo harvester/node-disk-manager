@@ -61,8 +61,8 @@ func effectEnqueuePrepareFormatPartition(e effectController, bd *diskv1.BlockDev
 	return nil
 }
 
-// effectPrepareFormatPartition prepares required spec for child partition before start formating
-func effectPrepareFormatPartition(childBd *diskv1.BlockDevice) effect {
+// effectPrepareFormatPartitionFactory prepares required spec for child partition before start formating
+func effectPrepareFormatPartitionFactory(childBd *diskv1.BlockDevice) effect {
 	return func(e effectController, parentBd *diskv1.BlockDevice) error {
 		logEffect(parentBd).Infof("Start preparing format partition for its child %s", childBd.Name)
 		chilBdCpy := childBd.DeepCopy()
@@ -114,9 +114,9 @@ func effectFormatPartition(e effectController, bd *diskv1.BlockDevice) error {
 	return nil
 }
 
-// effectUnmountFilesystem unmounts blockdevice from its mountPoint.
+// effectUnmountFilesystemFactory unmounts blockdevice from its mountPoint.
 // Then update its ProvisionPhase back to ProvisionPhaseFormatted.
-func effectUnmountFilesystem(fs *block.FileSystemInfo) effect {
+func effectUnmountFilesystemFactory(fs *block.FileSystemInfo) effect {
 	return func(e effectController, bd *diskv1.BlockDevice) error {
 		logEffect(bd).Infof("Start unmounting from %s", fs.MountPoint)
 		cmdErr := disk.UmountDisk(fs.MountPoint)
@@ -167,9 +167,9 @@ func effectMountFilesystem(e effectController, bd *diskv1.BlockDevice) error {
 	return updateDevice(e, bd, update)
 }
 
-// effectProvisionDevice provisions blockdevice as a disk to target longhorn and
+// effectProvisionDeviceFactory provisions blockdevice as a disk to target longhorn and
 // update ProvisionPhase to ProvisionPhaseProvisioned
-func effectProvisionDevice(node *longhornv1.Node) effect {
+func effectProvisionDeviceFactory(node *longhornv1.Node) effect {
 	return func(e effectController, bd *diskv1.BlockDevice) error {
 		logEffect(bd).Infof("Start provisioning onto node %s", node.Name)
 		oldDisk, ok := node.Spec.Disks[bd.Name]
@@ -199,9 +199,9 @@ func effectProvisionDevice(node *longhornv1.Node) effect {
 	}
 }
 
-// effectUnprovisionDevice unprovisions blockdevice from target longhorn and
+// effectUnprovisionDeviceFactory unprovisions blockdevice from target longhorn and
 // update ProvisionPhase back to ProvisionPhaseFormatted
-func effectUnprovisionDevice(node *longhornv1.Node, diskToRemove lhtypes.DiskSpec) effect {
+func effectUnprovisionDeviceFactory(node *longhornv1.Node, diskToRemove lhtypes.DiskSpec) effect {
 	return func(e effectController, bd *diskv1.BlockDevice) error {
 		onUnprovisionFailed := func(bd *diskv1.BlockDevice, err error) error {
 			setDeviceProvisionedCondition(bd, corev1.ConditionFalse, err.Error())

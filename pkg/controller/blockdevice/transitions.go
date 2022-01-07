@@ -111,7 +111,7 @@ func (p transitionTable) PhasePartitioned(bd *diskv1.BlockDevice) (diskv1.BlockD
 		logrus.Debugf("Not an unprovisioned disk %s, skip...", partBd.Name)
 		return currentPhase, noop, nil
 	}
-	return currentPhase, effectPrepareFormatPartition(partBd), nil
+	return currentPhase, effectPrepareFormatPartitionFactory(partBd), nil
 }
 
 func (p transitionTable) PhaseFormatting(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
@@ -140,7 +140,7 @@ func (p transitionTable) PhaseFormatted(bd *diskv1.BlockDevice) (diskv1.BlockDev
 
 	if filesystem.MountPoint != "" {
 		// If there is old mount point, umount first
-		return diskv1.ProvisionPhaseUnmounting, effectUnmountFilesystem(filesystem), nil
+		return diskv1.ProvisionPhaseUnmounting, effectUnmountFilesystemFactory(filesystem), nil
 	}
 	// If there is a new mount point, mount it
 	return diskv1.ProvisionPhaseMounting, effectMountFilesystem, nil
@@ -161,9 +161,9 @@ func (p transitionTable) PhaseMounted(bd *diskv1.BlockDevice) (diskv1.BlockDevic
 	mountPoint := bd.Spec.FileSystem.MountPoint
 	disk, ok := node.Spec.Disks[bd.Name]
 	if ok && disk.Path != mountPoint {
-		return diskv1.ProvisionPhaseUnprovisioning, effectUnprovisionDevice(node, disk), nil
+		return diskv1.ProvisionPhaseUnprovisioning, effectUnprovisionDeviceFactory(node, disk), nil
 	}
-	return diskv1.ProvisionPhaseProvisioning, effectProvisionDevice(node), nil
+	return diskv1.ProvisionPhaseProvisioning, effectProvisionDeviceFactory(node), nil
 }
 
 func (p transitionTable) PhaseUnmounting(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
@@ -196,7 +196,7 @@ func (p transitionTable) PhaseUnprovisioning(bd *diskv1.BlockDevice) (diskv1.Blo
 		return currentPhase, noop, err
 	}
 	if disk, ok := node.Spec.Disks[bd.Name]; ok {
-		return currentPhase, effectUnprovisionDevice(node, disk), nil
+		return currentPhase, effectUnprovisionDeviceFactory(node, disk), nil
 	}
 	return currentPhase, noop, nil
 }
