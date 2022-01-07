@@ -62,3 +62,7 @@ func ContainsIgnoredCase(s []string, k string) bool {
 	}
 	return false
 }
+
+func GetMountPoint(deviceName string) string {
+	return fmt.Sprintf("/var/lib/harvester/extra-disks/%s", deviceName)
+}

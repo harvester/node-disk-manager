@@ -66,7 +66,7 @@ func effectPrepareFormatPartition(childBd *diskv1.BlockDevice) effect {
 	return func(e effectController, parentBd *diskv1.BlockDevice) error {
 		logEffect(parentBd).Infof("Start preparing format partition for its child %s", childBd.Name)
 		chilBdCpy := childBd.DeepCopy()
-		chilBdCpy.Spec.FileSystem.MountPoint = parentBd.Spec.FileSystem.MountPoint
+		chilBdCpy.Spec.FileSystem.MountPoint = util.GetMountPoint(childBd.Name)
 		chilBdCpy.Spec.FileSystem.ForceFormatted = true
 		if !reflect.DeepEqual(chilBdCpy.Spec.FileSystem, childBd.Spec.FileSystem) {
 			if _, err := e.Blockdevices().Update(chilBdCpy); err != nil {
