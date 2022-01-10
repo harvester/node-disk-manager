@@ -109,9 +109,11 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 	// Note that NDM always tries to emit side effect here whether or not a
 	// transition is needed or not. Phase transition should pass a no-op
 	// side effect if they aim not to.
-	if err := effect(c, device); err != nil {
-		err := fmt.Errorf("[Transition] Failed to emit effect on phase %s for device %s: %v", device.Status.ProvisionPhase, device.Name, err)
-		return nil, err
+	if effect != nil {
+		if err := effect(c, device); err != nil {
+			err := fmt.Errorf("[Transition] Failed to emit effect on phase %s for device %s: %v", device.Status.ProvisionPhase, device.Name, err)
+			return nil, err
+		}
 	}
 
 	return nil, nil

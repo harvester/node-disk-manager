@@ -327,11 +327,6 @@ func getNode(e effectController, bd *diskv1.BlockDevice) (*longhornv1.Node, erro
 	return node, err
 }
 
-// noop does nothing
-func noop(_ effectController, _ *diskv1.BlockDevice) error {
-	return nil
-}
-
 func logEffect(bd *diskv1.BlockDevice) *logrus.Entry {
 	return logrus.WithFields(logrus.Fields{
 		"device":  bd.Name,
