@@ -94,6 +94,7 @@ func GetPartitionBlockDevice(part *block.Partition, nodeName, namespace string) 
 				DeviceType:        diskv1.DeviceTypePart,
 				Label:             part.Label,
 				PartUUID:          part.UUID,
+				UUID:              part.FsUUID,
 				DriveType:         part.DriveType.String(),
 				StorageController: part.StorageController.String(),
 			},

@@ -271,6 +271,7 @@ func diskPartition(ctx *context.Context, paths *linuxpath.Paths, disk, fname str
 	size := partitionSizeBytes(paths, disk, fname)
 	mp, pt, ro := partitionInfo(ctx, paths, fname)
 	du := GetDiskUUID(fname, string(PartUUID))
+	fsUUID := GetDiskUUID(fname, string(UUID))
 	driveType, storageController := diskTypes(fname)
 	label := GetFileSystemLabel(fname)
 	partType := GetPartType(fname)
@@ -284,6 +285,7 @@ func diskPartition(ctx *context.Context, paths *linuxpath.Paths, disk, fname str
 			IsReadOnly: ro,
 		},
 		UUID:              du,
+		FsUUID:            fsUUID,
 		PartType:          partType,
 		DriveType:         driveType,
 		StorageController: storageController,
