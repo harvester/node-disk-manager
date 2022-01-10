@@ -16,7 +16,6 @@ import (
 	"github.com/harvester/node-disk-manager/pkg/filter"
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/option"
-	"github.com/harvester/node-disk-manager/pkg/util"
 )
 
 const (
@@ -175,7 +174,7 @@ func (s *Scanner) SaveBlockDevice(
 		logrus.Infof("Block device %s with devPath %s will be auto-provisioned", bd.Name, bd.Spec.DevPath)
 		setDeviceAutoProvisionDetectedCondition(bd, corev1.ConditionTrue, "")
 		bd.Spec.FileSystem.ForceFormatted = true
-		bd.Spec.FileSystem.MountPoint = util.GetMountPoint(bd.Name)
+		bd.Spec.FileSystem.Provisioned = true
 	}
 
 	if oldBd, ok := oldBds[bd.Name]; ok {

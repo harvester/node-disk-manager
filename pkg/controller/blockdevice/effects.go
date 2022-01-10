@@ -73,7 +73,7 @@ func effectPrepareFormatPartitionFactory(childBd *diskv1.BlockDevice) effect {
 	return func(e effectController, parentBd *diskv1.BlockDevice) error {
 		logEffect(parentBd).Infof("Start preparing format partition for its child %s", childBd.Name)
 		chilBdCpy := childBd.DeepCopy()
-		chilBdCpy.Spec.FileSystem.MountPoint = util.GetMountPoint(childBd.Name)
+		chilBdCpy.Spec.FileSystem.Provisioned = parentBd.Spec.FileSystem.Provisioned
 		chilBdCpy.Spec.FileSystem.ForceFormatted = true
 		if !reflect.DeepEqual(chilBdCpy.Spec.FileSystem, childBd.Spec.FileSystem) {
 			if _, err := e.Blockdevices().Update(chilBdCpy); err != nil {
@@ -150,7 +150,7 @@ func effectUnmountFilesystemFactory(fs *block.FileSystemInfo) effect {
 // Then update its ProvisionPhase to ProvisionPhaseMounted.
 func effectMountFilesystem(e effectController, bd *diskv1.BlockDevice) error {
 	onCmdTimeout(e, bd, func(done chan<- cmdResultUpdater) {
-		mountPoint := bd.Spec.FileSystem.MountPoint
+		mountPoint := util.GetMountPoint(bd.Name)
 		logEffect(bd).Infof("Start mounting onto %s", mountPoint)
 		cmdErr := disk.MountDisk(bd.Spec.DevPath, mountPoint)
 		if cmdErr == nil {
@@ -181,7 +181,7 @@ func effectProvisionDeviceFactory(node *longhornv1.Node) effect {
 		jitterPoll(e, bd, func() (bool, error) {
 			oldDisk, ok := node.Spec.Disks[bd.Name]
 			newDisk := lhtypes.DiskSpec{
-				Path:              bd.Spec.FileSystem.MountPoint,
+				Path:              util.GetMountPoint(bd.Name),
 				AllowScheduling:   true,
 				EvictionRequested: false,
 				StorageReserved:   0,

@@ -122,29 +122,24 @@ func (p transitionTable) PhaseFormatting(bd *diskv1.BlockDevice) (diskv1.BlockDe
 
 func (p transitionTable) PhaseFormatted(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
+
 	filesystem := p.scanner.BlockInfo.GetFileSystemInfoByDevPath(bd.Spec.DevPath)
-	fs := *bd.Spec.FileSystem
+	targetMountPoint := util.GetMountPoint(bd.Name)
+	mountPointSynced := targetMountPoint == filesystem.MountPoint
 
-	mountPointSynced := fs.MountPoint == filesystem.MountPoint
-
-	if mountPointSynced {
-		// Mount points are synced.
-		// Now check if the disk needs to provision to longhorn.
-		if fs.MountPoint != "" {
-			return diskv1.ProvisionPhaseMounted, noop, nil
-		}
-		// No mount point. No need to transit phase.
-		return currentPhase, noop, nil
-	}
-
-	// Mount points are different.
-
-	if filesystem.MountPoint != "" {
-		// If there is old mount point, umount first
+	if !mountPointSynced && filesystem.MountPoint != "" {
 		return diskv1.ProvisionPhaseUnmounting, effectUnmountFilesystemFactory(filesystem), nil
 	}
-	// If there is a new mount point, mount it
-	return diskv1.ProvisionPhaseMounting, effectMountFilesystem, nil
+
+	if bd.Spec.FileSystem.Provisioned {
+		if mountPointSynced {
+			return diskv1.ProvisionPhaseMounted, noop, nil
+		}
+
+		return diskv1.ProvisionPhaseMounting, effectMountFilesystem, nil
+	}
+
+	return currentPhase, noop, nil
 }
 
 func (p transitionTable) PhaseMounting(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
@@ -163,13 +158,12 @@ func (p transitionTable) PhaseMounted(bd *diskv1.BlockDevice) (diskv1.BlockDevic
 		return currentPhase, noop, err
 	}
 
-	mountPoint := bd.Spec.FileSystem.MountPoint
-	disk, ok := node.Spec.Disks[bd.Name]
-	if ok && disk.Path != mountPoint {
-		return diskv1.ProvisionPhaseUnprovisioning, effectUnprovisionDeviceFactory(node), nil
-	}
+	if !bd.Spec.FileSystem.Provisioned {
+		if _, ok := node.Spec.Disks[bd.Name]; ok {
+			// There is a dangling disk. Unprovision it.
+			return diskv1.ProvisionPhaseUnprovisioning, effectUnprovisionDeviceFactory(node), nil
+		}
 
-	if !ok && mountPoint == "" {
 		filesystem := p.scanner.BlockInfo.GetFileSystemInfoByDevPath(bd.Spec.DevPath)
 		if filesystem.MountPoint != "" {
 			// If there is old mount point, umount first
@@ -193,22 +187,22 @@ func (p transitionTable) PhaseProvisioning(bd *diskv1.BlockDevice) (diskv1.Block
 
 func (p transitionTable) PhaseProvisioned(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
-	mountPoint := bd.Spec.FileSystem.MountPoint
-	if mountPoint == "" {
-		node, err := p.getNode()
-		if err != nil {
-			// NDM might be deployed earlier than Longhorn, so we re-enqueue to wait fot it.
-			if errors.IsNotFound(err) {
-				return currentPhase, effectEnqueueCurrentPhase, nil
-			}
-			return currentPhase, noop, err
+	node, err := p.getNode()
+	if err != nil {
+		// NDM might be deployed earlier than Longhorn, so we re-enqueue to wait fot it.
+		if errors.IsNotFound(err) {
+			return currentPhase, effectEnqueueCurrentPhase, nil
 		}
-
+		return currentPhase, noop, err
+	}
+	if !bd.Spec.FileSystem.Provisioned {
 		return diskv1.ProvisionPhaseUnprovisioning, effectUnprovisionDeviceFactory(node), nil
 	}
+	// Check if current filesystem and longhorn disk path not match
 	filesystem := p.scanner.BlockInfo.GetFileSystemInfoByDevPath(bd.Spec.DevPath)
-	if mountPoint != filesystem.MountPoint {
-		return diskv1.ProvisionPhaseUnprovisioning, noop, nil
+	disk, ok := node.Spec.Disks[bd.Name]
+	if !ok || disk.Path != filesystem.MountPoint {
+		return diskv1.ProvisionPhaseUnprovisioning, effectUnprovisionDeviceFactory(node), nil
 	}
 	return currentPhase, noop, nil
 }

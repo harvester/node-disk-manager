@@ -62,11 +62,11 @@ type BlockDeviceStatus struct {
 }
 
 type FilesystemInfo struct {
-	// a string with the partition's mount point, or "" if no mount point was discovered
-	MountPoint string `json:"mountPoint"`
-
 	// a bool indicating the device is force formatted to overwrite the existing one
 	ForceFormatted bool `json:"forceFormatted,omitempty"`
+
+	// a bool indicating whether the filesystem need to be provisioned as a disk for the node to store data.
+	Provisioned bool `json:"provisioned,omitempty"`
 }
 
 type DeviceStatus struct {

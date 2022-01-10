@@ -60,11 +60,9 @@ func GetDiskBlockDevice(disk *block.Disk, nodeName, namespace string) *diskv1.Bl
 			},
 		},
 		Spec: diskv1.BlockDeviceSpec{
-			NodeName: nodeName,
-			DevPath:  util.GetFullDevPath(disk.Name),
-			FileSystem: &diskv1.FilesystemInfo{
-				MountPoint: fileSystemInfo.MountPoint,
-			},
+			NodeName:   nodeName,
+			DevPath:    util.GetFullDevPath(disk.Name),
+			FileSystem: &diskv1.FilesystemInfo{},
 		},
 		Status: status,
 	}
@@ -113,11 +111,9 @@ func GetPartitionBlockDevice(part *block.Partition, nodeName, namespace string) 
 			},
 		},
 		Spec: diskv1.BlockDeviceSpec{
-			NodeName: nodeName,
-			DevPath:  util.GetFullDevPath(part.Name),
-			FileSystem: &diskv1.FilesystemInfo{
-				MountPoint: part.FileSystemInfo.MountPoint,
-			},
+			NodeName:   nodeName,
+			DevPath:    util.GetFullDevPath(part.Name),
+			FileSystem: &diskv1.FilesystemInfo{},
 		},
 		Status: status,
 	}

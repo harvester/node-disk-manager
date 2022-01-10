@@ -65,12 +65,10 @@ spec:
                     description: a bool indicating the device is force formatted to
                       overwrite the existing one
                     type: boolean
-                  mountPoint:
-                    description: a string with the partition's mount point, or ""
-                      if no mount point was discovered
-                    type: string
-                required:
-                - mountPoint
+                  provisioned:
+                    description: a bool indicating whether the filesystem need to
+                      be provisioned as a disk for the node to store data.
+                    type: boolean
                 type: object
               nodeName:
                 description: name of the node to which the block device is attached
