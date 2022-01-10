@@ -47,15 +47,17 @@ func Register(
 	opt *option.Option,
 	scanner *Scanner,
 ) error {
+	bdCache := bds.Cache()
+	nodeCache := nodes.Cache()
 	controller := &Controller{
 		namespace:        opt.Namespace,
 		nodeName:         opt.NodeName,
-		nodeCache:        nodes.Cache(),
+		nodeCache:        nodeCache,
 		nodes:            nodes,
 		blockdevices:     bds,
-		blockdeviceCache: bds.Cache(),
+		blockdeviceCache: bdCache,
 		scanner:          scanner,
-		transitionTable:  newTransitionTable(opt.Namespace, opt.NodeName, bds, nodes, scanner),
+		transitionTable:  newTransitionTable(opt.Namespace, opt.NodeName, bdCache, nodes, nodeCache, scanner),
 	}
 
 	if err := controller.scanner.StartScanning(); err != nil {

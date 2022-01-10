@@ -30,17 +30,17 @@ type transitionTable struct {
 func newTransitionTable(
 	namspace,
 	nodeName string,
-	bds ctldiskv1.BlockDeviceController,
-	nodes ctllonghornv1.NodeController,
+	bdCache ctldiskv1.BlockDeviceCache,
+	nodes ctllonghornv1.NodeClient,
+	nodeCache ctllonghornv1.NodeCache,
 	scanner *Scanner,
 ) transitionTable {
-	blockdeviceCache := bds.Cache()
 	return transitionTable{
 		namespace:        namspace,
 		nodeName:         nodeName,
 		nodes:            nodes,
-		nodeCache:        nodes.Cache(),
-		blockdeviceCache: blockdeviceCache,
+		nodeCache:        nodeCache,
+		blockdeviceCache: bdCache,
 		scanner:          scanner,
 	}
 }

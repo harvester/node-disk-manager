@@ -27,7 +27,7 @@ func main() {
 				Types: []interface{}{
 					longhornv1.Node{},
 				},
-				GenerateTypes:   false,
+				GenerateTypes:   true,
 				GenerateClients: true,
 			},
 		},
