@@ -83,7 +83,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 	// Get next phase from previous.
 	phase, effect, err := c.transitionTable.next(device)
 	if err != nil {
-		err := fmt.Errorf("[Transition] Failed to determine next phase of phase %s for %s: %v", device.Status.ProvisionPhase, device.Name, err)
+		err := fmt.Errorf("[Transition] Failed to determine next phase of %s for %s: %v", device.Status.ProvisionPhase, device.Name, err)
 		return c.updateFailed(device, err)
 	}
 
@@ -94,6 +94,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 		var err error
 		deviceCpy := device.DeepCopy()
 		phase.Set(deviceCpy)
+		logrus.Debugf("[Transition] from %s to %s", device.Status.ProvisionPhase, deviceCpy.Status.ProvisionPhase)
 		device, err = c.blockdevices.Update(deviceCpy)
 		if err != nil {
 			err := fmt.Errorf("[Transition] Failed to transit from %s to %s for %s: %v", device.Status.ProvisionPhase, phase, device.Name, err)
@@ -181,6 +182,10 @@ func (c *Controller) getNode() (*longhornv1.Node, error) {
 
 func (c *Controller) Nodes() ctllonghornv1.NodeClient {
 	return c.nodes
+}
+
+func (c *Controller) NodeCache() ctllonghornv1.NodeCache {
+	return c.nodeCache
 }
 
 func (c *Controller) Blockdevices() ctldiskv1.BlockDeviceController {

@@ -70,6 +70,7 @@ func (p transitionTable) PhaseUnprovisioned(bd *diskv1.BlockDevice) (diskv1.Bloc
 	currentPhase := bd.Status.ProvisionPhase
 	// Disk only cares about force formatting itself to a single root partition.
 	if !bd.Spec.FileSystem.ForceFormatted {
+		// TODO: should an already-formatted partition skip this force-formatted step?
 		return currentPhase, noop, nil
 	}
 	switch bd.Status.DeviceStatus.Details.DeviceType {
@@ -103,7 +104,7 @@ func (p transitionTable) PhasePartitioned(bd *diskv1.BlockDevice) (diskv1.BlockD
 	partBd, err := p.blockdeviceCache.Get(bd.Namespace, name)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return currentPhase, effectEnqueuePrepareFormatPartition, nil
+			return currentPhase, effectEnqueueCurrentPhase, nil
 		}
 		return currentPhase, noop, err
 	}
@@ -155,13 +156,17 @@ func (p transitionTable) PhaseMounted(bd *diskv1.BlockDevice) (diskv1.BlockDevic
 	currentPhase := bd.Status.ProvisionPhase
 	node, err := p.getNode()
 	if err != nil {
+		// NDM might be deployed earlier than Longhorn, so we re-enqueue to wait fot it.
+		if errors.IsNotFound(err) {
+			return currentPhase, effectEnqueueCurrentPhase, nil
+		}
 		return currentPhase, noop, err
 	}
 
 	mountPoint := bd.Spec.FileSystem.MountPoint
 	disk, ok := node.Spec.Disks[bd.Name]
 	if ok && disk.Path != mountPoint {
-		return diskv1.ProvisionPhaseUnprovisioning, effectUnprovisionDeviceFactory(node, disk), nil
+		return diskv1.ProvisionPhaseUnprovisioning, effectUnprovisionDeviceFactory(node), nil
 	}
 
 	if !ok && mountPoint == "" {
@@ -190,7 +195,16 @@ func (p transitionTable) PhaseProvisioned(bd *diskv1.BlockDevice) (diskv1.BlockD
 	currentPhase := bd.Status.ProvisionPhase
 	mountPoint := bd.Spec.FileSystem.MountPoint
 	if mountPoint == "" {
-		return diskv1.ProvisionPhaseUnprovisioning, noop, nil
+		node, err := p.getNode()
+		if err != nil {
+			// NDM might be deployed earlier than Longhorn, so we re-enqueue to wait fot it.
+			if errors.IsNotFound(err) {
+				return currentPhase, effectEnqueueCurrentPhase, nil
+			}
+			return currentPhase, noop, err
+		}
+
+		return diskv1.ProvisionPhaseUnprovisioning, effectUnprovisionDeviceFactory(node), nil
 	}
 	filesystem := p.scanner.BlockInfo.GetFileSystemInfoByDevPath(bd.Spec.DevPath)
 	if mountPoint != filesystem.MountPoint {
@@ -201,13 +215,6 @@ func (p transitionTable) PhaseProvisioned(bd *diskv1.BlockDevice) (diskv1.BlockD
 
 func (p transitionTable) PhaseUnprovisioning(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
-	node, err := p.getNode()
-	if err != nil {
-		return currentPhase, noop, err
-	}
-	if disk, ok := node.Spec.Disks[bd.Name]; ok {
-		return currentPhase, effectUnprovisionDeviceFactory(node, disk), nil
-	}
 	return currentPhase, noop, nil
 }
 
