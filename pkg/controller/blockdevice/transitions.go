@@ -68,24 +68,30 @@ func (p transitionTable) next(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisi
 
 func (p transitionTable) PhaseUnprovisioned(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
-	// Disk only cares about force formatting itself to a single root partition.
-	if !bd.Spec.FileSystem.ForceFormatted {
-		// TODO: should an already-formatted partition skip this force-formatted step?
-		return currentPhase, noop, nil
-	}
+	forceFormatted := bd.Spec.FileSystem.ForceFormatted
 	switch bd.Status.DeviceStatus.Details.DeviceType {
 	case diskv1.DeviceTypeDisk:
-		if diskv1.DevicePartitioned.IsTrue(bd) {
-			// already partitioned
-			return currentPhase, noop, nil
+		if forceFormatted && !diskv1.DevicePartitioned.IsTrue(bd) {
+			// Perform force partition/format
+			return diskv1.ProvisionPhasePartitioning, effectGptPartition, nil
 		}
-		return diskv1.ProvisionPhasePartitioning, effectGptPartition, nil
+		if bd.Status.DeviceStatus.Partitioned {
+			// already partitioned before the resource initialization
+			return diskv1.ProvisionPhasePartitioned, nil, nil
+		}
+		// already partitioned during this resource's lifecycle
+		return currentPhase, noop, nil
 	case diskv1.DeviceTypePart:
-		if diskv1.DeviceFormatted.IsTrue(bd) {
-			// already formatted
-			return currentPhase, noop, nil
+		if forceFormatted && !diskv1.DeviceFormatted.IsTrue(bd) {
+			// Perform force partition/format
+			return diskv1.ProvisionPhaseFormatting, effectFormatPartition, nil
 		}
-		return diskv1.ProvisionPhaseFormatting, effectFormatPartition, nil
+		if bd.Status.DeviceStatus.Details.UUID != "" {
+			// already formatted before the resource initialization
+			return diskv1.ProvisionPhaseFormatted, nil, nil
+		}
+		// already formatted during this resource's lifecycle
+		return currentPhase, noop, nil
 	default:
 		return currentPhase, noop, nil
 	}
