@@ -114,11 +114,10 @@ func (p transitionTable) PhasePartitioned(bd *diskv1.BlockDevice) (diskv1.BlockD
 		}
 		return currentPhase, nil, err
 	}
-	if !diskv1.ProvisionPhaseUnprovisioned.Matches(partBd) {
-		logrus.Debugf("Not an unprovisioned disk %s, skip...", partBd.Name)
-		return currentPhase, nil, nil
+	if bd.Spec.FileSystem.ForceFormatted {
+		return currentPhase, effectPrepareFormatPartitionFactory(partBd), nil
 	}
-	return currentPhase, effectPrepareFormatPartitionFactory(partBd), nil
+	return currentPhase, nil, nil
 }
 
 func (p transitionTable) PhaseFormatting(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
