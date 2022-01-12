@@ -248,11 +248,9 @@ func effectUnprovisionDeviceFactory(node *longhornv1.Node) effect {
 					return errors.IsNotFound(err), err
 				}
 				node = newNode
-				return false, nil
 			}
 
 			if status, ok := node.Status.DiskStatus[bd.Name]; ok && len(status.ScheduledReplica) > 0 {
-				logEffect(bd).Info("Still unprovisioning")
 				return false, nil
 			}
 

@@ -128,17 +128,18 @@ func (p transitionTable) PhaseFormatting(bd *diskv1.BlockDevice) (diskv1.BlockDe
 func (p transitionTable) PhaseFormatted(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
 
-	filesystem := p.blockInfo.GetFileSystemInfoByDevPath(bd.Spec.DevPath)
-	targetMountPoint := util.GetMountPoint(bd.Name)
-	mountPointSynced := targetMountPoint == filesystem.MountPoint
-
-	if !mountPointSynced && filesystem.MountPoint != "" {
-		return diskv1.ProvisionPhaseUnmounting, effectUnmountFilesystemFactory(filesystem), nil
-	}
-
 	if bd.Spec.FileSystem.Provisioned {
+		filesystem := p.blockInfo.GetFileSystemInfoByDevPath(bd.Spec.DevPath)
+		targetMountPoint := util.GetMountPoint(bd.Name)
+		mountPointSynced := targetMountPoint == filesystem.MountPoint
+
 		if mountPointSynced {
 			return diskv1.ProvisionPhaseMounted, nil, nil
+		}
+
+		if filesystem.MountPoint != "" {
+			// Unmount old dangling mount point
+			return diskv1.ProvisionPhaseUnmounting, effectUnmountFilesystemFactory(filesystem), nil
 		}
 
 		return diskv1.ProvisionPhaseMounting, effectMountFilesystem, nil
@@ -154,6 +155,21 @@ func (p transitionTable) PhaseMounting(bd *diskv1.BlockDevice) (diskv1.BlockDevi
 
 func (p transitionTable) PhaseMounted(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
+
+	filesystem := p.blockInfo.GetFileSystemInfoByDevPath(bd.Spec.DevPath)
+	if !bd.Spec.FileSystem.Provisioned && filesystem.MountPoint != "" {
+		// Unmount old dangling mount point
+		return diskv1.ProvisionPhaseUnmounting, effectUnmountFilesystemFactory(filesystem), nil
+	}
+
+	if filesystem.MountPoint == "" {
+		// Not mounted yet. Back to previous phase.
+		return diskv1.ProvisionPhaseFormatted, nil, nil
+	} else if util.GetMountPoint(bd.Name) != filesystem.MountPoint {
+		// Unmount old dangling mount point
+		return diskv1.ProvisionPhaseUnmounting, effectUnmountFilesystemFactory(filesystem), nil
+	}
+
 	node, err := p.getNode()
 	if err != nil {
 		// NDM might be deployed earlier than Longhorn, so we re-enqueue to wait fot it.
@@ -161,20 +177,6 @@ func (p transitionTable) PhaseMounted(bd *diskv1.BlockDevice) (diskv1.BlockDevic
 			return currentPhase, effectEnqueueCurrentPhase, nil
 		}
 		return currentPhase, nil, err
-	}
-
-	if !bd.Spec.FileSystem.Provisioned {
-		if _, ok := node.Spec.Disks[bd.Name]; ok {
-			// There is a dangling disk. Unprovision it.
-			return diskv1.ProvisionPhaseUnprovisioning, effectUnprovisionDeviceFactory(node), nil
-		}
-
-		filesystem := p.blockInfo.GetFileSystemInfoByDevPath(bd.Spec.DevPath)
-		if filesystem.MountPoint != "" {
-			// If there is old mount point, umount first
-			return diskv1.ProvisionPhaseUnmounting, effectUnmountFilesystemFactory(filesystem), nil
-		}
-		return diskv1.ProvisionPhaseFormatted, nil, nil
 	}
 
 	return diskv1.ProvisionPhaseProvisioning, effectProvisionDeviceFactory(node), nil
@@ -192,6 +194,7 @@ func (p transitionTable) PhaseProvisioning(bd *diskv1.BlockDevice) (diskv1.Block
 
 func (p transitionTable) PhaseProvisioned(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
+
 	node, err := p.getNode()
 	if err != nil {
 		// NDM might be deployed earlier than Longhorn, so we re-enqueue to wait fot it.
@@ -200,15 +203,27 @@ func (p transitionTable) PhaseProvisioned(bd *diskv1.BlockDevice) (diskv1.BlockD
 		}
 		return currentPhase, nil, err
 	}
+
 	if !bd.Spec.FileSystem.Provisioned {
 		return diskv1.ProvisionPhaseUnprovisioning, effectUnprovisionDeviceFactory(node), nil
 	}
-	// Check if current filesystem and longhorn disk path not match
+
 	filesystem := p.blockInfo.GetFileSystemInfoByDevPath(bd.Spec.DevPath)
+	if filesystem.MountPoint == "" {
+		// Not mounted yet. Back to previous phase.
+		return diskv1.ProvisionPhaseFormatted, nil, nil
+	}
+
 	disk, ok := node.Spec.Disks[bd.Name]
-	if !ok || disk.Path != filesystem.MountPoint {
+	if !ok {
+		// Not provisioned yet. Back to previous phase.
+		return diskv1.ProvisionPhaseMounted, nil, nil
+	}
+
+	if disk.Path != util.GetMountPoint(bd.Name) {
 		return diskv1.ProvisionPhaseUnprovisioning, effectUnprovisionDeviceFactory(node), nil
 	}
+
 	return currentPhase, nil, nil
 }
 
