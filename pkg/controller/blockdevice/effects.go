@@ -419,5 +419,5 @@ func onCmdTimeout(e effectController, bd *diskv1.BlockDevice, f func(chan<- cmdR
 			}
 		}
 	}()
-	go func() { f(doneCh) }()
+	go f(doneCh)
 }
