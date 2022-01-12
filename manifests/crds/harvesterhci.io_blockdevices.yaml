@@ -66,7 +66,7 @@ spec:
                       overwrite the existing one
                     type: boolean
                   provisioned:
-                    description: a bool indicating whether the filesystem need to
+                    description: a bool indicating whether the filesystem needs to
                       be provisioned as a disk for the node to store data.
                     type: boolean
                 type: object
