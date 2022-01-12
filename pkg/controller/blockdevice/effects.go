@@ -39,24 +39,26 @@ type effectController interface {
 // blockdevice, and then turns ProvisionPhase to phasePartitioned.
 func effectGptPartition(e effectController, bd *diskv1.BlockDevice) error {
 	onCmdTimeout(e, bd, func(done chan<- cmdResultUpdater) {
+		var updater cmdResultUpdater
 		logEffect(bd).Info("Start partition")
-		cmdErr := disk.MakeGPTPartition(bd.Spec.DevPath)
-		if cmdErr == nil {
-			logEffect(bd).Info("Finish partitioning")
-		} else {
-			logEffect(bd).Errorf("Failed to partition: %v", cmdErr.Error())
-		}
 
-		done <- func(bd *diskv1.BlockDevice) *diskv1.BlockDevice {
-			if cmdErr != nil {
+		if cmdErr := disk.MakeGPTPartition(bd.Spec.DevPath); cmdErr != nil {
+			logEffect(bd).Errorf("Failed to partition: %v", cmdErr.Error())
+			updater = func(bd *diskv1.BlockDevice) *diskv1.BlockDevice {
 				diskv1.ProvisionPhaseFailed.Set(bd)
 				setDevicePartitionedCondition(bd, corev1.ConditionFalse, cmdErr.Error())
-			} else {
+				return bd
+			}
+		} else {
+			logEffect(bd).Info("Finish partitioning")
+			updater = func(bd *diskv1.BlockDevice) *diskv1.BlockDevice {
 				diskv1.ProvisionPhasePartitioned.Set(bd)
 				setDevicePartitionedCondition(bd, corev1.ConditionTrue, "")
+				return bd
 			}
-			return bd
 		}
+
+		done <- updater
 	})
 	return nil
 }
@@ -96,24 +98,26 @@ func effectPrepareFormatPartitionFactory(childBd *diskv1.BlockDevice) effect {
 // ProvisionPhase to phaseFormatted.
 func effectFormatPartition(e effectController, bd *diskv1.BlockDevice) error {
 	onCmdTimeout(e, bd, func(done chan<- cmdResultUpdater) {
+		var updater cmdResultUpdater
 		logEffect(bd).Info("Start formating")
-		cmdErr := disk.MakeExt4DiskFormatting(bd.Spec.DevPath)
-		if cmdErr == nil {
-			logEffect(bd).Info("Finish formating")
-		} else {
-			logEffect(bd).Errorf("Failed to format: %v", cmdErr.Error())
-		}
 
-		done <- func(bd *diskv1.BlockDevice) *diskv1.BlockDevice {
-			if cmdErr != nil {
+		if cmdErr := disk.MakeExt4DiskFormatting(bd.Spec.DevPath); cmdErr != nil {
+			logEffect(bd).Errorf("Failed to format: %v", cmdErr.Error())
+			updater = func(bd *diskv1.BlockDevice) *diskv1.BlockDevice {
 				diskv1.ProvisionPhaseFailed.Set(bd)
 				setDeviceFormattedCondition(bd, corev1.ConditionFalse, cmdErr.Error())
-			} else {
+				return bd
+			}
+		} else {
+			logEffect(bd).Info("Finish formating")
+			updater = func(bd *diskv1.BlockDevice) *diskv1.BlockDevice {
 				diskv1.ProvisionPhaseFormatted.Set(bd)
 				setDeviceFormattedCondition(bd, corev1.ConditionTrue, "")
+				return bd
 			}
-			return bd
 		}
+
+		done <- updater
 	})
 	return nil
 }
@@ -123,24 +127,26 @@ func effectFormatPartition(e effectController, bd *diskv1.BlockDevice) error {
 func effectUnmountFilesystemFactory(fs *block.FileSystemInfo) effect {
 	return func(e effectController, bd *diskv1.BlockDevice) error {
 		onCmdTimeout(e, bd, func(done chan<- cmdResultUpdater) {
+			var updater cmdResultUpdater
 			logEffect(bd).Infof("Start unmounting from %s", fs.MountPoint)
-			cmdErr := disk.UmountDisk(fs.MountPoint)
-			if cmdErr == nil {
-				logEffect(bd).Infof("Finish unmounting from %s", fs.MountPoint)
-			} else {
-				logEffect(bd).Errorf("Failed to unmount from %s: %v", fs.MountPoint, cmdErr.Error())
-			}
 
-			done <- func(bd *diskv1.BlockDevice) *diskv1.BlockDevice {
-				if cmdErr != nil {
+			if cmdErr := disk.UmountDisk(fs.MountPoint); cmdErr != nil {
+				logEffect(bd).Errorf("Failed to unmount from %s: %v", fs.MountPoint, cmdErr.Error())
+				updater = func(bd *diskv1.BlockDevice) *diskv1.BlockDevice {
 					diskv1.ProvisionPhaseFailed.Set(bd)
 					setDeviceMountedCondition(bd, corev1.ConditionFalse, cmdErr.Error())
-				} else {
+					return bd
+				}
+			} else {
+				logEffect(bd).Infof("Finish unmounting from %s", fs.MountPoint)
+				updater = func(bd *diskv1.BlockDevice) *diskv1.BlockDevice {
 					diskv1.ProvisionPhaseFormatted.Set(bd)
 					setDeviceMountedCondition(bd, corev1.ConditionFalse, "")
+					return bd
 				}
-				return bd
 			}
+
+			done <- updater
 		})
 		return nil
 	}
@@ -150,25 +156,27 @@ func effectUnmountFilesystemFactory(fs *block.FileSystemInfo) effect {
 // Then update its ProvisionPhase to ProvisionPhaseMounted.
 func effectMountFilesystem(e effectController, bd *diskv1.BlockDevice) error {
 	onCmdTimeout(e, bd, func(done chan<- cmdResultUpdater) {
+		var updater cmdResultUpdater
 		mountPoint := util.GetMountPoint(bd.Name)
 		logEffect(bd).Infof("Start mounting onto %s", mountPoint)
-		cmdErr := disk.MountDisk(bd.Spec.DevPath, mountPoint)
-		if cmdErr == nil {
-			logEffect(bd).Infof("Finish mounting onto %s", mountPoint)
-		} else {
-			logEffect(bd).Errorf("Failed to mount onto %s: %v", mountPoint, cmdErr.Error())
-		}
 
-		done <- func(bd *diskv1.BlockDevice) *diskv1.BlockDevice {
-			if cmdErr != nil {
+		if cmdErr := disk.MountDisk(bd.Spec.DevPath, mountPoint); cmdErr != nil {
+			logEffect(bd).Errorf("Failed to mount onto %s: %v", mountPoint, cmdErr.Error())
+			updater = func(bd *diskv1.BlockDevice) *diskv1.BlockDevice {
 				diskv1.ProvisionPhaseFailed.Set(bd)
 				setDeviceMountedCondition(bd, corev1.ConditionFalse, cmdErr.Error())
-			} else {
+				return bd
+			}
+		} else {
+			logEffect(bd).Infof("Finish mounting onto %s", mountPoint)
+			updater = func(bd *diskv1.BlockDevice) *diskv1.BlockDevice {
 				diskv1.ProvisionPhaseMounted.Set(bd)
 				setDeviceMountedCondition(bd, corev1.ConditionTrue, "")
+				return bd
 			}
-			return bd
 		}
+
+		done <- updater
 	})
 	return nil
 }
