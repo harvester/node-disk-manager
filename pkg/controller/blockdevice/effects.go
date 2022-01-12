@@ -38,23 +38,20 @@ type effectController interface {
 // effectGptPartition makes a new GPT table with a single partitions on given
 // blockdevice, and then turns ProvisionPhase to phasePartitioned.
 func effectGptPartition(e effectController, bd *diskv1.BlockDevice) error {
-	onCmdTimeout(e, bd, func(done chan<- cmdResultUpdater) {
-		var updater cmdResultUpdater
+	onCmdTimeout(e, bd, func(done chan<- blockDeviceUpdater) {
+		var updater blockDeviceUpdater
 		logEffect(bd).Info("Start partition")
 
 		if cmdErr := disk.MakeGPTPartition(bd.Spec.DevPath); cmdErr != nil {
 			logEffect(bd).Errorf("Failed to partition: %v", cmdErr.Error())
-			updater = func(bd *diskv1.BlockDevice) *diskv1.BlockDevice {
+			updater = func(bd *diskv1.BlockDevice) {
 				diskv1.ProvisionPhaseFailed.Set(bd)
 				setDevicePartitionedCondition(bd, corev1.ConditionFalse, cmdErr.Error())
-				return bd
 			}
 		} else {
-			logEffect(bd).Info("Finish partitioning")
-			updater = func(bd *diskv1.BlockDevice) *diskv1.BlockDevice {
+			updater = func(bd *diskv1.BlockDevice) {
 				diskv1.ProvisionPhasePartitioned.Set(bd)
 				setDevicePartitionedCondition(bd, corev1.ConditionTrue, "")
-				return bd
 			}
 		}
 
@@ -97,23 +94,20 @@ func effectPrepareFormatPartitionFactory(childBd *diskv1.BlockDevice) effect {
 // effectFormatPartition format given blockdevice to EXT4 filesystem, and then turns
 // ProvisionPhase to phaseFormatted.
 func effectFormatPartition(e effectController, bd *diskv1.BlockDevice) error {
-	onCmdTimeout(e, bd, func(done chan<- cmdResultUpdater) {
-		var updater cmdResultUpdater
+	onCmdTimeout(e, bd, func(done chan<- blockDeviceUpdater) {
+		var updater blockDeviceUpdater
 		logEffect(bd).Info("Start formating")
 
 		if cmdErr := disk.MakeExt4DiskFormatting(bd.Spec.DevPath); cmdErr != nil {
 			logEffect(bd).Errorf("Failed to format: %v", cmdErr.Error())
-			updater = func(bd *diskv1.BlockDevice) *diskv1.BlockDevice {
+			updater = func(bd *diskv1.BlockDevice) {
 				diskv1.ProvisionPhaseFailed.Set(bd)
 				setDeviceFormattedCondition(bd, corev1.ConditionFalse, cmdErr.Error())
-				return bd
 			}
 		} else {
-			logEffect(bd).Info("Finish formating")
-			updater = func(bd *diskv1.BlockDevice) *diskv1.BlockDevice {
+			updater = func(bd *diskv1.BlockDevice) {
 				diskv1.ProvisionPhaseFormatted.Set(bd)
 				setDeviceFormattedCondition(bd, corev1.ConditionTrue, "")
-				return bd
 			}
 		}
 
@@ -126,23 +120,20 @@ func effectFormatPartition(e effectController, bd *diskv1.BlockDevice) error {
 // Then update its ProvisionPhase back to ProvisionPhaseFormatted.
 func effectUnmountFilesystemFactory(fs *block.FileSystemInfo) effect {
 	return func(e effectController, bd *diskv1.BlockDevice) error {
-		onCmdTimeout(e, bd, func(done chan<- cmdResultUpdater) {
-			var updater cmdResultUpdater
+		onCmdTimeout(e, bd, func(done chan<- blockDeviceUpdater) {
+			var updater blockDeviceUpdater
 			logEffect(bd).Infof("Start unmounting from %s", fs.MountPoint)
 
 			if cmdErr := disk.UmountDisk(fs.MountPoint); cmdErr != nil {
 				logEffect(bd).Errorf("Failed to unmount from %s: %v", fs.MountPoint, cmdErr.Error())
-				updater = func(bd *diskv1.BlockDevice) *diskv1.BlockDevice {
+				updater = func(bd *diskv1.BlockDevice) {
 					diskv1.ProvisionPhaseFailed.Set(bd)
 					setDeviceMountedCondition(bd, corev1.ConditionFalse, cmdErr.Error())
-					return bd
 				}
 			} else {
-				logEffect(bd).Infof("Finish unmounting from %s", fs.MountPoint)
-				updater = func(bd *diskv1.BlockDevice) *diskv1.BlockDevice {
+				updater = func(bd *diskv1.BlockDevice) {
 					diskv1.ProvisionPhaseFormatted.Set(bd)
 					setDeviceMountedCondition(bd, corev1.ConditionFalse, "")
-					return bd
 				}
 			}
 
@@ -155,24 +146,21 @@ func effectUnmountFilesystemFactory(fs *block.FileSystemInfo) effect {
 // effectMountFilesystem mounts blockdevice onto its mountPoint.
 // Then update its ProvisionPhase to ProvisionPhaseMounted.
 func effectMountFilesystem(e effectController, bd *diskv1.BlockDevice) error {
-	onCmdTimeout(e, bd, func(done chan<- cmdResultUpdater) {
-		var updater cmdResultUpdater
+	onCmdTimeout(e, bd, func(done chan<- blockDeviceUpdater) {
+		var updater blockDeviceUpdater
 		mountPoint := util.GetMountPoint(bd.Name)
 		logEffect(bd).Infof("Start mounting onto %s", mountPoint)
 
 		if cmdErr := disk.MountDisk(bd.Spec.DevPath, mountPoint); cmdErr != nil {
 			logEffect(bd).Errorf("Failed to mount onto %s: %v", mountPoint, cmdErr.Error())
-			updater = func(bd *diskv1.BlockDevice) *diskv1.BlockDevice {
+			updater = func(bd *diskv1.BlockDevice) {
 				diskv1.ProvisionPhaseFailed.Set(bd)
 				setDeviceMountedCondition(bd, corev1.ConditionFalse, cmdErr.Error())
-				return bd
 			}
 		} else {
-			logEffect(bd).Infof("Finish mounting onto %s", mountPoint)
-			updater = func(bd *diskv1.BlockDevice) *diskv1.BlockDevice {
+			updater = func(bd *diskv1.BlockDevice) {
 				diskv1.ProvisionPhaseMounted.Set(bd)
 				setDeviceMountedCondition(bd, corev1.ConditionTrue, "")
-				return bd
 			}
 		}
 
@@ -214,28 +202,12 @@ func effectProvisionDeviceFactory(node *longhornv1.Node) effect {
 					}
 					return false, err
 				}
-				logEffect(bd).Info("Finish provisioning")
 			}
 
-			bdCpy := bd.DeepCopy()
-			diskv1.ProvisionPhaseProvisioned.Set(bdCpy)
-			setDeviceProvisionedCondition(bdCpy, corev1.ConditionTrue, "")
-			if !reflect.DeepEqual(bd.Status, bdCpy.Status) {
-				if _, err := e.Blockdevices().Update(bdCpy); err != nil {
-					if errors.IsConflict(err) {
-						// Hit optimistic lock. Fetch latest resource for next poll.
-						newBd, err := e.BlockdeviceCache().Get(bd.Namespace, bd.Name)
-						if err != nil {
-							// If a critical resource is missing, then abort this polling
-							// because we cannot update its state anymore
-							return errors.IsNotFound(err), err
-						}
-						bd = newBd
-					}
-					return false, err
-				}
-			}
-			return true, nil
+			return updateBlockDevice(e, bd, func(bd *diskv1.BlockDevice) {
+				diskv1.ProvisionPhaseProvisioned.Set(bd)
+				setDeviceProvisionedCondition(bd, corev1.ConditionTrue, "")
+			})
 		})
 		return nil
 	}
@@ -245,32 +217,13 @@ func effectProvisionDeviceFactory(node *longhornv1.Node) effect {
 // update ProvisionPhase back to ProvisionPhaseFormatted
 func effectUnprovisionDeviceFactory(node *longhornv1.Node) effect {
 	return func(e effectController, bd *diskv1.BlockDevice) error {
-		onUnprovisionFinished := func(bd *diskv1.BlockDevice) (bool, error) {
-			bdCpy := bd.DeepCopy()
-			diskv1.ProvisionPhaseMounted.Set(bdCpy)
-			setDeviceProvisionedCondition(bdCpy, corev1.ConditionFalse, "")
-			if !reflect.DeepEqual(bd.Status, bdCpy.Status) {
-				if _, err := e.Blockdevices().Update(bdCpy); err != nil {
-					if errors.IsConflict(err) {
-						// Hit optimistic lock. Fetch latest resource for next poll.
-						newBd, err := e.BlockdeviceCache().Get(bd.Namespace, bd.Name)
-						if err != nil {
-							// If a critical resource is missing, then abort this polling
-							// because we cannot update its state anymore
-							return errors.IsNotFound(err), err
-						}
-						bd = newBd
-					}
-					return false, err
-				}
-			}
-			return true, nil
-		}
-
 		jitterPoll(e, bd, func() (bool, error) {
 			diskToRemove, ok := node.Spec.Disks[bd.Name]
 			if !ok {
-				return onUnprovisionFinished(bd)
+				return updateBlockDevice(e, bd, func(bd *diskv1.BlockDevice) {
+					diskv1.ProvisionPhaseMounted.Set(bd)
+					setDeviceProvisionedCondition(bd, corev1.ConditionFalse, "")
+				})
 			}
 
 			isUnprovisioning := false
@@ -321,7 +274,10 @@ func effectUnprovisionDeviceFactory(node *longhornv1.Node) effect {
 				}
 			}
 			// Finish. The device should back to mounted.
-			return onUnprovisionFinished(bd)
+			return updateBlockDevice(e, bd, func(bd *diskv1.BlockDevice) {
+				diskv1.ProvisionPhaseMounted.Set(bd)
+				setDeviceProvisionedCondition(bd, corev1.ConditionFalse, "")
+			})
 		})
 		return nil
 	}
@@ -348,25 +304,8 @@ func logEffect(bd *diskv1.BlockDevice) *logrus.Entry {
 func jitterPoll(e effectController, bd *diskv1.BlockDevice, conditionFunc wait.ConditionFunc) {
 	stopCh := make(chan struct{})
 	doneCh := make(chan struct{})
-	currentPhase := bd.Status.ProvisionPhase
 	go func() {
-		wait.JitterUntil(func() {
-			done, err := conditionFunc()
-			if done {
-				if err != nil {
-					logEffect(bd).Errorf("Ceased phase %s with err: %v", currentPhase, err.Error())
-				} else {
-					logEffect(bd).Infof("Finished phase %s", currentPhase)
-				}
-				close(stopCh)
-			} else {
-				if err != nil {
-					logEffect(bd).Errorf("Failed during phase %s: %v", currentPhase, err.Error())
-				} else {
-					logEffect(bd).Infof("Continue polling in phase %s", currentPhase)
-				}
-			}
-		}, effectDefaultPollInterval, 1.0, false, stopCh)
+		jitterUntil(conditionFunc, e, bd, stopCh)
 		doneCh <- struct{}{}
 	}()
 
@@ -377,7 +316,7 @@ func jitterPoll(e effectController, bd *diskv1.BlockDevice, conditionFunc wait.C
 			close(stopCh)
 			onEffectTimeout(e, bd)
 		case <-doneCh:
-			logEffect(bd).Debugf("Invalidated timeout: finish %s in time", currentPhase)
+			logEffect(bd).Debugf("Invalidated timeout: finish %s in time", bd.Status.ProvisionPhase)
 		}
 	}()
 }
@@ -385,47 +324,68 @@ func jitterPoll(e effectController, bd *diskv1.BlockDevice, conditionFunc wait.C
 func onEffectTimeout(e effectController, bd *diskv1.BlockDevice) {
 	err := fmt.Errorf("Timeout in phase %s", bd.Status.ProvisionPhase)
 	logEffect(bd).Error(err)
-	newBd, getErr := e.BlockdeviceCache().Get(bd.Namespace, bd.Name)
-	if getErr != nil {
-		logEffect(bd).Errorf("Failed to update after timeout in phase %s: %v", bd.Status.ProvisionPhase, getErr.Error())
-		return
-	}
-	newBdCpy := newBd.DeepCopy()
-	setDeviceFailedCondition(newBdCpy, corev1.ConditionTrue, err.Error())
-	diskv1.ProvisionPhaseFailed.Set(newBdCpy)
-	if _, err := e.Blockdevices().Update(newBdCpy); err != nil {
+	if _, updateErr := updateBlockDevice(e, bd, func(bd *diskv1.BlockDevice) {
+		setDeviceFailedCondition(bd, corev1.ConditionTrue, err.Error())
+		diskv1.ProvisionPhaseFailed.Set(bd)
+	}); updateErr != nil {
 		logEffect(bd).Errorf("Failed to update after timeout in phase %s: %v", bd.Status.ProvisionPhase, err.Error())
 	}
 }
 
-type cmdResultUpdater func(*diskv1.BlockDevice) *diskv1.BlockDevice
+type blockDeviceUpdater func(*diskv1.BlockDevice)
 
-func onCmdTimeout(e effectController, bd *diskv1.BlockDevice, f func(chan<- cmdResultUpdater)) {
-	doneCh := make(chan cmdResultUpdater, 1)
+func onCmdTimeout(e effectController, bd *diskv1.BlockDevice, f func(chan<- blockDeviceUpdater)) {
+	stopCh := make(chan struct{})
+	doneCh := make(chan blockDeviceUpdater, 1)
 	go func() {
 		select {
 		case <-time.After(effectDefaultTimeout):
+			close(stopCh)
 			onEffectTimeout(e, bd)
 		case update := <-doneCh:
-			if _, err := e.Blockdevices().Update(update(bd.DeepCopy())); err != nil {
-				emitError := func(err error) {
-					logEffect(bd).Errorf("Failed to update in phase %s: %v", bd.Status.ProvisionPhase, err.Error())
-				}
-				if !errors.IsConflict(err) {
-					emitError(err)
-					return
-				}
-				newBd, err := e.BlockdeviceCache().Get(bd.Namespace, bd.Name)
-				if err != nil {
-					emitError(err)
-					return
-				}
-				if _, err := e.Blockdevices().Update(update(newBd.DeepCopy())); err != nil {
-					emitError(err)
-					return
-				}
-			}
+			jitterUntil(func() (bool, error) {
+				return updateBlockDevice(e, bd, update)
+			}, e, bd, stopCh)
 		}
 	}()
 	go f(doneCh)
+}
+
+func jitterUntil(conditionFunc wait.ConditionFunc, e effectController, bd *diskv1.BlockDevice, stopCh chan struct{}) {
+	currentPhase := bd.Status.ProvisionPhase
+	wait.JitterUntil(func() {
+		done, err := conditionFunc()
+		if done {
+			if err != nil {
+				logEffect(bd).Errorf("Ceased phase %s with err: %v", currentPhase, err.Error())
+			} else {
+				logEffect(bd).Infof("Finished phase %s", currentPhase)
+			}
+			close(stopCh)
+		} else {
+			if err != nil {
+				logEffect(bd).Errorf("Failed during phase %s: %v", currentPhase, err.Error())
+			} else {
+				logEffect(bd).Infof("Continue polling in phase %s", currentPhase)
+			}
+		}
+	}, effectDefaultPollInterval, 1.0, false, stopCh)
+}
+
+func updateBlockDevice(e effectController, bd *diskv1.BlockDevice, update blockDeviceUpdater) (bool, error) {
+	bd, err := e.BlockdeviceCache().Get(bd.Namespace, bd.Name)
+	if err != nil && errors.IsNotFound(err) {
+		bd, err = e.Blockdevices().Get(bd.Namespace, bd.Name, metav1.GetOptions{})
+		if err != nil {
+			return errors.IsNotFound(err), err
+		}
+	}
+	bdCpy := bd.DeepCopy()
+	update(bdCpy)
+	if !reflect.DeepEqual(bd, bdCpy) {
+		if _, err := e.Blockdevices().Update(bdCpy); err != nil {
+			return errors.IsNotFound(err), err
+		}
+	}
+	return true, nil
 }
