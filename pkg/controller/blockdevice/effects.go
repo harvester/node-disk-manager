@@ -350,7 +350,7 @@ func jitterPoll(e effectController, bd *diskv1.BlockDevice, conditionFunc wait.C
 				} else {
 					logEffect(bd).Infof("Finished phase %s", currentPhase)
 				}
-				stopCh <- struct{}{}
+				close(stopCh)
 			} else {
 				if err != nil {
 					logEffect(bd).Errorf("Failed during phase %s: %v", currentPhase, err.Error())
@@ -366,7 +366,7 @@ func jitterPoll(e effectController, bd *diskv1.BlockDevice, conditionFunc wait.C
 		select {
 		case <-time.After(effectDefaultTimeout):
 			// Stop JitterUntil
-			stopCh <- struct{}{}
+			close(stopCh)
 			onEffectTimeout(e, bd)
 		case <-doneCh:
 			logEffect(bd).Debugf("Invalidated timeout: finish %s in time", currentPhase)
