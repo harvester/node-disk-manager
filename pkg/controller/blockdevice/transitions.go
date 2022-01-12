@@ -104,6 +104,11 @@ func (p transitionTable) PhasePartitioning(bd *diskv1.BlockDevice) (diskv1.Block
 
 func (p transitionTable) PhasePartitioned(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
+
+	if !bd.Spec.FileSystem.ForceFormatted {
+		return currentPhase, nil, nil
+	}
+
 	devPath := util.GetDiskPartitionPath(bd.Spec.DevPath, 1)
 	part := p.blockInfo.GetPartitionByDevPath(bd.Spec.DevPath, devPath)
 	name := block.GeneratePartitionGUID(part, bd.Spec.NodeName)
@@ -114,10 +119,7 @@ func (p transitionTable) PhasePartitioned(bd *diskv1.BlockDevice) (diskv1.BlockD
 		}
 		return currentPhase, nil, err
 	}
-	if bd.Spec.FileSystem.ForceFormatted {
-		return currentPhase, effectPrepareFormatPartitionFactory(partBd), nil
-	}
-	return currentPhase, nil, nil
+	return currentPhase, effectPrepareFormatPartitionFactory(partBd), nil
 }
 
 func (p transitionTable) PhaseFormatting(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
