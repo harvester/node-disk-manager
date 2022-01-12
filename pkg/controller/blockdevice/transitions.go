@@ -24,7 +24,7 @@ type transitionTable struct {
 	nodeCache        ctllonghornv1.NodeCache
 	blockdevices     ctldiskv1.BlockDeviceClient
 	blockdeviceCache ctldiskv1.BlockDeviceCache
-	scanner          *Scanner
+	blockInfo        block.Info
 }
 
 func newTransitionTable(
@@ -33,7 +33,7 @@ func newTransitionTable(
 	bdCache ctldiskv1.BlockDeviceCache,
 	nodes ctllonghornv1.NodeClient,
 	nodeCache ctllonghornv1.NodeCache,
-	scanner *Scanner,
+	blockInfo block.Info,
 ) transitionTable {
 	return transitionTable{
 		namespace:        namspace,
@@ -41,7 +41,7 @@ func newTransitionTable(
 		nodes:            nodes,
 		nodeCache:        nodeCache,
 		blockdeviceCache: bdCache,
-		scanner:          scanner,
+		blockInfo:        blockInfo,
 	}
 }
 
@@ -105,7 +105,7 @@ func (p transitionTable) PhasePartitioning(bd *diskv1.BlockDevice) (diskv1.Block
 func (p transitionTable) PhasePartitioned(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
 	devPath := util.GetDiskPartitionPath(bd.Spec.DevPath, 1)
-	part := p.scanner.BlockInfo.GetPartitionByDevPath(bd.Spec.DevPath, devPath)
+	part := p.blockInfo.GetPartitionByDevPath(bd.Spec.DevPath, devPath)
 	name := block.GeneratePartitionGUID(part, bd.Spec.NodeName)
 	partBd, err := p.blockdeviceCache.Get(bd.Namespace, name)
 	if err != nil {
@@ -128,7 +128,7 @@ func (p transitionTable) PhaseFormatting(bd *diskv1.BlockDevice) (diskv1.BlockDe
 func (p transitionTable) PhaseFormatted(bd *diskv1.BlockDevice) (diskv1.BlockDeviceProvisionPhase, effect, error) {
 	currentPhase := bd.Status.ProvisionPhase
 
-	filesystem := p.scanner.BlockInfo.GetFileSystemInfoByDevPath(bd.Spec.DevPath)
+	filesystem := p.blockInfo.GetFileSystemInfoByDevPath(bd.Spec.DevPath)
 	targetMountPoint := util.GetMountPoint(bd.Name)
 	mountPointSynced := targetMountPoint == filesystem.MountPoint
 
@@ -169,7 +169,7 @@ func (p transitionTable) PhaseMounted(bd *diskv1.BlockDevice) (diskv1.BlockDevic
 			return diskv1.ProvisionPhaseUnprovisioning, effectUnprovisionDeviceFactory(node), nil
 		}
 
-		filesystem := p.scanner.BlockInfo.GetFileSystemInfoByDevPath(bd.Spec.DevPath)
+		filesystem := p.blockInfo.GetFileSystemInfoByDevPath(bd.Spec.DevPath)
 		if filesystem.MountPoint != "" {
 			// If there is old mount point, umount first
 			return diskv1.ProvisionPhaseUnmounting, effectUnmountFilesystemFactory(filesystem), nil
@@ -204,7 +204,7 @@ func (p transitionTable) PhaseProvisioned(bd *diskv1.BlockDevice) (diskv1.BlockD
 		return diskv1.ProvisionPhaseUnprovisioning, effectUnprovisionDeviceFactory(node), nil
 	}
 	// Check if current filesystem and longhorn disk path not match
-	filesystem := p.scanner.BlockInfo.GetFileSystemInfoByDevPath(bd.Spec.DevPath)
+	filesystem := p.blockInfo.GetFileSystemInfoByDevPath(bd.Spec.DevPath)
 	disk, ok := node.Spec.Disks[bd.Name]
 	if !ok || disk.Path != filesystem.MountPoint {
 		return diskv1.ProvisionPhaseUnprovisioning, effectUnprovisionDeviceFactory(node), nil

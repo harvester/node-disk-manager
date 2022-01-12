@@ -49,6 +49,7 @@ func Register(
 ) error {
 	bdCache := bds.Cache()
 	nodeCache := nodes.Cache()
+	table := newTransitionTable(opt.Namespace, opt.NodeName, bdCache, nodes, nodeCache, scanner.BlockInfo)
 	controller := &Controller{
 		namespace:        opt.Namespace,
 		nodeName:         opt.NodeName,
@@ -57,7 +58,7 @@ func Register(
 		blockdevices:     bds,
 		blockdeviceCache: bdCache,
 		scanner:          scanner,
-		transitionTable:  newTransitionTable(opt.Namespace, opt.NodeName, bdCache, nodes, nodeCache, scanner),
+		transitionTable:  table,
 	}
 
 	if err := controller.scanner.StartScanning(); err != nil {
