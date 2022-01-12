@@ -20,7 +20,7 @@ func (c NodeClient) Update(node *longhornv1.Node) (*longhornv1.Node, error) {
 	return c(node.Namespace).Update(context.TODO(), node, metav1.UpdateOptions{})
 }
 func (c NodeClient) Get(namespace, name string, options metav1.GetOptions) (*longhornv1.Node, error) {
-	panic("implement me")
+	return c(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 }
 func (c NodeClient) Create(*longhornv1.Node) (*longhornv1.Node, error) {
 	panic("implement me")
