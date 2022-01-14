@@ -94,15 +94,21 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 		// No need to transit if the phases are the same.
 		logrus.Debugf("[Transition] Already in phase %s for %s", device.Status.ProvisionPhase, device.Name)
 	} else {
-		var err error
 		deviceCpy := device.DeepCopy()
 		phase.Set(deviceCpy)
 		logrus.Debugf("[Transition] from %s to %s", device.Status.ProvisionPhase, deviceCpy.Status.ProvisionPhase)
-		device, err = c.blockdevices.Update(deviceCpy)
+		newDevice, err := c.blockdevices.Update(deviceCpy)
 		if err != nil {
-			err := fmt.Errorf("[Transition] Failed to transit from %s to %s for %s: %v", device.Status.ProvisionPhase, phase, device.Name, err)
-			return c.updateFailed(device, err)
+			transitionErr := fmt.Errorf("[Transition] Failed to transit from %s to %s for %s: %v", device.Status.ProvisionPhase, phase, device.Name, err)
+			if errors.IsConflict(err) {
+				// Resource oudated and abort.
+				// Other side effect should take over the transition.
+				logrus.Error(transitionErr)
+				return nil, nil
+			}
+			return c.updateFailed(device, transitionErr)
 		}
+		device = newDevice
 	}
 
 	// Emit side effect
