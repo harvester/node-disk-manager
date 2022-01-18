@@ -13,7 +13,12 @@ import (
 	"github.com/harvester/node-disk-manager/pkg/block"
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	ctllonghornv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta1"
+	"github.com/harvester/node-disk-manager/pkg/indexers"
 	"github.com/harvester/node-disk-manager/pkg/util"
+)
+
+const (
+	maxConcurrentFormatEffect = 5
 )
 
 // transitionTable defines what phase the state manchine will move to
@@ -83,6 +88,15 @@ func (p transitionTable) PhaseUnprovisioned(bd *diskv1.BlockDevice) (diskv1.Bloc
 		return currentPhase, nil, nil
 	case diskv1.DeviceTypePart:
 		if forceFormatted && !diskv1.DeviceFormatted.IsTrue(bd) {
+			key := indexers.MakeDeviceByPhaseKey(bd, diskv1.ProvisionPhaseFormatting)
+			bds, err := p.blockdeviceCache.GetByIndex(indexers.DeviceByPhaseIndex, key)
+			if err != nil && !errors.IsNotFound(err) {
+				return currentPhase, nil, err
+			}
+			// Exceed maximum number of concurrent effects. Re-enqueue.
+			if len(bds) >= maxConcurrentFormatEffect {
+				return currentPhase, effectEnqueueCurrentPhase, nil
+			}
 			// Perform force partition/format
 			return diskv1.ProvisionPhaseFormatting, effectFormatPartition, nil
 		}

@@ -15,6 +15,7 @@ import (
 	"os"
 
 	"github.com/harvester/node-disk-manager/pkg/filter"
+	"github.com/harvester/node-disk-manager/pkg/indexers"
 
 	"github.com/ehazlett/simplelog"
 	"github.com/rancher/wrangler/pkg/kubeconfig"
@@ -183,6 +184,8 @@ func run(opt *option.Option) error {
 	if err != nil {
 		return fmt.Errorf("error building node-disk-manager controllers: %s", err.Error())
 	}
+
+	indexers.RegisterIndexers(disks)
 
 	excludeFilters := filter.SetExcludeFilters(opt.VendorFilter, opt.PathFilter, opt.LabelFilter)
 	autoProvisionFilters := filter.SetAutoProvisionFilters(opt.AutoProvisionFilter)
