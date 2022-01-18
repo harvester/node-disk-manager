@@ -58,8 +58,7 @@ func (c BlockDeviceCache) List(namespace string, selector labels.Selector) ([]*d
 }
 
 func (c BlockDeviceCache) AddIndexer(indexName string, indexer ctldiskv1.BlockDeviceIndexer) {
-	panic("implement me")
 }
 func (c BlockDeviceCache) GetByIndex(indexName, key string) ([]*diskv1.BlockDevice, error) {
-	panic("implement me")
+	return nil, nil
 }
