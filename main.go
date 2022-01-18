@@ -23,7 +23,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 
-	"github.com/harvester/node-disk-manager/pkg/block"
 	blockdevicev1 "github.com/harvester/node-disk-manager/pkg/controller/blockdevice"
 	nodev1 "github.com/harvester/node-disk-manager/pkg/controller/node"
 	ctldisk "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io"
@@ -170,12 +169,6 @@ func run(opt *option.Option) error {
 
 	ctx := signals.SetupSignalHandler(context.Background())
 
-	// register block device detector
-	block, err := block.New()
-	if err != nil {
-		return err
-	}
-
 	kubeConfig, err := kubeconfig.GetNonInteractiveClientConfig(opt.KubeConfig).ClientConfig()
 	if err != nil {
 		return fmt.Errorf("failed to find kubeconfig: %v", err)
@@ -195,14 +188,17 @@ func run(opt *option.Option) error {
 	autoProvisionFilters := filter.SetAutoProvisionFilters(opt.AutoProvisionFilter)
 
 	start := func(ctx context.Context) {
-		scanner := blockdevicev1.NewScanner(
+		scanner, err := blockdevicev1.NewScanner(
 			ctx,
 			disks.Harvesterhci().V1beta1().BlockDevice(),
-			block,
 			opt,
 			excludeFilters,
 			autoProvisionFilters,
 		)
+		if err != nil {
+			logrus.Fatalf("failed to register scanner: %s", err.Error())
+		}
+
 		if err := blockdevicev1.Register(
 			ctx, lhs.Longhorn().V1beta1().Node(),
 			disks.Harvesterhci().V1beta1().BlockDevice(),

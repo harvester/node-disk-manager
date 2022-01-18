@@ -41,15 +41,20 @@ type Scanner struct {
 func NewScanner(
 	ctx context.Context,
 	bds ctldiskv1.BlockDeviceController,
-	block block.Info,
 	opt *option.Option,
 	excludeFilters []*filter.Filter,
 	autoProvisionFilters []*filter.Filter,
-) *Scanner {
+) (*Scanner, error) {
 	// Rescan devices on the node periodically.
 	rescanInterval := defaultRescanInterval
 	if opt.RescanInterval > 0 {
 		rescanInterval = time.Duration(opt.RescanInterval) * time.Second
+	}
+
+	// register block device detector
+	block, err := block.New()
+	if err != nil {
+		return nil, err
 	}
 
 	return &Scanner{
@@ -62,7 +67,7 @@ func NewScanner(
 		excludeFilters:       excludeFilters,
 		autoProvisionFilters: autoProvisionFilters,
 		rescanInterval:       rescanInterval,
-	}
+	}, nil
 }
 
 func (s *Scanner) StartScanning() error {
