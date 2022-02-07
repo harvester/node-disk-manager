@@ -216,11 +216,15 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 				// forceFormatDisk may return a new device with new GPT label
 				// If in that case, just return instead of proceeding following update.
 				return newDevice, nil
+			} else {
+				deviceCpy = newDevice
 			}
 		case diskv1.DeviceTypePart:
-			if deviceCpy, err := c.forceFormatPartition(deviceCpy); err != nil {
+			newDevice, err := c.forceFormatPartition(deviceCpy)
+			if err != nil {
 				return updateFormattingErrorCondition(deviceCpy, err)
 			}
+			deviceCpy = newDevice
 		}
 	}
 
