@@ -305,10 +305,13 @@ func (c *Controller) updateFileSystemStatus(device *diskv1.BlockDevice) error {
 	device.Status.DeviceStatus.FileSystem.MountPoint = filesystem.MountPoint
 
 	if filesystem.MountPoint != "" && filesystem.Type != "" {
-		err := isValidFileSystem(device.Spec.FileSystem, device.Status.DeviceStatus.FileSystem)
-		mounted := err == nil && filesystem.MountPoint != ""
-		diskv1.DeviceMounted.SetError(device, "", err)
-		diskv1.DeviceMounted.SetStatusBool(device, mounted)
+		if err := isValidFileSystem(device.Spec.FileSystem, device.Status.DeviceStatus.FileSystem); err != nil {
+			diskv1.DeviceMounted.SetError(device, "", err)
+			diskv1.DeviceMounted.SetStatusBool(device, false)
+		} else if !diskv1.DeviceMounted.IsTrue(device) {
+			diskv1.DeviceMounted.SetError(device, "", nil)
+			diskv1.DeviceMounted.SetStatusBool(device, true)
+		}
 	} else if mountPoint != "" && device.Status.DeviceStatus.Partitioned {
 		diskv1.DeviceMounted.SetError(device, "", fmt.Errorf("cannot mount parent device with partitions"))
 		diskv1.DeviceMounted.SetStatusBool(device, false)
@@ -319,8 +322,10 @@ func (c *Controller) updateFileSystemStatus(device *diskv1.BlockDevice) error {
 				return err
 			}
 		}
-		diskv1.DeviceMounted.SetError(device, "", nil)
-		diskv1.DeviceMounted.SetStatusBool(device, false)
+		if diskv1.DeviceMounted.IsTrue(device) {
+			diskv1.DeviceMounted.SetError(device, "", nil)
+			diskv1.DeviceMounted.SetStatusBool(device, false)
+		}
 	}
 
 	return nil
