@@ -113,12 +113,6 @@ func main() {
 			Usage:       "Specify the interval of device rescanning of the node (in seconds)",
 			Destination: &opt.RescanInterval,
 		},
-		&cli.BoolFlag{
-			Name:        "auto-gpt-generate",
-			EnvVars:     []string{"NDM_AUTO_GPT_GENERATE"},
-			Usage:       "Enable auto GPT partition generating if a disk can not be globally identified",
-			Destination: &opt.AutoGPTGenerate,
-		},
 		&cli.StringFlag{
 			Name:        "auto-provision-filter",
 			EnvVars:     []string{"NDM_AUTO_PROVISION_FILTER"},

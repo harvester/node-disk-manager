@@ -15,5 +15,4 @@ type Option struct {
 	LabelFilter         string
 	AutoProvisionFilter string
 	RescanInterval      int64
-	AutoGPTGenerate     bool
 }

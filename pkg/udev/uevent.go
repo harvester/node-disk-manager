@@ -52,7 +52,6 @@ func NewUdev(
 		BlockdeviceCache:     bds.Cache(),
 		BlockInfo:            block,
 		ExcludeFilters:       excludeFilters,
-		AutoGPTGenerate:      opt.AutoGPTGenerate,
 		AutoProvisionFilters: autoProvisionFilters,
 	}
 	return &Udev{
@@ -154,17 +153,10 @@ func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, duration time.Duratio
 	if duration > defaultDuration {
 		time.Sleep(duration)
 	}
-	devPath := device.Spec.DevPath
-	logrus.Debugf("uevent add block deivce %s", devPath)
+	logrus.Debugf("uevent add block deivce %s", device.Spec.DevPath)
 
-	var err error
-	device, err = u.controller.MakeGPTPartitionIfNeeded(device)
-	if err != nil {
-		return
-	}
-
-	if device == nil {
-		logrus.Infof("Skip adding non-identifiable block device %s", devPath)
+	if device == nil || device.Name == "" {
+		logrus.Infof("Skip adding non-identifiable block device %s", device.Spec.DevPath)
 		return
 	}
 
