@@ -41,7 +41,7 @@ type Info interface {
 	GetPartitions() []*Partition
 	GetDiskByDevPath(name string) *Disk
 	GetPartitionByDevPath(disk, part string) *Partition
-	GetFileSystemInfoByDevPath(dname string) *FileSystemInfo
+	GetFileSystemInfoByFsUUID(dname string) *FileSystemInfo
 }
 
 type infoImpl struct {
@@ -92,8 +92,16 @@ func (i *infoImpl) GetPartitionByDevPath(disk, part string) *Partition {
 	return partition
 }
 
-func (i *infoImpl) GetFileSystemInfoByDevPath(dname string) *FileSystemInfo {
-	dname = strings.TrimPrefix(dname, "/dev/")
+func (i *infoImpl) GetFileSystemInfoByFsUUID(fsUUID string) *FileSystemInfo {
+	if fsUUID == "" {
+		return &FileSystemInfo{}
+	}
+	// Resolve the symlink to the special block device file
+	dname, err := filepath.EvalSymlinks("/dev/disk/by-uuid/" + fsUUID)
+	if err != nil {
+		logrus.Errorf("failed to get filesystem info for UUID %s: %s", fsUUID, err.Error())
+		return &FileSystemInfo{}
+	}
 	paths := linuxpath.New(i.ctx)
 	mp, pt, ro := partitionInfo(i.ctx, paths, dname)
 	return &FileSystemInfo{
@@ -271,6 +279,7 @@ func diskPartition(ctx *context.Context, paths *linuxpath.Paths, disk, fname str
 	size := partitionSizeBytes(paths, disk, fname)
 	mp, pt, ro := partitionInfo(ctx, paths, fname)
 	du := GetDiskUUID(fname, string(PartUUID))
+	fsUUID := GetDiskUUID(fname, string(UUID))
 	driveType, storageController := diskTypes(fname)
 	label := GetFileSystemLabel(fname)
 	partType := GetPartType(fname)
@@ -284,6 +293,7 @@ func diskPartition(ctx *context.Context, paths *linuxpath.Paths, disk, fname str
 			IsReadOnly: ro,
 		},
 		UUID:              du,
+		FsUUID:            fsUUID,
 		PartType:          partType,
 		DriveType:         driveType,
 		StorageController: storageController,
