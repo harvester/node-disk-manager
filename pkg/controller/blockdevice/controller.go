@@ -294,7 +294,8 @@ func ConvertBlockDevicesToMap(bds []*diskv1.BlockDevice) map[string]*diskv1.Bloc
 
 func (c *Controller) updateFileSystemStatus(device *diskv1.BlockDevice) error {
 	// fetch the latest device filesystem info
-	filesystem := c.BlockInfo.GetFileSystemInfoByDevPath(device.Spec.DevPath)
+	uuid := device.Status.DeviceStatus.Details.UUID
+	filesystem := c.BlockInfo.GetFileSystemInfoByFsUUID(uuid)
 	mountPoint := device.Spec.FileSystem.MountPoint
 	device.Status.DeviceStatus.FileSystem.Type = filesystem.Type
 	device.Status.DeviceStatus.FileSystem.IsReadOnly = filesystem.IsReadOnly
@@ -484,7 +485,8 @@ func (c *Controller) forceFormatDisk(device *diskv1.BlockDevice) (*diskv1.BlockD
 
 // provisionDeviceToNode adds a device to longhorn node as an additional disk.
 func (c *Controller) provisionDeviceToNode(device *diskv1.BlockDevice) error {
-	filesystem := c.BlockInfo.GetFileSystemInfoByDevPath(device.Spec.DevPath)
+	uuid := device.Status.DeviceStatus.Details.UUID
+	filesystem := c.BlockInfo.GetFileSystemInfoByFsUUID(uuid)
 	if filesystem == nil || filesystem.MountPoint == "" {
 		// No mount point. Skipping...
 		return nil
