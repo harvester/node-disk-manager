@@ -47,7 +47,6 @@ type Controller struct {
 	BlockInfo        block.Info
 	ExcludeFilters   []*filter.Filter
 
-	AutoGPTGenerate      bool
 	AutoProvisionFilters []*filter.Filter
 }
 
@@ -70,7 +69,6 @@ func Register(
 		BlockdeviceCache:     bds.Cache(),
 		BlockInfo:            block,
 		ExcludeFilters:       excludeFilters,
-		AutoGPTGenerate:      opt.AutoGPTGenerate,
 		AutoProvisionFilters: autoProvisionFilters,
 	}
 
@@ -121,19 +119,10 @@ func (c *Controller) ScanBlockDevicesOnNode() error {
 
 		bd := GetDiskBlockDevice(disk, c.NodeName, c.Namespace)
 
-		var err error
-		devPath := bd.Spec.DevPath
-		bd, err = c.MakeGPTPartitionIfNeeded(bd)
-		if err != nil {
-			return err
-		}
 		if bd == nil {
-			logrus.Infof("Skip adding non-identifiable block device %s", devPath)
+			logrus.Infof("Skip adding non-identifiable block device %s", bd.Spec.DevPath)
 			continue
 		}
-
-		// Refetch since it might be auto-GPT'ed
-		disk = c.BlockInfo.GetDiskByDevPath(bd.Spec.DevPath)
 
 		if c.ApplyAutoProvisionFiltersForDisk(disk) {
 			autoProvisionedMap[bd.Name] = true
@@ -339,36 +328,6 @@ func updateDeviceMount(devPath, mountPoint, existingMount string) error {
 		}
 	}
 	return nil
-}
-
-// MakeGPTPartitionIfNeeded makes GPT partition on given device if needed.
-//
-// Currently only making GPT partition on devices without a name (GUID).
-func (c *Controller) MakeGPTPartitionIfNeeded(device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
-	devPath := device.Spec.DevPath
-	guidMissing := device.ObjectMeta.Name == ""
-
-	if !guidMissing {
-		// No need to generate new GPT partition if this device is identifiable.
-		return device, nil
-	}
-
-	if !c.AutoGPTGenerate {
-		// Return a nil blockdevice to let caller know that this device is
-		// non-identifiable under current settings.
-		return nil, nil
-	}
-
-	if device.Status.DeviceStatus.Details.DeviceType == diskv1.DeviceTypeDisk {
-		// No device.Name means no WWN nor filesystem UUID for this device.
-		// To identify this device uniquely, we create a GPT table for it.
-		if err := disk.MakeGPTPartition(devPath); err != nil {
-			return nil, fmt.Errorf("failed to make GPT partition table for block device %s, error: %v", devPath, err)
-		}
-	}
-	blockDisk := c.BlockInfo.GetDiskByDevPath(devPath)
-	newDevice := GetDiskBlockDevice(blockDisk, c.NodeName, c.Namespace)
-	return newDevice, nil
 }
 
 // forceFormatPartition simply formats the partition to ext4 filesystem
