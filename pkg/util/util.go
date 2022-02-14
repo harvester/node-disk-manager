@@ -3,7 +3,6 @@ package util
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 )
 
@@ -30,18 +29,6 @@ func GetFullDevPath(shortPath string) string {
 		return ""
 	}
 	return fmt.Sprintf("/dev/%s", shortPath)
-}
-
-func GetDiskPartitionPath(devicePath string, partitionNum int) string {
-	partitionSep := ""
-	last := devicePath[len(devicePath)-1:]
-	if _, err := strconv.Atoi(last); err == nil {
-		// If a disk device name ends with a digit then the Linux Kernel adds
-		// the character 'p' to separate the partition number from the device name.
-		// Example: /dev/nvme0n1 -> /dev/nvme0n1p1
-		partitionSep = "p"
-	}
-	return fmt.Sprintf("%s%s%d", devicePath, partitionSep, partitionNum)
 }
 
 func MatchesIgnoredCase(s []string, k string) bool {

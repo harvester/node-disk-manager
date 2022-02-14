@@ -15,7 +15,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/wait"
 
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
@@ -28,11 +27,9 @@ import (
 )
 
 const (
-	blockDeviceHandlerName  = "harvester-block-device-handler"
-	defaultRescanInterval   = 30 * time.Second
-	forceFormatPollInterval = 3 * time.Second
-	forceFormatPollTimeout  = 30 * time.Second
-	enqueueDelay            = 10 * time.Second
+	blockDeviceHandlerName = "harvester-block-device-handler"
+	defaultRescanInterval  = 30 * time.Second
+	enqueueDelay           = 10 * time.Second
 )
 
 type Controller struct {
@@ -188,28 +185,12 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 	fsStatus := *deviceCpy.Status.DeviceStatus.FileSystem
 
 	if fs.ForceFormatted && fsStatus.LastFormattedAt == nil {
-		// perform disk force-format operation
-		updateFormattingErrorCondition := func(bd *diskv1.BlockDevice, err error) (*diskv1.BlockDevice, error) {
-			error := fmt.Errorf("failed to force format the device %s, %s", device.Spec.DevPath, err.Error())
-			logrus.Error(error)
-			diskv1.DeviceFormatting.SetError(bd, "", error)
-			diskv1.DeviceFormatting.SetStatusBool(bd, false)
-			return c.Blockdevices.Update(bd)
-		}
-
-		switch device.Status.DeviceStatus.Details.DeviceType {
-		case diskv1.DeviceTypeDisk:
-			if newDevice, err := c.forceFormatDisk(deviceCpy); err != nil {
-				return updateFormattingErrorCondition(deviceCpy, err)
-			} else if newDevice.Name != deviceCpy.Name {
-				// forceFormatDisk may return a new device with new GPT label
-				// If in that case, just return instead of proceeding following update.
-				return newDevice, nil
-			}
-		case diskv1.DeviceTypePart:
-			if deviceCpy, err := c.forceFormatPartition(deviceCpy); err != nil {
-				return updateFormattingErrorCondition(deviceCpy, err)
-			}
+		if err := c.forceFormat(deviceCpy); err != nil {
+			err := fmt.Errorf("failed to force format the device %s, %s", device.Spec.DevPath, err.Error())
+			logrus.Error(err)
+			diskv1.DeviceFormatting.SetError(deviceCpy, "", err)
+			diskv1.DeviceFormatting.SetStatusBool(deviceCpy, false)
+			return c.Blockdevices.Update(deviceCpy)
 		}
 	}
 
@@ -228,26 +209,23 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 		return device, err
 	}
 
-	if device.Status.DeviceStatus.Details.DeviceType == diskv1.DeviceTypePart {
-		switch {
-		case fs.MountPoint != "" && fs.Provisioned && device.Status.ProvisionPhase == diskv1.ProvisionPhaseUnprovisioned:
-			if err := c.provisionDeviceToNode(deviceCpy); err != nil {
-				err := fmt.Errorf("failed to provision device %s to node %s on path %s: %w", device.Name, c.NodeName, device.Spec.FileSystem.MountPoint, err)
-				logrus.Error(err)
-				diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
-				diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
-				shouldEnqueue = true
-			}
-		case fs.MountPoint == "" || !fs.Provisioned:
-			if device.Status.ProvisionPhase != diskv1.ProvisionPhaseUnprovisioned {
-				if err := c.unprovisionDeviceFromNode(deviceCpy); err != nil {
-					err := fmt.Errorf("failed to stop provisioning device %s to node %s on path %s: %w", device.Name, c.NodeName, device.Spec.FileSystem.MountPoint, err)
-					logrus.Error(err)
-					diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
-					diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
-					shouldEnqueue = true
-				}
-			}
+	needProvision := fs.MountPoint != "" && fs.Provisioned
+	switch {
+	case needProvision && device.Status.ProvisionPhase == diskv1.ProvisionPhaseUnprovisioned:
+		if err := c.provisionDeviceToNode(deviceCpy); err != nil {
+			err := fmt.Errorf("failed to provision device %s to node %s on path %s: %w", device.Name, c.NodeName, device.Spec.FileSystem.MountPoint, err)
+			logrus.Error(err)
+			diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
+			diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
+			shouldEnqueue = true
+		}
+	case !needProvision && device.Status.ProvisionPhase != diskv1.ProvisionPhaseUnprovisioned:
+		if err := c.unprovisionDeviceFromNode(deviceCpy); err != nil {
+			err := fmt.Errorf("failed to stop provisioning device %s to node %s on path %s: %w", device.Name, c.NodeName, device.Spec.FileSystem.MountPoint, err)
+			logrus.Error(err)
+			diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
+			diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
+			shouldEnqueue = true
 		}
 	}
 
@@ -330,15 +308,11 @@ func updateDeviceMount(devPath, mountPoint, existingMount string) error {
 	return nil
 }
 
-// forceFormatPartition simply formats the partition to ext4 filesystem
+// forceFormat simply formats the device to ext4 filesystem
 //
 // - umount the block device if it is mounted
-// - create ext4 filesystem formatting of the single partition
-func (c *Controller) forceFormatPartition(device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
-	if device.Status.DeviceStatus.Details.DeviceType != diskv1.DeviceTypePart {
-		return device, fmt.Errorf("device %s is not a partition", device.Name)
-	}
-
+// - create ext4 filesystem on the block device
+func (c *Controller) forceFormat(device *diskv1.BlockDevice) error {
 	filesystem := device.Spec.FileSystem
 	fsStatus := device.Status.DeviceStatus.FileSystem
 	logrus.Infof("performing format operation of disk %s, mount path %s", device.Spec.DevPath, filesystem.MountPoint)
@@ -346,100 +320,20 @@ func (c *Controller) forceFormatPartition(device *diskv1.BlockDevice) (*diskv1.B
 	// umount the disk if it is mounted
 	if fsStatus.MountPoint != "" {
 		if err := disk.UmountDisk(fsStatus.MountPoint); err != nil {
-			return device, err
+			return err
 		}
 	}
 
 	// make ext4 filesystem format of the partition disk
 	logrus.Debugf("make ext4 filesystem format of disk %s", device.Spec.DevPath)
 	if err := disk.MakeExt4DiskFormatting(device.Spec.DevPath); err != nil {
-		return device, err
+		return err
 	}
 	diskv1.DeviceFormatting.SetError(device, "", nil)
 	diskv1.DeviceFormatting.SetStatusBool(device, false)
 	diskv1.DeviceFormatting.Message(device, "Done device ext4 filesystem formatting")
 	device.Status.DeviceStatus.FileSystem.LastFormattedAt = &metav1.Time{Time: time.Now()}
-	return device, nil
-}
-
-// forceFormatDisk will be called when the user chooses to force formatting the
-// block device, the block device can only be force-formatted once only. And the
-// controller may reconcile this method multiple times if the process is failed.
-//
-// - umount the block device if it is mounted
-// - create a GUID partition table with a single linux partition of the block device
-// - if needed, remove old raw block device and create a new one
-func (c *Controller) forceFormatDisk(device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
-	if device.Status.DeviceStatus.Details.DeviceType != diskv1.DeviceTypeDisk {
-		return device, fmt.Errorf("device %s is not a disk", device.Name)
-	}
-
-	filesystem := device.Spec.FileSystem
-	fsStatus := device.Status.DeviceStatus.FileSystem
-	logrus.Infof("performing format operation of disk %s, mount path %s", device.Spec.DevPath, filesystem.MountPoint)
-
-	// umount the disk if it is mounted
-	if fsStatus.MountPoint != "" {
-		if err := disk.UmountDisk(fsStatus.MountPoint); err != nil {
-			return device, err
-		}
-	}
-
-	// create a GUID partition table with a single partition only
-	if err := disk.MakeGPTPartition(device.Spec.DevPath); err != nil {
-		return device, err
-	}
-
-	// Polling for newly added partition block device (from udev monitoring)
-	var bd *diskv1.BlockDevice
-	poll := func() (bool, error) {
-		var err error
-		devPath := util.GetDiskPartitionPath(device.Spec.DevPath, 1)
-		part := c.BlockInfo.GetPartitionByDevPath(device.Spec.DevPath, devPath)
-		name := block.GeneratePartitionGUID(part, c.NodeName)
-		bd, err = c.BlockdeviceCache.Get(device.Namespace, name)
-		if err != nil && !errors.IsNotFound(err) {
-			return false, err
-		}
-		logrus.Debugf("polling for single partition %s, found: %t", devPath, bd != nil)
-		return bd != nil, nil
-	}
-	if err := wait.PollImmediate(forceFormatPollInterval, forceFormatPollTimeout, poll); err != nil {
-		return device, err
-	}
-
-	// Update the single partition block device to start force formatting
-	toUpdate := bd.DeepCopy()
-	toUpdate.Spec.FileSystem.Provisioned = filesystem.Provisioned
-	toUpdate.Spec.FileSystem.MountPoint = filesystem.MountPoint
-	toUpdate.Spec.FileSystem.ForceFormatted = true
-	diskv1.DeviceFormatting.SetStatusBool(toUpdate, true)
-	diskv1.DeviceFormatting.Message(toUpdate, fmt.Sprintf("formatting disk partition %s with ext4 filesystem", toUpdate.Spec.DevPath))
-	if _, err := c.Blockdevices.Update(toUpdate); err != nil {
-		return device, err
-	}
-
-	// if needed, remove old raw block device and create a new one
-	blockDisk := c.BlockInfo.GetDiskByDevPath(device.Spec.DevPath)
-	newDiskDevice := GetDiskBlockDevice(blockDisk, c.NodeName, c.Namespace)
-	if newDiskDevice.Name == device.Name {
-		diskv1.DeviceFormatting.SetError(device, "", nil)
-		diskv1.DeviceFormatting.SetStatusBool(device, false)
-		device.Status.DeviceStatus.FileSystem.LastFormattedAt = &metav1.Time{Time: time.Now()}
-		device.Spec.FileSystem.MountPoint = ""
-		device.Spec.FileSystem.Provisioned = false
-		device.Status.DeviceStatus.Partitioned = true
-		return device, nil
-	}
-
-	if err := c.Blockdevices.Delete(c.Namespace, device.Name, &metav1.DeleteOptions{}); err != nil {
-		return device, err
-	}
-	diskv1.DeviceFormatting.SetError(newDiskDevice, "", nil)
-	diskv1.DeviceFormatting.SetStatusBool(newDiskDevice, false)
-	newDiskDevice.Status.DeviceStatus.FileSystem.LastFormattedAt = &metav1.Time{Time: time.Now()}
-	newDiskDevice.Spec.FileSystem.ForceFormatted = true
-	return c.Blockdevices.Create(newDiskDevice)
+	return nil
 }
 
 // provisionDeviceToNode adds a device to longhorn node as an additional disk.
