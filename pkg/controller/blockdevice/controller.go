@@ -149,15 +149,16 @@ func (c *Controller) ScanBlockDevicesOnNode() error {
 	}
 
 	oldBds := convertBlockDeviceListToMap(oldBdList)
-
-	// either create or update the block device
 	for _, bd := range newBds {
-		bd, err := c.SaveBlockDevice(bd, oldBds, autoProvisionedMap[bd.Name])
-		if err != nil {
-			return err
+		if _, ok := oldBds[bd.Name]; ok {
+			// remove blockdevice from old device so we can delete missing devices afterward
+			delete(oldBds, bd.Name)
+		} else {
+			// persist newly detected block device
+			if _, err := c.SaveBlockDevice(bd, autoProvisionedMap[bd.Name]); err != nil {
+				return err
+			}
 		}
-		// remove blockdevice from old device so we can delete missing devices afterward
-		delete(oldBds, bd.Name)
 	}
 
 	// This oldBds are leftover after running SaveBlockDevice.
@@ -218,7 +219,6 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 		return device, err
 	}
 
-	var shouldEnqueue bool
 	needProvision := deviceCpy.Spec.FileSystem.MountPoint != "" && deviceCpy.Spec.FileSystem.Provisioned
 	switch {
 	case needProvision && device.Status.ProvisionPhase == diskv1.ProvisionPhaseUnprovisioned:
@@ -227,7 +227,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 			logrus.Error(err)
 			diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
 			diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
-			shouldEnqueue = true
+			c.Blockdevices.EnqueueAfter(c.Namespace, device.Name, enqueueDelay)
 		}
 	case !needProvision && device.Status.ProvisionPhase != diskv1.ProvisionPhaseUnprovisioned:
 		if err := c.unprovisionDeviceFromNode(deviceCpy); err != nil {
@@ -235,36 +235,31 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 			logrus.Error(err)
 			diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
 			diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
-			shouldEnqueue = true
+			c.Blockdevices.EnqueueAfter(c.Namespace, device.Name, enqueueDelay)
 		}
 	}
 
 	if !reflect.DeepEqual(device, deviceCpy) {
-		if _, err := c.Blockdevices.Update(deviceCpy); err != nil {
-			return device, err
-		}
+		return c.Blockdevices.Update(deviceCpy)
 	}
-	if shouldEnqueue {
-		c.Blockdevices.EnqueueAfter(c.Namespace, device.Name, enqueueDelay)
+
+	// None of the above operations have resulted in an update to the device.
+	// We therefore try to update the latest device status from the OS
+	if err := c.updateDeviceStatus(deviceCpy, devPath); err != nil {
+		return nil, err
+	}
+	if !reflect.DeepEqual(device, deviceCpy) {
+		return c.Blockdevices.Update(deviceCpy)
 	}
 
 	return nil, nil
 }
 
 func convertBlockDeviceListToMap(bdList *diskv1.BlockDeviceList) map[string]*diskv1.BlockDevice {
-	bds := make([]*diskv1.BlockDevice, 0, len(bdList.Items))
+	bdMap := make(map[string]*diskv1.BlockDevice, len(bdList.Items))
 	for _, bd := range bdList.Items {
 		bd := bd
-		bds = append(bds, &bd)
-	}
-	return ConvertBlockDevicesToMap(bds)
-}
-
-// ConvertBlockDevicesToMap converts a BlockDeviceList to a map with GUID (Name) as keys.
-func ConvertBlockDevicesToMap(bds []*diskv1.BlockDevice) map[string]*diskv1.BlockDevice {
-	bdMap := make(map[string]*diskv1.BlockDevice, len(bds))
-	for _, bd := range bds {
-		bdMap[bd.Name] = bd
+		bdMap[bd.Name] = &bd
 	}
 	return bdMap
 }
@@ -456,51 +451,56 @@ func (c *Controller) unprovisionDeviceFromNode(device *diskv1.BlockDevice) error
 	return nil
 }
 
-// SaveBlockDevice persists the blockedevice information. If oldBds contains a
-// blockedevice under the same name (GUID), it will only do an update, otherwise
-// create a new one.
-//
-// Note that this method also activate the device if it's previously inactive.
-func (c *Controller) SaveBlockDevice(
-	bd *diskv1.BlockDevice,
-	oldBds map[string]*diskv1.BlockDevice,
-	autoProvisioned bool,
-) (*diskv1.BlockDevice, error) {
-	provision := func(bd *diskv1.BlockDevice) {
+// SaveBlockDevice persists the blockedevice information.
+func (c *Controller) SaveBlockDevice(bd *diskv1.BlockDevice, autoProvisioned bool) (*diskv1.BlockDevice, error) {
+	if autoProvisioned {
 		bd.Spec.FileSystem.ForceFormatted = true
 		bd.Spec.FileSystem.Provisioned = true
 		bd.Spec.FileSystem.MountPoint = fmt.Sprintf("/var/lib/harvester/extra-disks/%s", bd.Name)
 	}
-
-	if oldBd, ok := oldBds[bd.Name]; ok {
-		newStatus := bd.Status.DeviceStatus
-		oldStatus := oldBd.Status.DeviceStatus
-		lastFormatted := oldStatus.FileSystem.LastFormattedAt
-		if lastFormatted != nil && newStatus.FileSystem.LastFormattedAt == nil {
-			newStatus.FileSystem.LastFormattedAt = lastFormatted
-		}
-
-		// Only disk hasn't yet been formatted can be auto-provisioned.
-		autoProvisioned = autoProvisioned && lastFormatted == nil
-
-		if autoProvisioned || !reflect.DeepEqual(oldStatus, newStatus) || oldBd.Status.State != diskv1.BlockDeviceActive {
-			logrus.Infof("Update existing block device status %s with devPath: %s", oldBd.Name, oldBd.Spec.DevPath)
-			toUpdate := oldBd.DeepCopy()
-			toUpdate.Status.State = diskv1.BlockDeviceActive
-			toUpdate.Status.DeviceStatus = newStatus
-			if autoProvisioned {
-				provision(toUpdate)
-			}
-			return c.Blockdevices.Update(toUpdate)
-		}
-		return oldBd, nil
-	}
-
-	if autoProvisioned {
-		provision(bd)
-	}
 	logrus.Infof("Add new block device %s with device: %s", bd.Name, bd.Spec.DevPath)
 	return c.Blockdevices.Create(bd)
+}
+
+func (c *Controller) updateDeviceStatus(device *diskv1.BlockDevice, devPath string) error {
+	var newStatus diskv1.DeviceStatus
+	var needAutoProvision bool
+
+	switch device.Status.DeviceStatus.Details.DeviceType {
+	case diskv1.DeviceTypeDisk:
+		disk := c.BlockInfo.GetDiskByDevPath(devPath)
+		bd := GetDiskBlockDevice(disk, c.NodeName, c.Namespace)
+		newStatus = bd.Status.DeviceStatus
+		// Only disk can be auto-provisioned.
+		needAutoProvision = c.ApplyAutoProvisionFiltersForDisk(disk)
+	case diskv1.DeviceTypePart:
+		parentDevPath, err := block.GetParentDevName(devPath)
+		if err != nil {
+			return fmt.Errorf("failed to get parent devPath for %s: %v", device.Name, err)
+		}
+		part := c.BlockInfo.GetPartitionByDevPath(parentDevPath, devPath)
+		bd := GetPartitionBlockDevice(part, c.NodeName, c.Namespace)
+		newStatus = bd.Status.DeviceStatus
+	default:
+		return fmt.Errorf("unknown device type %s", device.Status.DeviceStatus.Details.DeviceType)
+	}
+
+	oldStatus := device.Status.DeviceStatus
+	lastFormatted := oldStatus.FileSystem.LastFormattedAt
+	if lastFormatted != nil && newStatus.FileSystem.LastFormattedAt == nil {
+		newStatus.FileSystem.LastFormattedAt = lastFormatted
+	}
+
+	if !reflect.DeepEqual(oldStatus, newStatus) {
+		logrus.Infof("Update existing block device status %s", device.Name)
+		device.Status.DeviceStatus = newStatus
+		if needAutoProvision && lastFormatted == nil {
+			device.Spec.FileSystem.ForceFormatted = true
+			device.Spec.FileSystem.Provisioned = true
+			device.Spec.FileSystem.MountPoint = fmt.Sprintf("/var/lib/harvester/extra-disks/%s", device.Name)
+		}
+	}
+	return nil
 }
 
 // OnBlockDeviceDelete will delete the block devices that belongs to the same parent device

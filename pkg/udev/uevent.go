@@ -6,14 +6,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"sync"
-	"time"
 
 	"github.com/pilebones/go-udev/netlink"
 	"github.com/sirupsen/logrus"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
@@ -22,10 +18,6 @@ import (
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	ctllonghornv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/option"
-)
-
-const (
-	defaultDuration time.Duration = 1
 )
 
 type Udev struct {
@@ -138,51 +130,23 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 			return
 		}
 		autoProvisioned := udevDevice.IsDisk() && u.controller.ApplyAutoProvisionFiltersForDisk(disk)
-		u.AddBlockDevice(bd, defaultDuration, autoProvisioned)
+		u.AddBlockDevice(bd, autoProvisioned)
 	case netlink.REMOVE:
 		if udevDevice.IsDisk() {
-			u.RemoveBlockDevice(bd, &udevDevice, disk, defaultDuration)
-		} else if udevDevice.IsPartition() {
-			u.deactivateBlockDevice(bd)
+			u.RemoveBlockDevice(bd, &udevDevice, disk)
 		}
 	}
 }
 
 // AddBlockDevice add new block device and partitions by watching the udev add action
-func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, duration time.Duration, autoProvisioned bool) {
-	if duration > defaultDuration {
-		time.Sleep(duration)
-	}
-
-	if device == nil || device.Name == "" {
-		logrus.Infof("Skip adding non-identifiable block device %s", device.Spec.DevPath)
-		return
-	}
-
-	logrus.Debugf("uevent add block deivce %s", device.Spec.DevPath)
-
-	bdList, err := u.controller.BlockdeviceCache.List(u.namespace, labels.SelectorFromSet(map[string]string{
-		v1.LabelHostname: u.nodeName,
-	}))
-	if err != nil {
-		logrus.Errorf("Failed to add block device via udev event, error: %s, retry in %s", err.Error(), 2*duration)
-		u.AddBlockDevice(device, 2*duration, autoProvisioned)
-		return
-	}
-	oldBds := blockdevice.ConvertBlockDevicesToMap(bdList)
-
-	if _, err := u.controller.SaveBlockDevice(device, oldBds, autoProvisioned); err != nil {
+func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, autoProvisioned bool) {
+	if _, err := u.controller.SaveBlockDevice(device, autoProvisioned); err != nil {
 		logrus.Errorf("failed to save block device %s, error: %s", device.Name, err.Error())
-		//u.AddBlockDevice(device, 2*defaultDuration)
 	}
 }
 
 // RemoveBlockDevice will set the existing block device to detached state
-func (u *Udev) RemoveBlockDevice(device *v1beta1.BlockDevice, udevDevice *Device, disk *block.Disk, duration time.Duration) {
-	if duration > defaultDuration {
-		time.Sleep(duration)
-	}
-
+func (u *Udev) RemoveBlockDevice(device *v1beta1.BlockDevice, udevDevice *Device, disk *block.Disk) {
 	logrus.Debugf("uevent remove block deivce %s", device.Spec.DevPath)
 
 	udevDevice.updateDiskFromUdev(disk)
@@ -195,37 +159,8 @@ func (u *Udev) RemoveBlockDevice(device *v1beta1.BlockDevice, udevDevice *Device
 		return
 	}
 
-	err := u.controller.Blockdevices.Delete(u.namespace, device.Name, &metav1.DeleteOptions{})
-	if err != nil && errors.IsNotFound(err) {
-		logrus.Errorf("failed to delete block device, %s is not found", device.Name)
-	} else if err != nil {
+	if err := u.controller.Blockdevices.Delete(u.namespace, device.Name, &metav1.DeleteOptions{}); err != nil {
 		logrus.Errorf("failed to delete block device %s, error: %s", device.Name, err.Error())
-		u.RemoveBlockDevice(device, udevDevice, disk, 2*duration)
-	}
-}
-
-func (u *Udev) deactivateBlockDevice(device *v1beta1.BlockDevice) {
-	bd, err := u.controller.BlockdeviceCache.Get(u.namespace, device.Name)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Do nothing since the device has already be deleted.
-			return
-		}
-
-		logrus.Errorf("failed to deactivate block device %s, error: %s", device.Name, err.Error())
-		return
-	}
-	if bd.Status.State == v1beta1.BlockDeviceInactive {
-		// Already inactive. Skip...
-		return
-	}
-
-	logrus.Debugf("deactivate block deivce %s on path %s", bd.Name, bd.Spec.DevPath)
-
-	deviceCpy := bd.DeepCopy()
-	deviceCpy.Status.State = v1beta1.BlockDeviceInactive
-	if _, err := u.controller.Blockdevices.Update(deviceCpy); err != nil && !errors.IsNotFound(err) {
-		logrus.Errorf("failed to deactivate block device %s, error: %s", device.Name, err.Error())
 	}
 }
 
