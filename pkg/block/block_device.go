@@ -94,13 +94,13 @@ func (i *infoImpl) GetPartitionByDevPath(disk, part string) *Partition {
 
 func (i *infoImpl) GetFileSystemInfoByFsUUID(fsUUID string) *FileSystemInfo {
 	if fsUUID == "" {
-		return &FileSystemInfo{}
+		return nil
 	}
 	// Resolve the symlink to the special block device file
 	dname, err := filepath.EvalSymlinks("/dev/disk/by-uuid/" + fsUUID)
 	if err != nil {
 		logrus.Errorf("failed to get filesystem info for UUID %s: %s", fsUUID, err.Error())
-		return &FileSystemInfo{}
+		return nil
 	}
 	paths := linuxpath.New(i.ctx)
 	mp, pt, ro := partitionInfo(i.ctx, paths, dname)
