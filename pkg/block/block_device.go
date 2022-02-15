@@ -93,7 +93,6 @@ func (i *infoImpl) GetPartitionByDevPath(disk, part string) *Partition {
 }
 
 func (i *infoImpl) GetFileSystemInfoByDevPath(dname string) *FileSystemInfo {
-	dname = strings.TrimPrefix(dname, "/dev/")
 	paths := linuxpath.New(i.ctx)
 	mp, pt, ro := partitionInfo(i.ctx, paths, dname)
 	return &FileSystemInfo{

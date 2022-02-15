@@ -13,7 +13,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
@@ -142,7 +141,7 @@ func (c *Controller) ScanBlockDevicesOnNode() error {
 		}
 	}
 
-	oldBdList, err := c.Blockdevices.List(c.Namespace, v1.ListOptions{
+	oldBdList, err := c.Blockdevices.List(c.Namespace, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", corev1.LabelHostname, c.NodeName),
 	})
 	if err != nil {
