@@ -41,7 +41,7 @@ type Info interface {
 	GetPartitions() []*Partition
 	GetDiskByDevPath(name string) *Disk
 	GetPartitionByDevPath(disk, part string) *Partition
-	GetFileSystemInfoByFsUUID(dname string) *FileSystemInfo
+	GetFileSystemInfoByDevPath(dname string) *FileSystemInfo
 }
 
 type infoImpl struct {
@@ -92,16 +92,8 @@ func (i *infoImpl) GetPartitionByDevPath(disk, part string) *Partition {
 	return partition
 }
 
-func (i *infoImpl) GetFileSystemInfoByFsUUID(fsUUID string) *FileSystemInfo {
-	if fsUUID == "" {
-		return nil
-	}
-	// Resolve the symlink to the special block device file
-	dname, err := filepath.EvalSymlinks("/dev/disk/by-uuid/" + fsUUID)
-	if err != nil {
-		logrus.Errorf("failed to get filesystem info for UUID %s: %s", fsUUID, err.Error())
-		return nil
-	}
+func (i *infoImpl) GetFileSystemInfoByDevPath(dname string) *FileSystemInfo {
+	dname = strings.TrimPrefix(dname, "/dev/")
 	paths := linuxpath.New(i.ctx)
 	mp, pt, ro := partitionInfo(i.ctx, paths, dname)
 	return &FileSystemInfo{
