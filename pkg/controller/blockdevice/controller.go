@@ -604,6 +604,9 @@ func resolvePersistentDevPath(device *diskv1.BlockDevice) (string, error) {
 		if wwn == "" {
 			return "", fmt.Errorf("WWN not found on device %s", device.Name)
 		}
+		if device.Status.DeviceStatus.Details.StorageController == string(diskv1.StorageControllerNVMe) {
+			return filepath.EvalSymlinks("/dev/disk/by-id/nvme-" + wwn)
+		}
 		return filepath.EvalSymlinks("/dev/disk/by-id/wwn-" + wwn)
 	case diskv1.DeviceTypePart:
 		partUUID := device.Status.DeviceStatus.Details.PartUUID
