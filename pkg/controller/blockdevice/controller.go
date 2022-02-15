@@ -117,7 +117,7 @@ func (c *Controller) ScanBlockDevicesOnNode() error {
 		bd := GetDiskBlockDevice(disk, c.NodeName, c.Namespace)
 
 		if bd == nil {
-			logrus.Infof("Skip adding non-identifiable block device %s", bd.Spec.DevPath)
+			logrus.Infof("Skip adding non-identifiable block device /dev/%s", disk.Name)
 			continue
 		}
 

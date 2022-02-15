@@ -153,12 +153,13 @@ func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, duration time.Duratio
 	if duration > defaultDuration {
 		time.Sleep(duration)
 	}
-	logrus.Debugf("uevent add block deivce %s", device.Spec.DevPath)
 
 	if device == nil || device.Name == "" {
 		logrus.Infof("Skip adding non-identifiable block device %s", device.Spec.DevPath)
 		return
 	}
+
+	logrus.Debugf("uevent add block deivce %s", device.Spec.DevPath)
 
 	bdList, err := u.controller.BlockdeviceCache.List(u.namespace, labels.SelectorFromSet(map[string]string{
 		v1.LabelHostname: u.nodeName,
