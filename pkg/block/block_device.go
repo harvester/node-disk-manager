@@ -329,12 +329,19 @@ func getDisk(ctx *context.Context, paths *linuxpath.Paths, dname string) *Disk {
 		IsReadOnly: ro,
 	}
 
+	var label string
+	if uuid != "" {
+		// Only disk with ext4 filesystem UUID can have a label
+		label = GetFileSystemLabel(dname)
+	}
+
 	if fs.Type == "" {
 		fs.Type = GetFileSystemType(dname)
 	}
 
 	d := &Disk{
 		Name:                   dname,
+		Label:                  label,
 		SizeBytes:              size,
 		PhysicalBlockSizeBytes: pbs,
 		DriveType:              driveType,
