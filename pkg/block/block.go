@@ -10,6 +10,7 @@ import (
 // raw block storage resources.
 type Disk struct {
 	Name                   string                  `json:"name"`
+	Label                  string                  `json:"label"`
 	SizeBytes              uint64                  `json:"size_bytes"`
 	PhysicalBlockSizeBytes uint64                  `json:"physical_block_size_bytes"`
 	DriveType              block.DriveType         `json:"drive_type"`
