@@ -37,24 +37,15 @@ func RegisterLabelFilter(filters ...string) *Filter {
 
 // Match returns true if filesystem label matches the pattern
 func (f *partLabelFilter) Match(part *block.Partition) bool {
-	for _, pattern := range f.labels {
-		if pattern == "" || part.Label == "" {
-			return false
-		}
-		ok, err := filepath.Match(pattern, part.Label)
-		if err != nil {
-			logrus.Errorf("failed to perform filesystem label matching on disk %s for pattern %s: %s", part.Name, pattern, err.Error())
-			return false
-		}
-		if ok {
-			return true
-		}
-	}
-	return false
+	return matchDevLabel(part.Label, part.Name, f.labels)
 }
 
 // Match returns true if all partitions of the disk match.
 func (f *diskLabelFilter) Match(disk *block.Disk) bool {
+	if matchDevLabel(disk.Label, disk.Name, f.filter.labels) {
+		return true
+	}
+
 	if len(disk.Partitions) > 0 {
 		for _, part := range disk.Partitions {
 			if !f.filter.Match(part) {
@@ -62,6 +53,23 @@ func (f *diskLabelFilter) Match(disk *block.Disk) bool {
 			}
 		}
 		return true
+	}
+	return false
+}
+
+func matchDevLabel(devLabel, devName string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if pattern == "" || devLabel == "" {
+			return false
+		}
+		ok, err := filepath.Match(pattern, devLabel)
+		if err != nil {
+			logrus.Errorf("failed to perform filesystem label matching on disk %s for pattern %s: %s", devName, pattern, err.Error())
+			return false
+		}
+		if ok {
+			return true
+		}
 	}
 	return false
 }
