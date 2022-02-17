@@ -43,7 +43,7 @@ func (f *partDevicePathFilter) Match(part *block.Partition) bool {
 	if devPath == "" {
 		return false
 	}
-	return match(devPath, f.filter.devicePaths)
+	return matchDevPath(devPath, f.filter.devicePaths)
 }
 
 // Match returns true if given device path matches the pattern.
@@ -52,10 +52,10 @@ func (f *diskDevicePathFilter) Match(disk *block.Disk) bool {
 	if devPath == "" {
 		return false
 	}
-	return match(devPath, f.devicePaths)
+	return matchDevPath(devPath, f.devicePaths)
 }
 
-func match(devPath string, patterns []string) bool {
+func matchDevPath(devPath string, patterns []string) bool {
 	for _, pattern := range patterns {
 		if pattern == "" || devPath == "" {
 			return false

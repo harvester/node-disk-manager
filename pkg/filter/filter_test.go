@@ -81,6 +81,7 @@ func Test_devicePathFilter(t *testing.T) {
 func Test_labelFilter(t *testing.T) {
 	type input struct {
 		part   *block.Partition
+		disk   *block.Disk
 		labels []string
 	}
 	var testCases = []struct {
@@ -89,9 +90,12 @@ func Test_labelFilter(t *testing.T) {
 		expected bool
 	}{
 		{
-			name: "valid partition and matched label",
+			name: "valid label and matched label pattern",
 			given: input{
 				part: &block.Partition{
+					Label: "match",
+				},
+				disk: &block.Disk{
 					Label: "match",
 				},
 				labels: []string{"match"},
@@ -99,17 +103,21 @@ func Test_labelFilter(t *testing.T) {
 			expected: true,
 		},
 		{
-			name: "empty partition and matched label",
+			name: "empty label and matched label pattern",
 			given: input{
 				part:   &block.Partition{},
+				disk:   &block.Disk{},
 				labels: []string{"match"},
 			},
 			expected: false,
 		},
 		{
-			name: "valid partition and empty label",
+			name: "valid label and empty label pattern",
 			given: input{
 				part: &block.Partition{
+					Label: "match",
+				},
+				disk: &block.Disk{
 					Label: "match",
 				},
 				labels: nil,
@@ -117,9 +125,12 @@ func Test_labelFilter(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "valid partition and valid label but mismatch",
+			name: "valid label and valid label pattern but mismatch",
 			given: input{
 				part: &block.Partition{
+					Label: "match",
+				},
+				disk: &block.Disk{
 					Label: "match",
 				},
 				labels: []string{"mismatch"},
@@ -127,12 +138,59 @@ func Test_labelFilter(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "glob",
+			name: "glob pattern",
 			given: input{
 				part: &block.Partition{
 					Label: "match",
 				},
+				disk: &block.Disk{
+					Label: "match",
+				},
 				labels: []string{"m*c?"},
+			},
+			expected: true,
+		},
+		{
+			name: "all partition labels matched",
+			given: input{
+				disk: &block.Disk{
+					Partitions: []*block.Partition{
+						{Label: "match"},
+						{Label: "match"},
+						{Label: "match"},
+					},
+				},
+				labels: []string{"match"},
+			},
+			expected: true,
+		},
+		{
+			name: "one partition label not matched",
+			given: input{
+				disk: &block.Disk{
+					Partitions: []*block.Partition{
+						{Label: "match"},
+						{Label: "match"},
+						{Label: "mismatch"},
+					},
+				},
+				labels: []string{"match"},
+			},
+			expected: false,
+		},
+		{
+			// NOTE: This should happen in real world case
+			name: "none partition label matched but disk label matches",
+			given: input{
+				disk: &block.Disk{
+					Label: "match",
+					Partitions: []*block.Partition{
+						{Label: "mismatch"},
+						{Label: "mismatch"},
+						{Label: "mismatch"},
+					},
+				},
+				labels: []string{"match"},
 			},
 			expected: true,
 		},
@@ -141,8 +199,14 @@ func Test_labelFilter(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			filter := RegisterLabelFilter(tc.given.labels...)
-			result := filter.ApplyPartFilter(tc.given.part)
-			assert.Equal(t, tc.expected, result)
+			if tc.given.part != nil {
+				result := filter.ApplyPartFilter(tc.given.part)
+				assert.Equal(t, tc.expected, result)
+			}
+			if tc.given.disk != nil {
+				result := filter.ApplyDiskFilter(tc.given.disk)
+				assert.Equal(t, tc.expected, result)
+			}
 		})
 	}
 }
