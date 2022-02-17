@@ -271,8 +271,8 @@ func ConvertBlockDevicesToMap(bds []*diskv1.BlockDevice) map[string]*diskv1.Bloc
 
 func (c *Controller) updateDeviceMount(device *diskv1.BlockDevice, devPath string, filesystem *block.FileSystemInfo) error {
 	expectedMountPoint := device.Spec.FileSystem.MountPoint
-	if expectedMountPoint != "" && device.Status.DeviceStatus.Partitioned && diskv1.DeviceMounted.IsTrue(device) {
-		return fmt.Errorf("cannot mount parent device with partitions")
+	if expectedMountPoint != "" && device.Status.DeviceStatus.Partitioned {
+		return fmt.Errorf("cannot mount device with partitions")
 	}
 	// umount the previous path if exist
 	if filesystem != nil && filesystem.MountPoint != "" {
