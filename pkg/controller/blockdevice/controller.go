@@ -101,7 +101,6 @@ func Register(
 func (c *Controller) ScanBlockDevicesOnNode() error {
 	logrus.Debugf("Scan block devices of node: %s", c.NodeName)
 	newBds := make([]*diskv1.BlockDevice, 0)
-
 	autoProvisionedMap := make(map[string]bool, 0)
 
 	// list all the block devices
@@ -110,11 +109,9 @@ func (c *Controller) ScanBlockDevicesOnNode() error {
 		if c.ApplyExcludeFiltersForDisk(disk) {
 			continue
 		}
-
 		logrus.Debugf("Found a disk block device /dev/%s", disk.Name)
 
 		bd := GetDiskBlockDevice(disk, c.NodeName, c.Namespace)
-
 		if bd == nil {
 			logrus.Infof("Skip adding non-identifiable block device /dev/%s", disk.Name)
 			continue
@@ -155,7 +152,7 @@ func (c *Controller) ScanBlockDevicesOnNode() error {
 			delete(oldBds, bd.Name)
 		} else {
 			// persist newly detected block device
-			if _, err := c.SaveBlockDevice(bd, autoProvisionedMap[bd.Name]); err != nil {
+			if _, err := c.SaveBlockDevice(bd, autoProvisionedMap[bd.Name]); err != nil && !errors.IsAlreadyExists(err) {
 				return err
 			}
 		}
@@ -164,7 +161,7 @@ func (c *Controller) ScanBlockDevicesOnNode() error {
 	// This oldBds are leftover after running SaveBlockDevice.
 	// Clean up all previous registered block devices.
 	for _, oldBd := range oldBds {
-		if err := c.Blockdevices.Delete(oldBd.Namespace, oldBd.Name, &metav1.DeleteOptions{}); err != nil {
+		if err := c.Blockdevices.Delete(oldBd.Namespace, oldBd.Name, &metav1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
 			return err
 		}
 	}
