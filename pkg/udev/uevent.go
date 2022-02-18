@@ -9,6 +9,7 @@ import (
 
 	"github.com/pilebones/go-udev/netlink"
 	"github.com/sirupsen/logrus"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
@@ -101,16 +102,16 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 	var disk *block.Disk
 	var part *block.Partition
 	var bd *v1beta1.BlockDevice
+	devPath := udevDevice.GetDevName()
 	if udevDevice.IsDisk() {
-		disk = u.controller.BlockInfo.GetDiskByDevPath(udevDevice.GetShortName())
+		disk = u.controller.BlockInfo.GetDiskByDevPath(devPath)
 		bd = blockdevice.GetDiskBlockDevice(disk, u.nodeName, u.namespace)
 	} else {
-		parentPath, err := block.GetParentDevName(udevDevice.GetDevName())
-		logrus.Infof("debug: parent path %s", parentPath)
+		parentPath, err := block.GetParentDevName(devPath)
 		if err != nil {
 			logrus.Errorf("failed to get parent dev name, %s", err.Error())
 		}
-		part = u.controller.BlockInfo.GetPartitionByDevPath(parentPath, udevDevice.GetDevName())
+		part = u.controller.BlockInfo.GetPartitionByDevPath(parentPath, devPath)
 		disk = part.Disk
 		bd = blockdevice.GetPartitionBlockDevice(part, u.nodeName, u.namespace)
 	}
@@ -125,7 +126,7 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 
 	switch uevent.Action {
 	case netlink.ADD:
-		if len(bd.Name) == 0 {
+		if bd.Name == "" {
 			logrus.Infof("Skip adding non-identifiable block device %s", bd.Spec.DevPath)
 			return
 		}
@@ -140,7 +141,8 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 
 // AddBlockDevice add new block device and partitions by watching the udev add action
 func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, autoProvisioned bool) {
-	if _, err := u.controller.SaveBlockDevice(device, autoProvisioned); err != nil {
+	_, err := u.controller.SaveBlockDevice(device, autoProvisioned)
+	if err != nil && !apierrors.IsAlreadyExists(err) {
 		logrus.Errorf("failed to save block device %s, error: %s", device.Name, err.Error())
 	}
 }
@@ -159,7 +161,8 @@ func (u *Udev) RemoveBlockDevice(device *v1beta1.BlockDevice, udevDevice *Device
 		return
 	}
 
-	if err := u.controller.Blockdevices.Delete(u.namespace, device.Name, &metav1.DeleteOptions{}); err != nil {
+	err := u.controller.Blockdevices.Delete(u.namespace, device.Name, &metav1.DeleteOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
 		logrus.Errorf("failed to delete block device %s, error: %s", device.Name, err.Error())
 	}
 }
