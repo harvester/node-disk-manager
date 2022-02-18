@@ -19,7 +19,7 @@ func HasPartitions(disk *Disk) bool {
 func GetFileSystemLabel(devPath string) string {
 	result, err := lsblk(devPath, "label")
 	if err != nil {
-		logrus.Warnf(err.Error())
+		logrus.Debugf(err.Error())
 	}
 	return result
 }
@@ -27,7 +27,7 @@ func GetFileSystemLabel(devPath string) string {
 func GetPartType(devPath string) string {
 	result, err := lsblk(devPath, "parttype")
 	if err != nil {
-		logrus.Warnf(err.Error())
+		logrus.Debugf(err.Error())
 	}
 	return result
 }

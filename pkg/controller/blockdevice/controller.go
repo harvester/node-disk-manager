@@ -99,7 +99,7 @@ func Register(
 
 // ScanBlockDevicesOnNode scans block devices on the node, and it will either create or update them.
 func (c *Controller) ScanBlockDevicesOnNode() error {
-	logrus.Infof("Scan block devices of node: %s", c.NodeName)
+	logrus.Debugf("Scan block devices of node: %s", c.NodeName)
 	newBds := make([]*diskv1.BlockDevice, 0)
 
 	autoProvisionedMap := make(map[string]bool, 0)
@@ -403,7 +403,7 @@ func (c *Controller) unprovisionDeviceFromNode(device *diskv1.BlockDevice) error
 
 	diskToRemove, ok := node.Spec.Disks[device.Name]
 	if !ok {
-		logrus.Errorf("disk %s not in disks of longhorn node %s/%s", device.Name, c.Namespace, c.NodeName)
+		logrus.Infof("disk %s not in disks of longhorn node %s/%s", device.Name, c.Namespace, c.NodeName)
 		updateProvisionPhaseUnprovisioned()
 		return nil
 	}
