@@ -19,7 +19,7 @@ func GetFileSystemType(part string) string {
 	}
 	out, err := exec.Command(args[0], args[1:]...).Output()
 	if err != nil {
-		logrus.Warnf("failed to read disk uuid of %s : %s\n", part, err.Error())
+		logrus.Debugf("failed to read disk uuid of %s : %s\n", part, err.Error())
 		return ""
 	}
 
@@ -29,7 +29,7 @@ func GetFileSystemType(part string) string {
 
 	parts := strings.Split(string(out), "TYPE=")
 	if len(parts) != 2 {
-		logrus.Warnf("failed to parse the type of %s\n", part)
+		logrus.Debugf("failed to parse the type of %s\n", part)
 		return ""
 	}
 
@@ -48,7 +48,7 @@ func GetDiskUUID(part string, uuidType string) string {
 	}
 	out, err := exec.Command(args[0], args[1:]...).Output()
 	if err != nil {
-		logrus.Warnf("failed to read disk uuid of %s : %s\n", part, err.Error())
+		logrus.Debugf("failed to read disk uuid of %s : %s\n", part, err.Error())
 		return ""
 	}
 
@@ -58,7 +58,7 @@ func GetDiskUUID(part string, uuidType string) string {
 
 	parts := strings.Split(string(out), "UUID=")
 	if len(parts) != 2 {
-		logrus.Warnf("failed to parse the uuid of %s\n", part)
+		logrus.Debugf("failed to parse the uuid of %s\n", part)
 		return ""
 	}
 

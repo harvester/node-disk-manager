@@ -271,8 +271,11 @@ func diskPartition(ctx *context.Context, paths *linuxpath.Paths, disk, fname str
 	mp, pt, ro := partitionInfo(ctx, paths, fname)
 	du := GetDiskUUID(fname, string(PartUUID))
 	fsUUID := GetDiskUUID(fname, string(UUID))
+	var label string
+	if fsUUID != "" {
+		label = GetFileSystemLabel(fname)
+	}
 	driveType, storageController := diskTypes(fname)
-	label := GetFileSystemLabel(fname)
 	partType := GetPartType(fname)
 	return &Partition{
 		Name:      fname,
@@ -545,7 +548,7 @@ func GeneratePartitionGUID(part *Partition, nodeName string) string {
 	if valueExists(part.UUID) {
 		return makeHashGUID(nodeName + part.UUID)
 	}
-	logrus.Warnf("failed to generate GUID for device %s", part.Name)
+	logrus.Debugf("failed to generate GUID for device %s", part.Name)
 	return ""
 }
 
@@ -562,7 +565,7 @@ func GenerateDiskGUID(disk *Disk, nodeName string) string {
 	if valueExists(id) {
 		return makeHashGUID(nodeName + id)
 	}
-	logrus.Warnf("failed to generate GUID for device %s", disk.Name)
+	logrus.Debugf("failed to generate GUID for device %s", disk.Name)
 	return ""
 }
 
