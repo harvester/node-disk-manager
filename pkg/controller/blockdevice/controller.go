@@ -352,8 +352,9 @@ func (c *Controller) updateDeviceStatus(device *diskv1.BlockDevice, devPath stri
 		disk := c.BlockInfo.GetDiskByDevPath(devPath)
 		bd := GetDiskBlockDevice(disk, c.NodeName, c.Namespace)
 		newStatus = bd.Status.DeviceStatus
+		autoProvisioned := c.scanner.ApplyAutoProvisionFiltersForDisk(disk)
 		// Only disk can be auto-provisioned.
-		needAutoProvision = !device.Spec.FileSystem.Provisioned && c.scanner.ApplyAutoProvisionFiltersForDisk(disk)
+		needAutoProvision = c.scanner.NeedsAutoProvision(device, autoProvisioned)
 	case diskv1.DeviceTypePart:
 		parentDevPath, err := block.GetParentDevName(devPath)
 		if err != nil {
@@ -376,7 +377,8 @@ func (c *Controller) updateDeviceStatus(device *diskv1.BlockDevice, devPath stri
 		logrus.Infof("Update existing block device status %s", device.Name)
 		device.Status.DeviceStatus = newStatus
 	}
-	if needAutoProvision && lastFormatted == nil {
+	// Only disk hasn't yet been formatted can be auto-provisioned.
+	if needAutoProvision {
 		logrus.Infof("Auto provisioning block device %s", device.Name)
 		device.Spec.FileSystem.ForceFormatted = true
 		device.Spec.FileSystem.Provisioned = true
