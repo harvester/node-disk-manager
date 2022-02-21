@@ -18,7 +18,6 @@ import (
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
 	"github.com/harvester/node-disk-manager/pkg/disk"
-	"github.com/harvester/node-disk-manager/pkg/filter"
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	ctllonghornv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/option"
@@ -27,7 +26,6 @@ import (
 
 const (
 	blockDeviceHandlerName = "harvester-block-device-handler"
-	defaultRescanInterval  = 30 * time.Second
 	enqueueDelay           = 10 * time.Second
 )
 
@@ -41,9 +39,8 @@ type Controller struct {
 	Blockdevices     ctldiskv1.BlockDeviceController
 	BlockdeviceCache ctldiskv1.BlockDeviceCache
 	BlockInfo        block.Info
-	ExcludeFilters   []*filter.Filter
 
-	AutoProvisionFilters []*filter.Filter
+	scanner *Scanner
 }
 
 // Register register the block device CRD controller
@@ -53,127 +50,25 @@ func Register(
 	bds ctldiskv1.BlockDeviceController,
 	block block.Info,
 	opt *option.Option,
-	excludeFilters []*filter.Filter,
-	autoProvisionFilters []*filter.Filter,
+	scanner *Scanner,
 ) error {
 	controller := &Controller{
-		Namespace:            opt.Namespace,
-		NodeName:             opt.NodeName,
-		NodeCache:            nodes.Cache(),
-		Nodes:                nodes,
-		Blockdevices:         bds,
-		BlockdeviceCache:     bds.Cache(),
-		BlockInfo:            block,
-		ExcludeFilters:       excludeFilters,
-		AutoProvisionFilters: autoProvisionFilters,
+		Namespace:        opt.Namespace,
+		NodeName:         opt.NodeName,
+		NodeCache:        nodes.Cache(),
+		Nodes:            nodes,
+		Blockdevices:     bds,
+		BlockdeviceCache: bds.Cache(),
+		BlockInfo:        block,
+		scanner:          scanner,
 	}
 
-	if err := controller.ScanBlockDevicesOnNode(); err != nil {
+	if err := scanner.Start(ctx, time.Duration(opt.RescanInterval)); err != nil {
 		return err
 	}
-
-	// Rescan devices on the node periodically.
-	rescanInterval := defaultRescanInterval
-	if opt.RescanInterval > 0 {
-		rescanInterval = time.Duration(opt.RescanInterval) * time.Second
-	}
-	go func() {
-		ticker := time.NewTicker(rescanInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if err := controller.ScanBlockDevicesOnNode(); err != nil {
-					logrus.Errorf("Failed to rescan block devices on node %s: %v", controller.NodeName, err)
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
 
 	bds.OnChange(ctx, blockDeviceHandlerName, controller.OnBlockDeviceChange)
 	bds.OnRemove(ctx, blockDeviceHandlerName, controller.OnBlockDeviceDelete)
-	return nil
-}
-
-// ScanBlockDevicesOnNode scans block devices on the node, and it will either create or update them.
-func (c *Controller) ScanBlockDevicesOnNode() error {
-	logrus.Debugf("Scan block devices of node: %s", c.NodeName)
-	newBds := make([]*diskv1.BlockDevice, 0)
-	autoProvisionedMap := make(map[string]bool, 0)
-
-	// list all the block devices
-	for _, disk := range c.BlockInfo.GetDisks() {
-		// ignore block device by filters
-		if c.ApplyExcludeFiltersForDisk(disk) {
-			continue
-		}
-		logrus.Debugf("Found a disk block device /dev/%s", disk.Name)
-
-		bd := GetDiskBlockDevice(disk, c.NodeName, c.Namespace)
-		if bd == nil {
-			logrus.Infof("Skip adding non-identifiable block device /dev/%s", disk.Name)
-			continue
-		}
-
-		if c.ApplyAutoProvisionFiltersForDisk(disk) {
-			autoProvisionedMap[bd.Name] = true
-		}
-
-		newBds = append(newBds, bd)
-
-		for _, part := range disk.Partitions {
-			// ignore block device by filters
-			if c.ApplyExcludeFiltersForPartition(part) {
-				continue
-			}
-			logrus.Debugf("Found a partition block device /dev/%s", part.Name)
-			bd := GetPartitionBlockDevice(part, c.NodeName, c.Namespace)
-			if bd.Name == "" {
-				logrus.Infof("Skip adding non-identifiable block device %s", bd.Spec.DevPath)
-				continue
-			}
-			newBds = append(newBds, bd)
-		}
-	}
-
-	oldBdList, err := c.Blockdevices.List(c.Namespace, metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("%s=%s", corev1.LabelHostname, c.NodeName),
-	})
-	if err != nil {
-		return err
-	}
-
-	oldBds := convertBlockDeviceListToMap(oldBdList)
-	for _, bd := range newBds {
-		if oldBd, ok := oldBds[bd.Name]; ok {
-			// Only enqueue if auto-provisioned changes to enabled.
-			if !oldBd.Spec.FileSystem.Provisioned && autoProvisionedMap[bd.Name] {
-				logrus.Debugf("Enqueue block device %s for auto-provisioning", bd.Name)
-				c.Blockdevices.Enqueue(c.Namespace, bd.Name)
-			} else {
-				logrus.Debugf("Skip updating device %s", bd.Name)
-			}
-			// remove blockdevice from old device so we can delete missing devices afterward
-			delete(oldBds, bd.Name)
-		} else {
-			logrus.Debugf("Enqueue device %s for creation", bd.Name)
-			// persist newly detected block device
-			if _, err := c.SaveBlockDevice(bd, autoProvisionedMap[bd.Name]); err != nil && !errors.IsAlreadyExists(err) {
-				return err
-			}
-		}
-	}
-
-	// This oldBds are leftover after running SaveBlockDevice.
-	// Clean up all previous registered block devices.
-	for _, oldBd := range oldBds {
-		logrus.Debugf("Delete device %s", oldBd.Name)
-		if err := c.Blockdevices.Delete(oldBd.Namespace, oldBd.Name, &metav1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -259,15 +154,6 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 	}
 
 	return nil, nil
-}
-
-func convertBlockDeviceListToMap(bdList *diskv1.BlockDeviceList) map[string]*diskv1.BlockDevice {
-	bdMap := make(map[string]*diskv1.BlockDevice, len(bdList.Items))
-	for _, bd := range bdList.Items {
-		bd := bd
-		bdMap[bd.Name] = &bd
-	}
-	return bdMap
 }
 
 func (c *Controller) updateDeviceMount(device *diskv1.BlockDevice, devPath string, filesystem *block.FileSystemInfo) error {
@@ -457,17 +343,6 @@ func (c *Controller) unprovisionDeviceFromNode(device *diskv1.BlockDevice) error
 	return nil
 }
 
-// SaveBlockDevice persists the blockedevice information.
-func (c *Controller) SaveBlockDevice(bd *diskv1.BlockDevice, autoProvisioned bool) (*diskv1.BlockDevice, error) {
-	if autoProvisioned {
-		bd.Spec.FileSystem.ForceFormatted = true
-		bd.Spec.FileSystem.Provisioned = true
-		bd.Spec.FileSystem.MountPoint = fmt.Sprintf("/var/lib/harvester/extra-disks/%s", bd.Name)
-	}
-	logrus.Infof("Add new block device %s with device: %s", bd.Name, bd.Spec.DevPath)
-	return c.Blockdevices.Create(bd)
-}
-
 func (c *Controller) updateDeviceStatus(device *diskv1.BlockDevice, devPath string) error {
 	var newStatus diskv1.DeviceStatus
 	var needAutoProvision bool
@@ -478,7 +353,7 @@ func (c *Controller) updateDeviceStatus(device *diskv1.BlockDevice, devPath stri
 		bd := GetDiskBlockDevice(disk, c.NodeName, c.Namespace)
 		newStatus = bd.Status.DeviceStatus
 		// Only disk can be auto-provisioned.
-		needAutoProvision = !device.Spec.FileSystem.Provisioned && c.ApplyAutoProvisionFiltersForDisk(disk)
+		needAutoProvision = !device.Spec.FileSystem.Provisioned && c.scanner.ApplyAutoProvisionFiltersForDisk(disk)
 	case diskv1.DeviceTypePart:
 		parentDevPath, err := block.GetParentDevName(devPath)
 		if err != nil {
@@ -563,45 +438,6 @@ func (c *Controller) OnBlockDeviceDelete(key string, device *diskv1.BlockDevice)
 	}
 
 	return nil, nil
-}
-
-// ApplyExcludeFiltersForPartition check the status of disk for every
-// registered exclude filters. If the disk meets one of the criteria, it
-// returns true.
-func (c *Controller) ApplyExcludeFiltersForDisk(disk *block.Disk) bool {
-	for _, filter := range c.ExcludeFilters {
-		if filter.ApplyDiskFilter(disk) {
-			logrus.Debugf("block device /dev/%s ignored by %s", disk.Name, filter.Name)
-			return true
-		}
-	}
-	return false
-}
-
-// ApplyExcludeFiltersForPartition check the status of partition for every
-// registered exclude filters. If the partition meets one of the criteria, it
-// returns true.
-func (c *Controller) ApplyExcludeFiltersForPartition(part *block.Partition) bool {
-	for _, filter := range c.ExcludeFilters {
-		if filter.ApplyPartFilter(part) {
-			logrus.Debugf("block device /dev/%s ignored by %s", part.Name, filter.Name)
-			return true
-		}
-	}
-	return false
-}
-
-// ApplyAutoProvisionFiltersForDisk check the status of disk for every
-// registered auto-provision filters. If the disk meets one of the criteria, it
-// returns true.
-func (c *Controller) ApplyAutoProvisionFiltersForDisk(disk *block.Disk) bool {
-	for _, filter := range c.AutoProvisionFilters {
-		if filter.ApplyDiskFilter(disk) {
-			logrus.Debugf("block device /dev/%s is promoted to auto-provision by %s", disk.Name, filter.Name)
-			return true
-		}
-	}
-	return false
 }
 
 func resolvePersistentDevPath(device *diskv1.BlockDevice) (string, error) {

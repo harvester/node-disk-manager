@@ -195,23 +195,28 @@ func run(opt *option.Option) error {
 	autoProvisionFilters := filter.SetAutoProvisionFilters(opt.AutoProvisionFilter)
 
 	start := func(ctx context.Context) {
-		if err := blockdevicev1.Register(
-			ctx, lhs.Longhorn().V1beta1().Node(),
-			disks.Harvesterhci().V1beta1().BlockDevice(),
+		bds := disks.Harvesterhci().V1beta1().BlockDevice()
+		nodes := lhs.Longhorn().V1beta1().Node()
+		scanner := blockdevicev1.NewScanner(
+			opt.NodeName,
+			opt.Namespace,
+			bds,
 			block,
-			opt,
 			excludeFilters,
 			autoProvisionFilters,
+		)
+		if err := blockdevicev1.Register(
+			ctx,
+			nodes,
+			bds,
+			block,
+			opt,
+			scanner,
 		); err != nil {
 			logrus.Fatalf("failed to register block device controller, %s", err.Error())
 		}
 
-		if err := nodev1.Register(
-			ctx,
-			lhs.Longhorn().V1beta1().Node(),
-			disks.Harvesterhci().V1beta1().BlockDevice(),
-			opt,
-		); err != nil {
+		if err := nodev1.Register(ctx, nodes, bds, opt); err != nil {
 			logrus.Fatalf("failed to register ndm node controller, %s", err.Error())
 		}
 
@@ -224,14 +229,7 @@ func run(opt *option.Option) error {
 		// 2. add node actions, i.e. block device rescan
 
 		// register to monitor the UDEV events, similar to run `udevadm monitor -u`
-		go udev.NewUdev(
-			lhs.Longhorn().V1beta1().Node(),
-			disks.Harvesterhci().V1beta1().BlockDevice(),
-			block,
-			opt,
-			excludeFilters,
-			autoProvisionFilters,
-		).Monitor(ctx)
+		go udev.NewUdev(opt, scanner).Monitor(ctx)
 	}
 
 	start(ctx)
