@@ -129,8 +129,7 @@ func (s *Scanner) scanBlockDevicesOnNode() error {
 		bd := device.bd
 		autoProvisioned := device.AutoProvisioned
 		if oldBd, ok := oldBds[bd.Name]; ok {
-			// Only enqueue if auto-provisioned changes to enabled.
-			if !oldBd.Spec.FileSystem.Provisioned && autoProvisioned {
+			if s.NeedsAutoProvision(oldBd, autoProvisioned) {
 				logrus.Debugf("Enqueue block device %s for auto-provisioning", bd.Name)
 				s.Blockdevices.Enqueue(s.Namespace, bd.Name)
 			} else {
@@ -139,7 +138,7 @@ func (s *Scanner) scanBlockDevicesOnNode() error {
 			// remove blockdevice from old device so we can delete missing devices afterward
 			delete(oldBds, bd.Name)
 		} else {
-			logrus.Debugf("Enqueue device %s for creation", bd.Name)
+			logrus.Debugf("Create new device %s", bd.Name)
 			// persist newly detected block device
 			if _, err := s.SaveBlockDevice(bd, autoProvisioned); err != nil && !errors.IsAlreadyExists(err) {
 				return err
@@ -215,4 +214,14 @@ func (s *Scanner) SaveBlockDevice(bd *diskv1.BlockDevice, autoProvisioned bool) 
 	}
 	logrus.Infof("Add new block device %s with device: %s", bd.Name, bd.Spec.DevPath)
 	return s.Blockdevices.Create(bd)
+}
+
+// NeedsAutoProvision returns true if the current block device needs to be auto-provisioned.
+//
+// Criteria:
+// - disk hasn't yet set to provisioned
+// - disk hasn't yet been force formatted
+// - disk matches auto-provisioned patterns
+func (s *Scanner) NeedsAutoProvision(oldBd *diskv1.BlockDevice, autoProvisionPatternMatches bool) bool {
+	return !oldBd.Spec.FileSystem.Provisioned && autoProvisionPatternMatches && oldBd.Status.DeviceStatus.FileSystem.LastFormattedAt == nil
 }
