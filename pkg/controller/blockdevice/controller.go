@@ -147,10 +147,18 @@ func (c *Controller) ScanBlockDevicesOnNode() error {
 
 	oldBds := convertBlockDeviceListToMap(oldBdList)
 	for _, bd := range newBds {
-		if _, ok := oldBds[bd.Name]; ok {
+		if oldBd, ok := oldBds[bd.Name]; ok {
+			// Only enqueue if auto-provisioned changes to enabled.
+			if !oldBd.Spec.FileSystem.Provisioned && autoProvisionedMap[bd.Name] {
+				logrus.Debugf("Enqueue block device %s for auto-provisioning", bd.Name)
+				c.Blockdevices.Enqueue(c.Namespace, bd.Name)
+			} else {
+				logrus.Debugf("Skip updating device %s", bd.Name)
+			}
 			// remove blockdevice from old device so we can delete missing devices afterward
 			delete(oldBds, bd.Name)
 		} else {
+			logrus.Debugf("Enqueue device %s for creation", bd.Name)
 			// persist newly detected block device
 			if _, err := c.SaveBlockDevice(bd, autoProvisionedMap[bd.Name]); err != nil && !errors.IsAlreadyExists(err) {
 				return err
@@ -161,6 +169,7 @@ func (c *Controller) ScanBlockDevicesOnNode() error {
 	// This oldBds are leftover after running SaveBlockDevice.
 	// Clean up all previous registered block devices.
 	for _, oldBd := range oldBds {
+		logrus.Debugf("Delete device %s", oldBd.Name)
 		if err := c.Blockdevices.Delete(oldBd.Namespace, oldBd.Name, &metav1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
 			return err
 		}
@@ -469,7 +478,7 @@ func (c *Controller) updateDeviceStatus(device *diskv1.BlockDevice, devPath stri
 		bd := GetDiskBlockDevice(disk, c.NodeName, c.Namespace)
 		newStatus = bd.Status.DeviceStatus
 		// Only disk can be auto-provisioned.
-		needAutoProvision = c.ApplyAutoProvisionFiltersForDisk(disk)
+		needAutoProvision = !device.Spec.FileSystem.Provisioned && c.ApplyAutoProvisionFiltersForDisk(disk)
 	case diskv1.DeviceTypePart:
 		parentDevPath, err := block.GetParentDevName(devPath)
 		if err != nil {
@@ -491,11 +500,12 @@ func (c *Controller) updateDeviceStatus(device *diskv1.BlockDevice, devPath stri
 	if !reflect.DeepEqual(oldStatus, newStatus) {
 		logrus.Infof("Update existing block device status %s", device.Name)
 		device.Status.DeviceStatus = newStatus
-		if needAutoProvision && lastFormatted == nil {
-			device.Spec.FileSystem.ForceFormatted = true
-			device.Spec.FileSystem.Provisioned = true
-			device.Spec.FileSystem.MountPoint = fmt.Sprintf("/var/lib/harvester/extra-disks/%s", device.Name)
-		}
+	}
+	if needAutoProvision && lastFormatted == nil {
+		logrus.Infof("Auto provisioning block device %s", device.Name)
+		device.Spec.FileSystem.ForceFormatted = true
+		device.Spec.FileSystem.Provisioned = true
+		device.Spec.FileSystem.MountPoint = fmt.Sprintf("/var/lib/harvester/extra-disks/%s", device.Name)
 	}
 	return nil
 }
