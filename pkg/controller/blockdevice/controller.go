@@ -107,9 +107,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 		return device, err
 	}
 
-	// mount device by path, and skip mount partitioned device
-	needUpdateMount := filesystem != nil && filesystem.MountPoint != deviceCpy.Spec.FileSystem.MountPoint
-	if needUpdateMount {
+	if needUpdateMountPoint(deviceCpy, filesystem) {
 		err := c.updateDeviceMount(deviceCpy, devPath, filesystem)
 		if err != nil {
 			err := fmt.Errorf("failed to update device mount %s: %s", device.Name, err.Error())
@@ -123,11 +121,11 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 		return device, err
 	}
 
-	needProvision := deviceCpy.Spec.FileSystem.MountPoint != "" && deviceCpy.Spec.FileSystem.Provisioned
+	needProvision := deviceCpy.Spec.FileSystem.Provisioned
 	switch {
 	case needProvision && device.Status.ProvisionPhase == diskv1.ProvisionPhaseUnprovisioned:
 		if err := c.provisionDeviceToNode(deviceCpy, devPath); err != nil {
-			err := fmt.Errorf("failed to provision device %s to node %s on path %s: %w", device.Name, c.NodeName, device.Spec.FileSystem.MountPoint, err)
+			err := fmt.Errorf("failed to provision device %s to node %s: %w", device.Name, c.NodeName, err)
 			logrus.Error(err)
 			diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
 			diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
@@ -135,7 +133,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 		}
 	case !needProvision && device.Status.ProvisionPhase != diskv1.ProvisionPhaseUnprovisioned:
 		if err := c.unprovisionDeviceFromNode(deviceCpy); err != nil {
-			err := fmt.Errorf("failed to stop provisioning device %s to node %s on path %s: %w", device.Name, c.NodeName, device.Spec.FileSystem.MountPoint, err)
+			err := fmt.Errorf("failed to stop provisioning device %s to node %s: %w", device.Name, c.NodeName, err)
 			logrus.Error(err)
 			diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
 			diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
@@ -160,12 +158,11 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 }
 
 func (c *Controller) updateDeviceMount(device *diskv1.BlockDevice, devPath string, filesystem *block.FileSystemInfo) error {
-	expectedMountPoint := device.Spec.FileSystem.MountPoint
-	if expectedMountPoint != "" && device.Status.DeviceStatus.Partitioned {
+	if device.Status.DeviceStatus.Partitioned {
 		return fmt.Errorf("cannot mount device with partitions")
 	}
 	// umount the previous path if exist
-	if filesystem != nil && filesystem.MountPoint != "" {
+	if filesystem.MountPoint != "" {
 		logrus.Infof("Unmount device %s from path %s", device.Name, filesystem.MountPoint)
 		if err := disk.UmountDisk(filesystem.MountPoint); err != nil {
 			return err
@@ -174,14 +171,13 @@ func (c *Controller) updateDeviceMount(device *diskv1.BlockDevice, devPath strin
 		diskv1.DeviceMounted.SetStatusBool(device, false)
 	}
 
-	if expectedMountPoint != "" {
-		logrus.Debugf("Mount deivce %s to %s", device.Name, expectedMountPoint)
-		if err := disk.MountDisk(devPath, expectedMountPoint); err != nil {
-			return err
-		}
-		diskv1.DeviceMounted.SetError(device, "", nil)
-		diskv1.DeviceMounted.SetStatusBool(device, true)
+	expectedMountPoint := extraDiskMountPoint(device)
+	logrus.Debugf("Mount deivce %s to %s", device.Name, expectedMountPoint)
+	if err := disk.MountDisk(devPath, expectedMountPoint); err != nil {
+		return err
 	}
+	diskv1.DeviceMounted.SetError(device, "", nil)
+	diskv1.DeviceMounted.SetStatusBool(device, true)
 
 	return c.updateDeviceFileSystem(device, devPath)
 }
@@ -289,7 +285,7 @@ func (c *Controller) provisionDeviceToNode(device *diskv1.BlockDevice, devPath s
 		diskv1.DiskAddedToNode.Message(device, msg)
 	}
 
-	mountPoint := device.Spec.FileSystem.MountPoint
+	mountPoint := extraDiskMountPoint(device)
 	if disk, ok := node.Spec.Disks[device.Name]; ok && disk.Path == mountPoint {
 		// Device exists and with the same mount point. No need to update the node.
 		updateDeviceStatus()
@@ -326,9 +322,6 @@ func (c *Controller) unprovisionDeviceFromNode(device *diskv1.BlockDevice) error
 
 	updateProvisionPhaseUnprovisioned := func() {
 		msg := fmt.Sprintf("Disk not in longhorn node `%s`", c.NodeName)
-		// To prevent user from mistaking unprovisioning from umount, NDM umount
-		// for the device as well while unprovisioning it.
-		device.Spec.FileSystem.MountPoint = ""
 		device.Status.ProvisionPhase = diskv1.ProvisionPhaseUnprovisioned
 		diskv1.DiskAddedToNode.SetError(device, "", nil)
 		diskv1.DiskAddedToNode.SetStatusBool(device, false)
@@ -427,7 +420,6 @@ func (c *Controller) updateDeviceStatus(device *diskv1.BlockDevice, devPath stri
 		logrus.Infof("Auto provisioning block device %s", device.Name)
 		device.Spec.FileSystem.ForceFormatted = true
 		device.Spec.FileSystem.Provisioned = true
-		device.Spec.FileSystem.MountPoint = fmt.Sprintf("/var/lib/harvester/extra-disks/%s", device.Name)
 	}
 	return nil
 }
@@ -532,4 +524,23 @@ func resolvePersistentDevPath(device *diskv1.BlockDevice) (string, error) {
 	default:
 		return "", nil
 	}
+}
+
+func extraDiskMountPoint(bd *diskv1.BlockDevice) string {
+	return fmt.Sprintf("/var/lib/harvester/extra-disks/%s", bd.Name)
+}
+
+func needUpdateMountPoint(bd *diskv1.BlockDevice, filesystem *block.FileSystemInfo) bool {
+	if filesystem == nil {
+		return false
+	}
+	if filesystem.MountPoint == "" && bd.Spec.FileSystem.Provisioned {
+		// Expect to provision. Need mount first.
+		return true
+	}
+	if filesystem.MountPoint != "" && !bd.Spec.FileSystem.Provisioned && bd.Status.ProvisionPhase == diskv1.ProvisionPhaseUnprovisioned {
+		// Unprovision finished. Need unmount.
+		return true
+	}
+	return false
 }
