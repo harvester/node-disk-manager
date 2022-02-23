@@ -46,6 +46,18 @@ type Controller struct {
 	scanner *Scanner
 }
 
+type NeedMountUpdate int8
+
+const (
+	NeedMountUpdateNo NeedMountUpdate = 1 << iota
+	NeedMountUpdateMount
+	NeedMountUpdateUnmount
+)
+
+func (f NeedMountUpdate) Has(flag NeedMountUpdate) bool {
+	return f&flag != 0
+}
+
 // Register register the block device CRD controller
 func Register(
 	ctx context.Context,
@@ -107,8 +119,8 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 		return device, err
 	}
 
-	if needUpdateMountPoint(deviceCpy, filesystem) {
-		err := c.updateDeviceMount(deviceCpy, devPath, filesystem)
+	if needMountUpdate := needUpdateMountPoint(deviceCpy, filesystem); needMountUpdate != NeedMountUpdateNo {
+		err := c.updateDeviceMount(deviceCpy, devPath, filesystem, needMountUpdate)
 		if err != nil {
 			err := fmt.Errorf("failed to update device mount %s: %s", device.Name, err.Error())
 			logrus.Error(err)
@@ -124,7 +136,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 	needProvision := deviceCpy.Spec.FileSystem.Provisioned
 	switch {
 	case needProvision && device.Status.ProvisionPhase == diskv1.ProvisionPhaseUnprovisioned:
-		if err := c.provisionDeviceToNode(deviceCpy, devPath); err != nil {
+		if err := c.provisionDeviceToNode(deviceCpy); err != nil {
 			err := fmt.Errorf("failed to provision device %s to node %s: %w", device.Name, c.NodeName, err)
 			logrus.Error(err)
 			diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
@@ -157,12 +169,11 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 	return nil, nil
 }
 
-func (c *Controller) updateDeviceMount(device *diskv1.BlockDevice, devPath string, filesystem *block.FileSystemInfo) error {
+func (c *Controller) updateDeviceMount(device *diskv1.BlockDevice, devPath string, filesystem *block.FileSystemInfo, needMountUpdate NeedMountUpdate) error {
 	if device.Status.DeviceStatus.Partitioned {
 		return fmt.Errorf("cannot mount device with partitions")
 	}
-	// umount the previous path if exist
-	if filesystem.MountPoint != "" {
+	if needMountUpdate.Has(NeedMountUpdateUnmount) {
 		logrus.Infof("Unmount device %s from path %s", device.Name, filesystem.MountPoint)
 		if err := disk.UmountDisk(filesystem.MountPoint); err != nil {
 			return err
@@ -170,16 +181,19 @@ func (c *Controller) updateDeviceMount(device *diskv1.BlockDevice, devPath strin
 		diskv1.DeviceMounted.SetError(device, "", nil)
 		diskv1.DeviceMounted.SetStatusBool(device, false)
 	}
-
-	expectedMountPoint := extraDiskMountPoint(device)
-	logrus.Debugf("Mount deivce %s to %s", device.Name, expectedMountPoint)
-	if err := disk.MountDisk(devPath, expectedMountPoint); err != nil {
-		return err
+	if needMountUpdate.Has(NeedMountUpdateMount) {
+		expectedMountPoint := extraDiskMountPoint(device)
+		logrus.Infof("Mount deivce %s to %s", device.Name, expectedMountPoint)
+		if err := disk.MountDisk(devPath, expectedMountPoint); err != nil {
+			return err
+		}
+		diskv1.DeviceMounted.SetError(device, "", nil)
+		diskv1.DeviceMounted.SetStatusBool(device, true)
 	}
-	diskv1.DeviceMounted.SetError(device, "", nil)
-	diskv1.DeviceMounted.SetStatusBool(device, true)
-
-	return c.updateDeviceFileSystem(device, devPath)
+	if needMountUpdate != NeedMountUpdateNo {
+		return c.updateDeviceFileSystem(device, devPath)
+	}
+	return nil
 }
 
 func (c *Controller) updateDeviceFileSystem(device *diskv1.BlockDevice, devPath string) error {
@@ -265,13 +279,7 @@ func (c *Controller) forceFormat(device *diskv1.BlockDevice, devPath string, fil
 }
 
 // provisionDeviceToNode adds a device to longhorn node as an additional disk.
-func (c *Controller) provisionDeviceToNode(device *diskv1.BlockDevice, devPath string) error {
-	filesystem := c.BlockInfo.GetFileSystemInfoByDevPath(devPath)
-	if filesystem == nil || filesystem.MountPoint == "" {
-		// No mount point. Skipping...
-		return nil
-	}
-
+func (c *Controller) provisionDeviceToNode(device *diskv1.BlockDevice) error {
 	node, err := c.Nodes.Get(c.Namespace, c.NodeName, metav1.GetOptions{})
 	if err != nil {
 		return err
@@ -530,17 +538,21 @@ func extraDiskMountPoint(bd *diskv1.BlockDevice) string {
 	return fmt.Sprintf("/var/lib/harvester/extra-disks/%s", bd.Name)
 }
 
-func needUpdateMountPoint(bd *diskv1.BlockDevice, filesystem *block.FileSystemInfo) bool {
+func needUpdateMountPoint(bd *diskv1.BlockDevice, filesystem *block.FileSystemInfo) NeedMountUpdate {
 	if filesystem == nil {
-		return false
+		return NeedMountUpdateNo
 	}
-	if filesystem.MountPoint == "" && bd.Spec.FileSystem.Provisioned {
-		// Expect to provision. Need mount first.
-		return true
+	if bd.Spec.FileSystem.Provisioned {
+		if filesystem.MountPoint == "" {
+			return NeedMountUpdateMount
+		}
+		if filesystem.MountPoint == extraDiskMountPoint(bd) {
+			return NeedMountUpdateNo
+		}
+		return NeedMountUpdateUnmount | NeedMountUpdateMount
 	}
-	if filesystem.MountPoint != "" && !bd.Spec.FileSystem.Provisioned && bd.Status.ProvisionPhase == diskv1.ProvisionPhaseUnprovisioned {
-		// Unprovision finished. Need unmount.
-		return true
+	if filesystem.MountPoint != "" {
+		return NeedMountUpdateUnmount
 	}
-	return false
+	return NeedMountUpdateNo
 }
