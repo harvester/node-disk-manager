@@ -59,6 +59,7 @@ type BlockDeviceStatus struct {
 }
 
 type FilesystemInfo struct {
+	// DEPRECATED: no longer use and has no effect.
 	// a string with the partition's mount point, or "" if no mount point was discovered
 	MountPoint string `json:"mountPoint"`
 
