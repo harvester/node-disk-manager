@@ -19,11 +19,10 @@ import (
 )
 
 type Udev struct {
-	namespace  string
-	nodeName   string
-	startOnce  sync.Once
-	scanner    *blockdevice.Scanner
-	controller *blockdevice.Controller
+	namespace string
+	nodeName  string
+	startOnce sync.Once
+	scanner   *blockdevice.Scanner
 }
 
 func NewUdev(opt *option.Option, scanner *blockdevice.Scanner) *Udev {
