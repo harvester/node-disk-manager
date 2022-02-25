@@ -32,8 +32,8 @@ spec:
     - jsonPath: .spec.nodeName
       name: NodeName
       type: string
-    - jsonPath: .status.state
-      name: Status
+    - jsonPath: .status.provisionPhase
+      name: ProvisionPhase
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
@@ -66,8 +66,9 @@ spec:
                       overwrite the existing one
                     type: boolean
                   mountPoint:
-                    description: a string with the partition's mount point, or ""
-                      if no mount point was discovered
+                    description: 'DEPRECATED: no longer use and has no effect. a string
+                      with the partition''s mount point, or "" if no mount point was
+                      discovered'
                     type: string
                   provisioned:
                     description: a bool indicating whether the filesystem can be provisioned
