@@ -19,7 +19,7 @@ var (
 // +kubebuilder:printcolumn:name="DevPath",type="string",JSONPath=`.spec.devPath`
 // +kubebuilder:printcolumn:name="MountPoint",type="string",JSONPath=`.status.deviceStatus.fileSystem.mountPoint`
 // +kubebuilder:printcolumn:name="NodeName",type="string",JSONPath=`.spec.nodeName`
-// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=`.status.state`
+// +kubebuilder:printcolumn:name="ProvisionPhase",type="string",JSONPath=`.status.provisionPhase`
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=`.metadata.creationTimestamp`
 
 type BlockDevice struct {
