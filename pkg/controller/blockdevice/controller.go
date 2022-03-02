@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"time"
 
+	ghwutil "github.com/jaypipes/ghw/pkg/util"
 	lhtypes "github.com/longhorn/longhorn-manager/types"
 	lhutil "github.com/longhorn/longhorn-manager/util"
 	"github.com/sirupsen/logrus"
@@ -445,14 +446,26 @@ func (c *Controller) OnBlockDeviceDelete(key string, device *diskv1.BlockDevice)
 func resolvePersistentDevPath(device *diskv1.BlockDevice) (string, error) {
 	switch device.Status.DeviceStatus.Details.DeviceType {
 	case diskv1.DeviceTypeDisk:
-		wwn := device.Status.DeviceStatus.Details.WWN
-		if wwn == "" {
-			return "", fmt.Errorf("WWN not found on device %s", device.Name)
+		valueExists := func(value string) bool {
+			return value != "" && value != ghwutil.UNKNOWN
 		}
-		if device.Status.DeviceStatus.Details.StorageController == string(diskv1.StorageControllerNVMe) {
-			return filepath.EvalSymlinks("/dev/disk/by-id/nvme-" + wwn)
+		// Disk naming priority.
+		// #1 WWN
+		// #2 filesystem UUID (UUID)
+		// #3 partition table UUID (PTUUID)
+		if wwn := device.Status.DeviceStatus.Details.WWN; valueExists(wwn) {
+			if device.Status.DeviceStatus.Details.StorageController == string(diskv1.StorageControllerNVMe) {
+				return filepath.EvalSymlinks("/dev/disk/by-id/nvme-" + wwn)
+			}
+			return filepath.EvalSymlinks("/dev/disk/by-id/wwn-" + wwn)
 		}
-		return filepath.EvalSymlinks("/dev/disk/by-id/wwn-" + wwn)
+		if fsUUID := device.Status.DeviceStatus.Details.UUID; valueExists(fsUUID) {
+			return filepath.EvalSymlinks("/dev/disk/by-uuid/" + fsUUID)
+		}
+		if ptUUID := device.Status.DeviceStatus.Details.PtUUID; valueExists(ptUUID) {
+			return block.GetDevPathByPTUUID(ptUUID)
+		}
+		return "", fmt.Errorf("WWN/UUID/PTUUID not found on device %s", device.Name)
 	case diskv1.DeviceTypePart:
 		partUUID := device.Status.DeviceStatus.Details.PartUUID
 		if partUUID == "" {

@@ -1,6 +1,7 @@
 package block
 
 import (
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -30,6 +31,32 @@ func GetPartType(devPath string) string {
 		logrus.Debugf(err.Error())
 	}
 	return result
+}
+
+func GetDevPathByPTUUID(ptUUID string) (string, error) {
+	args := []string{"lsblk", "-dJo", "PATH,PTUUID"}
+	out, err := exec.Command(args[0], args[1:]...).Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to execute `%s` for PTUUID %s: %w", strings.Join(args, " "), ptUUID, err)
+	}
+
+	bds := struct {
+		BlockDevices []struct {
+			Path   string `json:"path"`
+			PTUUID string `json:"ptuuid"`
+		} `json:"blockdevices"`
+	}{}
+	if err := json.Unmarshal(out, &bds); err != nil {
+		return "", fmt.Errorf("failed to unmarshal lsblk for PTUUID `%s`: %w", ptUUID, err)
+	}
+
+	for _, bd := range bds.BlockDevices {
+		if bd.PTUUID == ptUUID {
+			return bd.Path, nil
+		}
+	}
+
+	return "", nil
 }
 
 func lsblk(devPath, output string) (string, error) {
