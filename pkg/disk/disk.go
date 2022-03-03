@@ -7,8 +7,12 @@ import (
 )
 
 // MakeExt4DiskFormatting create ext4 filesystem formatting of the specified devPath
-func MakeExt4DiskFormatting(devPath string) error {
-	cmd := exec.Command("mkfs.ext4", "-F", devPath)
+func MakeExt4DiskFormatting(devPath, uuid string) error {
+	args := []string{"-F", devPath}
+	if uuid != "" {
+		args = append(args, "-U", uuid)
+	}
+	cmd := exec.Command("mkfs.ext4", args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	err := cmd.Run()
