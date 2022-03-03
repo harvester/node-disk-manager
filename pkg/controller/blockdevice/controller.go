@@ -2,7 +2,9 @@ package blockdevice
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"time"
@@ -12,7 +14,7 @@ import (
 	lhutil "github.com/longhorn/longhorn-manager/util"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
@@ -199,6 +201,10 @@ func (c *Controller) updateDeviceFileSystem(device *diskv1.BlockDevice, devPath 
 	return nil
 }
 
+func valueExists(value string) bool {
+	return value != "" && value != ghwutil.UNKNOWN
+}
+
 // forceFormat simply formats the device to ext4 filesystem
 //
 // - umount the block device if it is mounted
@@ -214,9 +220,34 @@ func (c *Controller) forceFormat(device *diskv1.BlockDevice, devPath string, fil
 
 	// make ext4 filesystem format of the partition disk
 	logrus.Debugf("make ext4 filesystem format of device %s", device.Name)
-	if err := disk.MakeExt4DiskFormatting(devPath); err != nil {
+	// Reuse UUID if possible to make the filesystem UUID more stable
+	var uuid string
+	if !valueExists(device.Status.DeviceStatus.Details.WWN) {
+		uuid = device.Status.DeviceStatus.Details.UUID
+		if !valueExists(uuid) {
+			uuid = device.Status.DeviceStatus.Details.PtUUID
+		}
+		if !valueExists(uuid) {
+			// Reset the UUID to prevent "unknown" being passed down.
+			uuid = ""
+		}
+	}
+	if err := disk.MakeExt4DiskFormatting(devPath, uuid); err != nil {
 		return err
 	}
+
+	// HACK: Update the UUID if it is reused.
+	//
+	// This makes the controller able to find then device after
+	// a PtUUID is reused in `mkfs.ext4` as filesystem UUID.
+	//
+	// If the UUID is not updated within one-stop, the next
+	// `OnBlockDeviceChange` is not able to find the device
+	// because `status.DeviceStatus.Details.UUID` is missing.
+	if uuid != "" {
+		device.Status.DeviceStatus.Details.UUID = uuid
+	}
+
 	if err := c.updateDeviceFileSystem(device, devPath); err != nil {
 		return err
 	}
@@ -224,6 +255,7 @@ func (c *Controller) forceFormat(device *diskv1.BlockDevice, devPath string, fil
 	diskv1.DeviceFormatting.SetStatusBool(device, false)
 	diskv1.DeviceFormatting.Message(device, "Done device ext4 filesystem formatting")
 	device.Status.DeviceStatus.FileSystem.LastFormattedAt = &metav1.Time{Time: time.Now()}
+	device.Status.DeviceStatus.Partitioned = false
 	return nil
 }
 
@@ -276,7 +308,7 @@ func (c *Controller) provisionDeviceToNode(device *diskv1.BlockDevice, devPath s
 func (c *Controller) unprovisionDeviceFromNode(device *diskv1.BlockDevice) error {
 	node, err := c.Nodes.Get(c.Namespace, c.NodeName, metav1.GetOptions{})
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			// Skip since the node is not there.
 			return nil
 		}
@@ -415,7 +447,7 @@ func (c *Controller) OnBlockDeviceDelete(key string, device *diskv1.BlockDevice)
 
 	// Clean disk from related longhorn node
 	node, err := c.Nodes.Get(c.Namespace, c.NodeName, metav1.GetOptions{})
-	if err != nil && !errors.IsNotFound(err) {
+	if err != nil && !apierrors.IsNotFound(err) {
 		return device, err
 	}
 	if node == nil {
@@ -446,13 +478,12 @@ func (c *Controller) OnBlockDeviceDelete(key string, device *diskv1.BlockDevice)
 func resolvePersistentDevPath(device *diskv1.BlockDevice) (string, error) {
 	switch device.Status.DeviceStatus.Details.DeviceType {
 	case diskv1.DeviceTypeDisk:
-		valueExists := func(value string) bool {
-			return value != "" && value != ghwutil.UNKNOWN
-		}
 		// Disk naming priority.
 		// #1 WWN
 		// #2 filesystem UUID (UUID)
 		// #3 partition table UUID (PTUUID)
+		// #4 PtUUID as UUID to query disk info
+		//    (NDM might reuse PtUUID as UUID to format a disk)
 		if wwn := device.Status.DeviceStatus.Details.WWN; valueExists(wwn) {
 			if device.Status.DeviceStatus.Details.StorageController == string(diskv1.StorageControllerNVMe) {
 				return filepath.EvalSymlinks("/dev/disk/by-id/nvme-" + wwn)
@@ -460,16 +491,30 @@ func resolvePersistentDevPath(device *diskv1.BlockDevice) (string, error) {
 			return filepath.EvalSymlinks("/dev/disk/by-id/wwn-" + wwn)
 		}
 		if fsUUID := device.Status.DeviceStatus.Details.UUID; valueExists(fsUUID) {
-			return filepath.EvalSymlinks("/dev/disk/by-uuid/" + fsUUID)
+			path, err := filepath.EvalSymlinks("/dev/disk/by-uuid/" + fsUUID)
+			if err == nil {
+				return path, nil
+			}
+			if !errors.Is(err, os.ErrNotExist) {
+				return "", err
+			}
 		}
+
 		if ptUUID := device.Status.DeviceStatus.Details.PtUUID; valueExists(ptUUID) {
-			return block.GetDevPathByPTUUID(ptUUID)
+			path, err := block.GetDevPathByPTUUID(ptUUID)
+			if err != nil {
+				return "", err
+			}
+			if path != "" {
+				return path, nil
+			}
+			return filepath.EvalSymlinks("/dev/disk/by-uuid/" + ptUUID)
 		}
-		return "", fmt.Errorf("WWN/UUID/PTUUID not found on device %s", device.Name)
+		return "", fmt.Errorf("WWN/UUID/PTUUID was not found on device %s", device.Name)
 	case diskv1.DeviceTypePart:
 		partUUID := device.Status.DeviceStatus.Details.PartUUID
 		if partUUID == "" {
-			return "", fmt.Errorf("PARTUUID not found on device %s", device.Name)
+			return "", fmt.Errorf("PARTUUID was not found on device %s", device.Name)
 		}
 		return filepath.EvalSymlinks("/dev/disk/by-partuuid/" + partUUID)
 	default:
