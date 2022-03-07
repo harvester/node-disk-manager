@@ -220,7 +220,16 @@ func (c *Controller) forceFormat(device *diskv1.BlockDevice, devPath string, fil
 
 	// make ext4 filesystem format of the partition disk
 	logrus.Debugf("make ext4 filesystem format of device %s", device.Name)
-	// Reuse UUID if possible to make the filesystem UUID more stable
+	// Reuse UUID if possible to make the filesystem UUID more stable.
+	//
+	// The reason filesystem UUID needs to be stable is that if a disk
+	// lacks WWN, NDM then needs a UUID to determine the unique identity
+	// of the blockdevice CR.
+	//
+	// We don't reuse WWN as UUID here because we assume that WWN is
+	// stable and permanent for a disk. Thefore, even if the underlying
+	// device gets formatted and the filesystem UUID changes, it still
+	// won't affect then unique identity of the blockdevice.
 	var uuid string
 	if !valueExists(device.Status.DeviceStatus.Details.WWN) {
 		uuid = device.Status.DeviceStatus.Details.UUID
