@@ -213,6 +213,9 @@ spec:
                     - driveType
                     - storageController
                     type: object
+                  devPath:
+                    description: device path
+                    type: string
                   fileSystem:
                     properties:
                       LastFormattedAt:
@@ -245,6 +248,7 @@ spec:
                 required:
                 - capacity
                 - details
+                - devPath
                 - fileSystem
                 - partitioned
                 type: object
