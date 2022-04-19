@@ -415,6 +415,9 @@ func (c *Controller) updateDeviceStatus(device *diskv1.BlockDevice, devPath stri
 		newStatus.FileSystem.LastFormattedAt = lastFormatted
 	}
 
+	// Update device path
+	newStatus.DevPath = devPath
+
 	if !reflect.DeepEqual(oldStatus, newStatus) {
 		logrus.Infof("Update existing block device status %s", device.Name)
 		device.Status.DeviceStatus = newStatus
