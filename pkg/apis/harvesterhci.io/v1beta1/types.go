@@ -83,6 +83,9 @@ type DeviceStatus struct {
 	// a object describe the disk details
 	Details DeviceDetails `json:"details"`
 
+	// device path
+	DevPath string `json:"devPath"`
+
 	FileSystem *FilesystemStatus `json:"fileSystem"`
 }
 
