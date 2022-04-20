@@ -135,7 +135,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 
 	needProvision := deviceCpy.Spec.FileSystem.Provisioned
 	switch {
-	case needProvision && device.Status.ProvisionPhase == diskv1.ProvisionPhaseUnprovisioned:
+	case needProvision:
 		if err := c.provisionDeviceToNode(deviceCpy); err != nil {
 			err := fmt.Errorf("failed to provision device %s to node %s: %w", device.Name, c.NodeName, err)
 			logrus.Error(err)
@@ -280,40 +280,35 @@ func (c *Controller) forceFormat(device *diskv1.BlockDevice, devPath string, fil
 
 // provisionDeviceToNode adds a device to longhorn node as an additional disk.
 func (c *Controller) provisionDeviceToNode(device *diskv1.BlockDevice) error {
-	node, err := c.Nodes.Get(c.Namespace, c.NodeName, metav1.GetOptions{})
+	node, err := c.NodeCache.Get(c.Namespace, c.NodeName)
+	if apierrors.IsNotFound(err) {
+		node, err = c.Nodes.Get(c.Namespace, c.NodeName, metav1.GetOptions{})
+	}
 	if err != nil {
 		return err
 	}
 
-	updateDeviceStatus := func() {
-		msg := fmt.Sprintf("Added disk %s to longhorn node `%s` as an additional disk", device.Name, node.Name)
-		device.Status.ProvisionPhase = diskv1.ProvisionPhaseProvisioned
-		diskv1.DiskAddedToNode.SetError(device, "", nil)
-		diskv1.DiskAddedToNode.SetStatusBool(device, true)
-		diskv1.DiskAddedToNode.Message(device, msg)
-	}
-
-	mountPoint := extraDiskMountPoint(device)
-	if disk, ok := node.Spec.Disks[device.Name]; ok && disk.Path == mountPoint {
-		// Device exists and with the same mount point. No need to update the node.
-		updateDeviceStatus()
-		return nil
-	}
-
 	nodeCpy := node.DeepCopy()
 	diskSpec := lhtypes.DiskSpec{
-		Path:              mountPoint,
+		Path:              extraDiskMountPoint(device),
 		AllowScheduling:   true,
 		EvictionRequested: false,
 		StorageReserved:   0,
 		Tags:              []string{},
 	}
-	nodeCpy.Spec.Disks[device.Name] = diskSpec
-	if _, err = c.Nodes.Update(nodeCpy); err != nil {
-		return err
+
+	if disk, ok := node.Spec.Disks[device.Name]; !ok || !reflect.DeepEqual(disk, diskSpec) {
+		nodeCpy.Spec.Disks[device.Name] = diskSpec
+		if _, err = c.Nodes.Update(nodeCpy); err != nil {
+			return err
+		}
 	}
 
-	updateDeviceStatus()
+	msg := fmt.Sprintf("Added disk %s to longhorn node `%s` as an additional disk", device.Name, node.Name)
+	device.Status.ProvisionPhase = diskv1.ProvisionPhaseProvisioned
+	diskv1.DiskAddedToNode.SetError(device, "", nil)
+	diskv1.DiskAddedToNode.SetStatusBool(device, true)
+	diskv1.DiskAddedToNode.Message(device, msg)
 	return nil
 }
 
@@ -535,6 +530,11 @@ func resolvePersistentDevPath(device *diskv1.BlockDevice) (string, error) {
 }
 
 func extraDiskMountPoint(bd *diskv1.BlockDevice) string {
+	// DEPRECATED: only for backward compatibility
+	if bd.Spec.FileSystem.MountPoint != "" {
+		return bd.Spec.FileSystem.MountPoint
+	}
+
 	return fmt.Sprintf("/var/lib/harvester/extra-disks/%s", bd.Name)
 }
 
