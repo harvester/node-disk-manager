@@ -23,7 +23,7 @@ func GetDiskBlockDevice(disk *block.Disk, nodeName, namespace string) *diskv1.Bl
 		Type:       disk.FileSystemInfo.Type,
 		IsReadOnly: disk.FileSystemInfo.IsReadOnly,
 	}
-
+	devPath := util.GetFullDevPath(disk.Name)
 	status := diskv1.BlockDeviceStatus{
 		State:          diskv1.BlockDeviceActive,
 		ProvisionPhase: diskv1.ProvisionPhaseUnprovisioned,
@@ -47,6 +47,7 @@ func GetDiskBlockDevice(disk *block.Disk, nodeName, namespace string) *diskv1.Bl
 				NUMANodeID:        disk.NUMANodeID,
 				WWN:               disk.WWN,
 			},
+			DevPath:    devPath,
 			FileSystem: fileSystemInfo,
 		},
 	}
@@ -61,7 +62,7 @@ func GetDiskBlockDevice(disk *block.Disk, nodeName, namespace string) *diskv1.Bl
 		},
 		Spec: diskv1.BlockDeviceSpec{
 			NodeName:   nodeName,
-			DevPath:    util.GetFullDevPath(disk.Name),
+			DevPath:    devPath,
 			FileSystem: &diskv1.FilesystemInfo{},
 		},
 		Status: status,
@@ -81,6 +82,7 @@ func GetPartitionBlockDevice(part *block.Partition, nodeName, namespace string) 
 		MountPoint: part.FileSystemInfo.MountPoint,
 		IsReadOnly: part.FileSystemInfo.IsReadOnly,
 	}
+	devPath := util.GetFullDevPath(part.Name)
 	status := diskv1.BlockDeviceStatus{
 		State:          diskv1.BlockDeviceActive,
 		ProvisionPhase: diskv1.ProvisionPhaseUnprovisioned,
@@ -99,6 +101,7 @@ func GetPartitionBlockDevice(part *block.Partition, nodeName, namespace string) 
 				StorageController: part.StorageController.String(),
 			},
 			FileSystem:   fileSystemInfo,
+			DevPath:      devPath,
 			ParentDevice: util.GetFullDevPath(part.Disk.Name),
 		},
 	}
@@ -113,7 +116,7 @@ func GetPartitionBlockDevice(part *block.Partition, nodeName, namespace string) 
 		},
 		Spec: diskv1.BlockDeviceSpec{
 			NodeName:   nodeName,
-			DevPath:    util.GetFullDevPath(part.Name),
+			DevPath:    devPath,
 			FileSystem: &diskv1.FilesystemInfo{},
 		},
 		Status: status,
