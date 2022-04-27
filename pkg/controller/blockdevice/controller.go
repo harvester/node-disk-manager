@@ -114,6 +114,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 			diskv1.DeviceFormatting.SetStatusBool(deviceCpy, false)
 		}
 		if !reflect.DeepEqual(device, deviceCpy) {
+			logrus.Debugf("Update block device %s for new formatting state", device.Name)
 			return c.Blockdevices.Update(deviceCpy)
 		}
 		return device, err
@@ -128,6 +129,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 			diskv1.DeviceMounted.SetStatusBool(deviceCpy, false)
 		}
 		if !reflect.DeepEqual(device, deviceCpy) {
+			logrus.Debugf("Update block device %s for new mount state", device.Name)
 			return c.Blockdevices.Update(deviceCpy)
 		}
 		return device, err
@@ -154,6 +156,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 	}
 
 	if !reflect.DeepEqual(device, deviceCpy) {
+		logrus.Debugf("Update block device %s for new provision state", device.Name)
 		return c.Blockdevices.Update(deviceCpy)
 	}
 
@@ -162,7 +165,9 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 	if err := c.updateDeviceStatus(deviceCpy, devPath); err != nil {
 		return nil, err
 	}
+
 	if !reflect.DeepEqual(device, deviceCpy) {
+		logrus.Debugf("Update block device %s for new status", device.Name)
 		return c.Blockdevices.Update(deviceCpy)
 	}
 
