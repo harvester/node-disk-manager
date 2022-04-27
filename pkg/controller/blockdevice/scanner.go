@@ -133,7 +133,7 @@ func (s *Scanner) scanBlockDevicesOnNode() error {
 				logrus.Debugf("Enqueue block device %s for auto-provisioning", bd.Name)
 				s.Blockdevices.Enqueue(s.Namespace, bd.Name)
 			} else if isDevPathChanged(oldBd, bd) {
-				logrus.Debugf("Enqueue block device %s for device patch change", bd.Name)
+				logrus.Debugf("Enqueue block device %s for device path change", bd.Name)
 				s.Blockdevices.Enqueue(s.Namespace, bd.Name)
 			} else {
 				logrus.Debugf("Skip updating device %s", bd.Name)
