@@ -132,6 +132,9 @@ func (s *Scanner) scanBlockDevicesOnNode() error {
 			if s.NeedsAutoProvision(oldBd, autoProvisioned) {
 				logrus.Debugf("Enqueue block device %s for auto-provisioning", bd.Name)
 				s.Blockdevices.Enqueue(s.Namespace, bd.Name)
+			} else if isDevPathChanged(oldBd, bd) {
+				logrus.Debugf("Enqueue block device %s for device patch change", bd.Name)
+				s.Blockdevices.Enqueue(s.Namespace, bd.Name)
 			} else {
 				logrus.Debugf("Skip updating device %s", bd.Name)
 			}
@@ -223,4 +226,13 @@ func (s *Scanner) SaveBlockDevice(bd *diskv1.BlockDevice, autoProvisioned bool) 
 // - disk matches auto-provisioned patterns
 func (s *Scanner) NeedsAutoProvision(oldBd *diskv1.BlockDevice, autoProvisionPatternMatches bool) bool {
 	return !oldBd.Spec.FileSystem.Provisioned && autoProvisionPatternMatches && oldBd.Status.DeviceStatus.FileSystem.LastFormattedAt == nil
+}
+
+// isDevPathChanged returns true if the device path has changed.
+//
+// When reboot, device path might change but controller cannot detect
+// it during the reconciliation. We explicitly check and update the value
+// when scanner startup.
+func isDevPathChanged(oldBd *diskv1.BlockDevice, newBd *diskv1.BlockDevice) bool {
+	return oldBd.Status.DeviceStatus.DevPath != newBd.Status.DeviceStatus.DevPath
 }
