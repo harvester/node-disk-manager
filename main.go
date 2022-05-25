@@ -119,6 +119,13 @@ func main() {
 			Usage:       "A string of comma-separated glob patterns that auto-provisions devices matching provided device path",
 			Destination: &opt.AutoProvisionFilter,
 		},
+		&cli.UintFlag{
+			Name:        "max-concurrent-ops",
+			EnvVars:     []string{"NDM_MAX_CONCURRENT_OPS"},
+			Usage:       "Specify the maximum concurrent count of disk operations, such as formatting",
+			DefaultText: "5",
+			Destination: &opt.MaxConcurrentOps,
+		},
 	}
 
 	app.Action = func(c *cli.Context) error {

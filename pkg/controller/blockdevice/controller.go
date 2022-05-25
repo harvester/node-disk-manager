@@ -32,6 +32,40 @@ const (
 	enqueueDelay           = 10 * time.Second
 )
 
+// semaphore is a simple semaphore implementation in channel
+type semaphore struct {
+	ch chan struct{}
+}
+
+// newSemaphore creates a new semaphore with the given capacity.
+func newSemaphore(n uint) *semaphore {
+	return &semaphore{
+		ch: make(chan struct{}, n),
+	}
+}
+
+// acquire a semaphore to prevent concurrent update
+func (s *semaphore) acquire() bool {
+	select {
+	case s.ch <- struct{}{}:
+		return true
+	default:
+		// full
+		return false
+	}
+}
+
+// release the semaphore
+func (s *semaphore) release() bool {
+	select {
+	case <-s.ch:
+		return true
+	default:
+		// empty
+		return false
+	}
+}
+
 type Controller struct {
 	Namespace string
 	NodeName  string
@@ -43,7 +77,8 @@ type Controller struct {
 	BlockdeviceCache ctldiskv1.BlockDeviceCache
 	BlockInfo        block.Info
 
-	scanner *Scanner
+	scanner   *Scanner
+	semaphore *semaphore
 }
 
 type NeedMountUpdate int8
@@ -76,6 +111,7 @@ func Register(
 		BlockdeviceCache: bds.Cache(),
 		BlockInfo:        block,
 		scanner:          scanner,
+		semaphore:        newSemaphore(opt.MaxConcurrentOps),
 	}
 
 	if err := scanner.Start(ctx, time.Duration(opt.RescanInterval)); err != nil {
@@ -225,6 +261,14 @@ func valueExists(value string) bool {
 // - umount the block device if it is mounted
 // - create ext4 filesystem on the block device
 func (c *Controller) forceFormat(device *diskv1.BlockDevice, devPath string, filesystem *block.FileSystemInfo) error {
+	if !c.semaphore.acquire() {
+		logrus.Infof("Hit maximum concurrent count. Requeue device %s", device.Name)
+		c.Blockdevices.EnqueueAfter(c.Namespace, device.Name, enqueueDelay)
+		return nil
+	}
+
+	defer c.semaphore.release()
+
 	// umount the disk if it is mounted
 	if filesystem != nil && filesystem.MountPoint != "" {
 		logrus.Infof("unmount %s for %s", filesystem.MountPoint, device.Name)
