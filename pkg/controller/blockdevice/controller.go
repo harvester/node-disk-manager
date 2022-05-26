@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -29,7 +30,6 @@ import (
 
 const (
 	blockDeviceHandlerName = "harvester-block-device-handler"
-	enqueueDelay           = 10 * time.Second
 )
 
 // semaphore is a simple semaphore implementation in channel
@@ -102,6 +102,9 @@ func Register(
 	opt *option.Option,
 	scanner *Scanner,
 ) error {
+	// Initialize random seed.
+	rand.Seed(time.Now().UnixNano())
+
 	controller := &Controller{
 		Namespace:        opt.Namespace,
 		NodeName:         opt.NodeName,
@@ -179,7 +182,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 			logrus.Error(err)
 			diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
 			diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
-			c.Blockdevices.EnqueueAfter(c.Namespace, device.Name, enqueueDelay)
+			c.Blockdevices.EnqueueAfter(c.Namespace, device.Name, jitterEnqueueDelay())
 		}
 	case !needProvision && device.Status.ProvisionPhase != diskv1.ProvisionPhaseUnprovisioned:
 		if err := c.unprovisionDeviceFromNode(deviceCpy); err != nil {
@@ -187,7 +190,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 			logrus.Error(err)
 			diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
 			diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
-			c.Blockdevices.EnqueueAfter(c.Namespace, device.Name, enqueueDelay)
+			c.Blockdevices.EnqueueAfter(c.Namespace, device.Name, jitterEnqueueDelay())
 		}
 	}
 
@@ -263,7 +266,7 @@ func valueExists(value string) bool {
 func (c *Controller) forceFormat(device *diskv1.BlockDevice, devPath string, filesystem *block.FileSystemInfo) error {
 	if !c.semaphore.acquire() {
 		logrus.Infof("Hit maximum concurrent count. Requeue device %s", device.Name)
-		c.Blockdevices.EnqueueAfter(c.Namespace, device.Name, enqueueDelay)
+		c.Blockdevices.EnqueueAfter(c.Namespace, device.Name, jitterEnqueueDelay())
 		return nil
 	}
 
@@ -411,7 +414,7 @@ func (c *Controller) unprovisionDeviceFromNode(device *diskv1.BlockDevice) error
 			logrus.Debugf("device %s is unprovisioned", device.Name)
 		} else {
 			// Still unprovisioning
-			c.Blockdevices.EnqueueAfter(c.Namespace, device.Name, enqueueDelay)
+			c.Blockdevices.EnqueueAfter(c.Namespace, device.Name, jitterEnqueueDelay())
 			logrus.Debugf("device %s is unprovisioning", device.Name)
 		}
 	} else {
@@ -608,4 +611,10 @@ func needUpdateMountPoint(bd *diskv1.BlockDevice, filesystem *block.FileSystemIn
 		return NeedMountUpdateUnmount
 	}
 	return NeedMountUpdateNo
+}
+
+// jitterEnqueueDelay returns a random duration between 7 to 13.
+func jitterEnqueueDelay() time.Duration {
+	enqueueDelay := 10
+	return time.Duration(rand.Intn(3)+enqueueDelay) * time.Second
 }
