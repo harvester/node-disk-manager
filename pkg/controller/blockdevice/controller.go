@@ -307,13 +307,17 @@ func (c *Controller) provisionDeviceToNode(device *diskv1.BlockDevice) error {
 		if _, err = c.Nodes.Update(nodeCpy); err != nil {
 			return err
 		}
+
+		if !diskv1.DiskAddedToNode.IsTrue(device) {
+			// Update if needed. If the info is alreay there, no need to update.
+			msg := fmt.Sprintf("Added disk %s to longhorn node `%s` as an additional disk", device.Name, node.Name)
+			device.Status.ProvisionPhase = diskv1.ProvisionPhaseProvisioned
+			diskv1.DiskAddedToNode.SetError(device, "", nil)
+			diskv1.DiskAddedToNode.SetStatusBool(device, true)
+			diskv1.DiskAddedToNode.Message(device, msg)
+		}
 	}
 
-	msg := fmt.Sprintf("Added disk %s to longhorn node `%s` as an additional disk", device.Name, node.Name)
-	device.Status.ProvisionPhase = diskv1.ProvisionPhaseProvisioned
-	diskv1.DiskAddedToNode.SetError(device, "", nil)
-	diskv1.DiskAddedToNode.SetStatusBool(device, true)
-	diskv1.DiskAddedToNode.Message(device, msg)
 	return nil
 }
 
