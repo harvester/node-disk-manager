@@ -7,10 +7,19 @@ disk manager help to manage host disks, implementing disk partition and file sys
 
 `make`
 
-
 ## Running
 
 `./bin/node-disk-manager`
+
+## Features
+
+- [x] Disk provisioning as Longhorn disks with a simple boolean.
+- [x] Disk formatting if needed with a simple boolean.
+- [x] Disk discovery, including existing block devices, and hot plugged disks.
+- [x] Support multiple storage controller (IDE/SATA/SCSI/Virtio).
+- [x] Support vritual disks (WWN on the disk is required for unique identification).
+- [ ] Device mapper and LVM are not yet supported.
+- [ ] The behaviour of multipath devices is undefined.
 
 ## License
 Copyright (c) 2022 [Rancher Labs, Inc.](http://rancher.com)
