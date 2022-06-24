@@ -46,6 +46,7 @@ func newSemaphore(n uint) *semaphore {
 
 // acquire a semaphore to prevent concurrent update
 func (s *semaphore) acquire() bool {
+	logrus.Debugf("Pre-acquire channel stats: %d/%d", len(s.ch), cap(s.ch))
 	select {
 	case s.ch <- struct{}{}:
 		return true
