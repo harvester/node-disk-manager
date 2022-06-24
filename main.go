@@ -48,12 +48,14 @@ func main() {
 		},
 		&cli.StringFlag{
 			Name:        "namespace",
+			Value:       "longhorn-system",
 			DefaultText: "longhorn-system",
 			EnvVars:     []string{"LONGHORN_NAMESPACE"},
 			Destination: &opt.Namespace,
 		},
 		&cli.IntFlag{
 			Name:        "threadiness",
+			Value:       2,
 			DefaultText: "2",
 			Destination: &opt.Threadiness,
 		},
@@ -66,6 +68,7 @@ func main() {
 		&cli.StringFlag{
 			Name:        "profile-listen-address",
 			Value:       "0.0.0.0:6060",
+			DefaultText: "0.0.0.0:6060",
 			Usage:       "Address to listen on for profiling",
 			Destination: &opt.ProfilerAddress,
 		},
@@ -80,6 +83,7 @@ func main() {
 			EnvVars:     []string{"NDM_LOG_FORMAT"},
 			Usage:       "Log format",
 			Value:       "text",
+			DefaultText: "text",
 			Destination: &opt.LogFormat,
 		},
 		&cli.StringFlag{
@@ -91,6 +95,7 @@ func main() {
 		&cli.StringFlag{
 			Name:        "vendor-filter",
 			Value:       "longhorn",
+			DefaultText: "longhorn",
 			EnvVars:     []string{"NDM_VENDOR_FILTER"},
 			Usage:       "A string of comma-separated values that you want to exclude for block device vendor filter",
 			Destination: &opt.VendorFilter,
@@ -123,6 +128,7 @@ func main() {
 			Name:        "max-concurrent-ops",
 			EnvVars:     []string{"NDM_MAX_CONCURRENT_OPS"},
 			Usage:       "Specify the maximum concurrent count of disk operations, such as formatting",
+			Value:       5,
 			DefaultText: "5",
 			Destination: &opt.MaxConcurrentOps,
 		},
