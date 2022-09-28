@@ -143,9 +143,11 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 		return nil, fmt.Errorf("failed to resolve persistent dev path for block device %s", device.Name)
 	}
 	filesystem := c.BlockInfo.GetFileSystemInfoByDevPath(devPath)
+	logrus.Infof("Get filesystem info from device %s, fs type: %s", devPath, filesystem.Type)
 
 	needFormat := deviceCpy.Spec.FileSystem.ForceFormatted && deviceCpy.Status.DeviceStatus.FileSystem.LastFormattedAt == nil
 	if needFormat {
+		logrus.Infof("Prepare to force format device %s", device.Name)
 		err := c.forceFormat(deviceCpy, devPath, filesystem)
 		if err != nil {
 			err := fmt.Errorf("failed to force format device %s: %s", device.Name, err.Error())
@@ -178,6 +180,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 	needProvision := deviceCpy.Spec.FileSystem.Provisioned
 	switch {
 	case needProvision:
+		logrus.Infof("Prepare to provision device %s to node %s", device.Name, c.NodeName)
 		if err := c.provisionDeviceToNode(deviceCpy); err != nil {
 			err := fmt.Errorf("failed to provision device %s to node %s: %w", device.Name, c.NodeName, err)
 			logrus.Error(err)
@@ -186,6 +189,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 			c.Blockdevices.EnqueueAfter(c.Namespace, device.Name, jitterEnqueueDelay())
 		}
 	case !needProvision && device.Status.ProvisionPhase != diskv1.ProvisionPhaseUnprovisioned:
+		logrus.Infof("Prepare to stop provisioning device %s to node %s", device.Name, c.NodeName)
 		if err := c.unprovisionDeviceFromNode(deviceCpy); err != nil {
 			err := fmt.Errorf("failed to stop provisioning device %s to node %s: %w", device.Name, c.NodeName, err)
 			logrus.Error(err)

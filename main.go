@@ -165,6 +165,9 @@ func initLogs(opt *option.Option) {
 	}
 	logrus.SetOutput(os.Stdout)
 	logrus.Infof("Node Disk Manager %s is starting", version.FriendlyVersion())
+	logrus.Infof("Notable parameters are following:")
+	logrus.Infof("Namespace: %s, ConcurrentOps: %d, RescanInterval: %d",
+		opt.Namespace, opt.MaxConcurrentOps, opt.RescanInterval)
 	if opt.Debug {
 		logrus.SetLevel(logrus.DebugLevel)
 		logrus.Debugf("Loglevel set to [%v]", logrus.DebugLevel)
