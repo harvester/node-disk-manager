@@ -143,7 +143,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 		return nil, fmt.Errorf("failed to resolve persistent dev path for block device %s", device.Name)
 	}
 	filesystem := c.BlockInfo.GetFileSystemInfoByDevPath(devPath)
-	logrus.Infof("Get filesystem info from device %s, fs type: %s", devPath, filesystem.Type)
+	logrus.Debugf("Get filesystem info from device %s, fs type: %s", devPath, filesystem.Type)
 
 	needFormat := deviceCpy.Spec.FileSystem.ForceFormatted && deviceCpy.Status.DeviceStatus.FileSystem.LastFormattedAt == nil
 	if needFormat {
@@ -177,9 +177,19 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 		return device, err
 	}
 
+	/*
+	 * We use the needProvision to control first time provision.
+	 * 1. `deviceCpy.Spec.FileSystem.Provisioned` is False.
+	 * 2. updateDeviceStatus() would made `deviceCpy.Spec.FileSystem.Provisioned` be true and trigger Update
+	 * 3. loop back and check `deviceCpy.Spec.FileSystem.Provisioned` again. (Now needProvision is true)
+	 * 4. provision
+	 *
+	 * NOTE: we do not need to provision again for provisioned device so we should do another
+	 *       check with `device.Status.ProvisionPhase`
+	 */
 	needProvision := deviceCpy.Spec.FileSystem.Provisioned
 	switch {
-	case needProvision:
+	case needProvision && device.Status.ProvisionPhase == diskv1.ProvisionPhaseUnprovisioned:
 		logrus.Infof("Prepare to provision device %s to node %s", device.Name, c.NodeName)
 		if err := c.provisionDeviceToNode(deviceCpy); err != nil {
 			err := fmt.Errorf("failed to provision device %s to node %s: %w", device.Name, c.NodeName, err)
@@ -355,6 +365,9 @@ func (c *Controller) provisionDeviceToNode(device *diskv1.BlockDevice) error {
 	}
 
 	if disk, ok := node.Spec.Disks[device.Name]; !ok || !reflect.DeepEqual(disk, diskSpec) {
+		/* we should respect the disk Tags from LH */
+		diskSpec.Tags = disk.Tags
+		logrus.Debugf("Previous disk tags on LH: %+v, we should respect it.", disk.Tags)
 		nodeCpy.Spec.Disks[device.Name] = diskSpec
 		if _, err = c.Nodes.Update(nodeCpy); err != nil {
 			return err

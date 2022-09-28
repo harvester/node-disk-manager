@@ -129,11 +129,13 @@ func (s *Scanner) scanBlockDevicesOnNode() error {
 		bd := device.bd
 		autoProvisioned := device.AutoProvisioned
 		if oldBd, ok := oldBds[bd.Name]; ok {
-			if s.NeedsAutoProvision(oldBd, autoProvisioned) {
-				logrus.Debugf("Enqueue block device %s for auto-provisioning", bd.Name)
-				s.Blockdevices.Enqueue(s.Namespace, bd.Name)
-			} else if isDevPathChanged(oldBd, bd) {
+			if isDevPathChanged(oldBd, bd) {
 				logrus.Debugf("Enqueue block device %s for device path change", bd.Name)
+				s.Blockdevices.Enqueue(s.Namespace, bd.Name)
+			} else if isDevAlreadyProvisioned(bd) {
+				logrus.Debugf("Skip the provisioned device: %s", bd.Name)
+			} else if s.NeedsAutoProvision(oldBd, autoProvisioned) {
+				logrus.Debugf("Enqueue block device %s for auto-provisioning", bd.Name)
 				s.Blockdevices.Enqueue(s.Namespace, bd.Name)
 			} else {
 				logrus.Debugf("Skip updating device %s", bd.Name)
@@ -235,4 +237,9 @@ func (s *Scanner) NeedsAutoProvision(oldBd *diskv1.BlockDevice, autoProvisionPat
 // when scanner startup.
 func isDevPathChanged(oldBd *diskv1.BlockDevice, newBd *diskv1.BlockDevice) bool {
 	return oldBd.Status.DeviceStatus.DevPath != newBd.Status.DeviceStatus.DevPath
+}
+
+/* isDevAlreadyProvisioned would return true if the device is provisioned */
+func isDevAlreadyProvisioned(newBd *diskv1.BlockDevice) bool {
+	return newBd.Status.ProvisionPhase == diskv1.ProvisionPhaseProvisioned
 }
