@@ -82,15 +82,15 @@ type Controller struct {
 	semaphore *semaphore
 }
 
-type NeedMountUpdate int8
+type NeedMountUpdateOP int8
 
 const (
-	NeedMountUpdateNo NeedMountUpdate = 1 << iota
+	NeedMountUpdateNoOp NeedMountUpdateOP = 1 << iota
 	NeedMountUpdateMount
 	NeedMountUpdateUnmount
 )
 
-func (f NeedMountUpdate) Has(flag NeedMountUpdate) bool {
+func (f NeedMountUpdateOP) Has(flag NeedMountUpdateOP) bool {
 	return f&flag != 0
 }
 
@@ -162,7 +162,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 		return device, err
 	}
 
-	if needMountUpdate := needUpdateMountPoint(deviceCpy, filesystem); needMountUpdate != NeedMountUpdateNo {
+	if needMountUpdate := needUpdateMountPoint(deviceCpy, filesystem); needMountUpdate != NeedMountUpdateNoOp {
 		err := c.updateDeviceMount(deviceCpy, devPath, filesystem, needMountUpdate)
 		if err != nil {
 			err := fmt.Errorf("failed to update device mount %s: %s", device.Name, err.Error())
@@ -228,9 +228,10 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 	return nil, nil
 }
 
-func (c *Controller) updateDeviceMount(device *diskv1.BlockDevice, devPath string, filesystem *block.FileSystemInfo, needMountUpdate NeedMountUpdate) error {
+func (c *Controller) updateDeviceMount(device *diskv1.BlockDevice, devPath string, filesystem *block.FileSystemInfo, needMountUpdate NeedMountUpdateOP) error {
+	logrus.Infof("Prepare to try %s", convertMountStr(needMountUpdate))
 	if device.Status.DeviceStatus.Partitioned {
-		return fmt.Errorf("cannot mount device with partitions")
+		return fmt.Errorf("not support the partitioned device now")
 	}
 	if needMountUpdate.Has(NeedMountUpdateUnmount) {
 		logrus.Infof("Unmount device %s from path %s", device.Name, filesystem.MountPoint)
@@ -249,7 +250,7 @@ func (c *Controller) updateDeviceMount(device *diskv1.BlockDevice, devPath strin
 		diskv1.DeviceMounted.SetError(device, "", nil)
 		diskv1.DeviceMounted.SetStatusBool(device, true)
 	}
-	if needMountUpdate != NeedMountUpdateNo {
+	if needMountUpdate != NeedMountUpdateNoOp {
 		return c.updateDeviceFileSystem(device, devPath)
 	}
 	return nil
@@ -612,27 +613,43 @@ func extraDiskMountPoint(bd *diskv1.BlockDevice) string {
 	return fmt.Sprintf("/var/lib/harvester/extra-disks/%s", bd.Name)
 }
 
-func needUpdateMountPoint(bd *diskv1.BlockDevice, filesystem *block.FileSystemInfo) NeedMountUpdate {
+func needUpdateMountPoint(bd *diskv1.BlockDevice, filesystem *block.FileSystemInfo) NeedMountUpdateOP {
 	if filesystem == nil {
-		return NeedMountUpdateNo
+		logrus.Debugf("Filesystem is not ready, skip the mount operation")
+		return NeedMountUpdateNoOp
 	}
+
+	logrus.Debugf("Checking mount operation with FS.Provisioned %v, FS.Mountpoint %s", bd.Spec.FileSystem.Provisioned, filesystem.MountPoint)
 	if bd.Spec.FileSystem.Provisioned {
 		if filesystem.MountPoint == "" {
 			return NeedMountUpdateMount
 		}
 		if filesystem.MountPoint == extraDiskMountPoint(bd) {
-			return NeedMountUpdateNo
+			logrus.Debugf("Already mounted, return no-op")
+			return NeedMountUpdateNoOp
 		}
 		return NeedMountUpdateUnmount | NeedMountUpdateMount
 	}
 	if filesystem.MountPoint != "" {
 		return NeedMountUpdateUnmount
 	}
-	return NeedMountUpdateNo
+	return NeedMountUpdateNoOp
 }
 
 // jitterEnqueueDelay returns a random duration between 7 to 13.
 func jitterEnqueueDelay() time.Duration {
 	enqueueDelay := 10
 	return time.Duration(rand.Intn(3)+enqueueDelay) * time.Second
+}
+
+func convertMountStr(mountOP NeedMountUpdateOP) string {
+	switch mountOP {
+	case NeedMountUpdateNoOp:
+		return "No-Op"
+	case NeedMountUpdateMount:
+		return "Mount"
+	case NeedMountUpdateUnmount:
+		return "Unmount"
+	}
+	return "Unknown OP"
 }
