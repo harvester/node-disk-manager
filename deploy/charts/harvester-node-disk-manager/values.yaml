@@ -1,0 +1,78 @@
+# Default values for harvester-node-disk-manager.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+image:
+  repository: rancher/harvester-node-disk-manager
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+longhornNamespace:
+
+# An array of disk vendor strings that you want to exclude from creating block device resources.
+vendorFilter: []
+  # - longhorn
+
+# An array of mount paths that you want to exclude from creating block device resources.
+pathFilter: []
+  # - /oem
+  # - /path/to/exclude
+
+# An array of filesystem labels on partitions that you want to exclude from
+# creating block device resources.
+# Accepting Golang's glob patterns.
+labelFilter: []
+  # - MY_FS_LABEL
+  # - GLOB_*_WORKS
+
+# An array of device paths of disks that you want to auto-provision to Longhorn.
+# Accepting Golang's glob patterns.
+autoProvisionFilter: []
+  # - /dev/sda?
+  # - /dev/nvme0n1p1
+
+# Specify the interval of device rescanning of the node (in seconds)
+rescanInterval:
+
+# Sepcify how many concurrent ops we could execute at the same time
+maxConcurrentOps:
+
+# Perform auto GPT partition generating if a disk can not be globally identified
+# Default to false.
+autoGPTGenerate:

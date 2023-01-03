@@ -1,0 +1,1 @@
+The harvester-node-disk-manager has been installed into "{{ .Release.Namespace }}" namespace.

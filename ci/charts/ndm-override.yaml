@@ -1,0 +1,7 @@
+image:
+  repository: rancher/harvester-node-disk-manager
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+autoProvisionFilter: [/dev/sd*]

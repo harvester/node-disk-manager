@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "harvester-node-disk-manager.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "harvester-node-disk-manager.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "harvester-node-disk-manager.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+    {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      labels:
+        {{- include "harvester-node-disk-manager.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "harvester-node-disk-manager.name" . }}
+      hostNetwork: true
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - node-disk-manager
+        env:
+        {{- with .Values.vendorFilter }}
+        - name: NDM_VENDOR_FILTER
+          value: {{ . | join "," | quote }}
+        {{- end }}
+        {{- with .Values.pathFilter }}
+        - name: NDM_PATH_FILTER
+          value: {{ . | join "," | quote }}
+        {{- end }}
+        {{- with .Values.labelFilter }}
+        - name: NDM_LABEL_FILTER
+          value: {{ . | join "," | quote }}
+        {{- end }}
+        {{- with .Values.autoProvisionFilter }}
+        - name: NDM_AUTO_PROVISION_FILTER
+          value: {{ . | join "," | quote }}
+        {{- end }}
+        {{- with .Values.rescanInterval }}
+        - name: NDM_RESCAN_INTERVAL
+          value: {{ . | quote }}
+        {{- end }}
+        {{- with .Values.maxConcurrentOps }}
+        - name: NDM_MAX_CONCURRENT_OPS
+          value: {{ . | quote }}
+        {{- end }}
+        {{- with .Values.autoGPTGenerate }}
+        - name: NDM_AUTO_GPT_GENERATE
+          value: {{ . | quote }}
+        {{- end }}
+        - name: LONGHORN_NAMESPACE
+          value: {{ .Values.longhornNamespace | default "longhorn-system" }}
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - mountPath: /host/proc # To access dockerd/containerd mount namespace
+          name: host-proc
+          readOnly: true
+        - mountPath: /run/udev  # To receive udev events
+          name: host-run-udev
+          readOnly: true
+        - mountPath: /dev # To get host device info
+          name: host-dev
+          readOnly: true
+        - mountPath: /sys # To get host sysfs info
+          name: host-sys
+          readOnly: true
+        resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: host-proc
+          hostPath:
+            path: /proc
+            type: Directory
+        - name: host-run-udev
+          hostPath:
+            path: /run/udev
+            type: Directory
+        - name: host-dev
+          hostPath:
+            path: /dev
+            type: Directory
+        - name: host-sys
+          hostPath:
+            path: /sys
+            type: Directory
