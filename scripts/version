@@ -21,6 +21,10 @@ SUFFIX="-${ARCH}"
 
 TAG=${TAG:-${VERSION}${SUFFIX}}
 REPO=${REPO:-harvester}
+if [[ -n ${BUILD_FOR_CI} ]]; then
+  TAG=${COMMIT}
+  return
+fi
 
 if echo $TAG | grep -q dirty; then
     TAG=dev

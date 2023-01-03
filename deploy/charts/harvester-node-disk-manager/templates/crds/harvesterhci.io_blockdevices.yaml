@@ -1,0 +1,288 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    {}
+  creationTimestamp: null
+  name: blockdevices.harvesterhci.io
+spec:
+  group: harvesterhci.io
+  names:
+    kind: BlockDevice
+    listKind: BlockDeviceList
+    plural: blockdevices
+    shortNames:
+    - bd
+    - bds
+    singular: blockdevice
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.deviceStatus.details.deviceType
+      name: Type
+      type: string
+    - jsonPath: .spec.devPath
+      name: DevPath
+      type: string
+    - jsonPath: .status.deviceStatus.fileSystem.mountPoint
+      name: MountPoint
+      type: string
+    - jsonPath: .spec.nodeName
+      name: NodeName
+      type: string
+    - jsonPath: .status.state
+      name: Status
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1beta1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              devPath:
+                description: a string with the device path of the disk, e.g. "/dev/sda1"
+                type: string
+              fileSystem:
+                properties:
+                  forceFormatted:
+                    description: a bool indicating the device is force formatted to
+                      overwrite the existing one
+                    type: boolean
+                  mountPoint:
+                    description: a string with the partition's mount point, or ""
+                      if no mount point was discovered
+                    type: string
+                  provisioned:
+                    description: a bool indicating whether the filesystem can be provisioned
+                      as a disk for the node to store data.
+                    type: boolean
+                required:
+                - mountPoint
+                type: object
+              nodeName:
+                description: name of the node to which the block device is attached
+                type: string
+            required:
+            - devPath
+            - fileSystem
+            - nodeName
+            type: object
+          status:
+            properties:
+              conditions:
+                items:
+                  properties:
+                    lastTransitionTime:
+                      description: Last time the condition transitioned from one status
+                        to another.
+                      type: string
+                    lastUpdateTime:
+                      description: The last time this condition was updated.
+                      type: string
+                    message:
+                      description: Human-readable message indicating details about
+                        last transition
+                      type: string
+                    reason:
+                      description: The reason for the condition's last transition.
+                      type: string
+                    status:
+                      description: Status of the condition, one of True, False, Unknown.
+                      type: string
+                    type:
+                      description: Type of the condition.
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
+              deviceStatus:
+                properties:
+                  capacity:
+                    description: a object describe the disk capacity
+                    properties:
+                      physicalBlockSizeBytes:
+                        description: the size of the physical blocks used on the disk,
+                          in bytes
+                        format: int64
+                        type: integer
+                      sizeBytes:
+                        description: the amount of storage the disk provides
+                        format: int64
+                        type: integer
+                    required:
+                    - physicalBlockSizeBytes
+                    - sizeBytes
+                    type: object
+                  details:
+                    description: a object describe the disk details
+                    properties:
+                      busPath:
+                        description: a string represents the block device bus path
+                        type: string
+                      deviceType:
+                        description: a string represents the type of the device, options
+                          are "disk", "part"
+                        enum:
+                        - disk
+                        - part
+                        type: string
+                      driveType:
+                        description: a string represents the type of drive bus, options
+                          are "HDD", "FDD", "ODD", or "SSD", which correspond to a
+                          hard disk drive (rotational), floppy drive, optical (CD/DVD)
+                          drive and solid-state drive
+                        enum:
+                        - HDD
+                        - FDD
+                        - ODD
+                        - SSD
+                        - Unknown
+                        type: string
+                      isRemovable:
+                        description: contains a boolean indicating if the disk drive
+                          is removable
+                        type: boolean
+                      label:
+                        description: a string containing the disk label
+                        type: string
+                      model:
+                        description: a string with the vendor-assigned disk model
+                          name
+                        type: string
+                      numaNodeID:
+                        description: the numeric index of the NUMA node this disk
+                          is local to, or -1
+                        type: integer
+                      partUUID:
+                        description: PartUUID is a partition-table-level UUID for
+                          the partition, a standard feature for all partitions on
+                          GPT-partitioned disks
+                        type: string
+                      ptUUID:
+                        description: PtUUID is the UUID of the partition table itself,
+                          a unique identifier for the entire disk assigned at the
+                          time the disk was partitioned
+                        type: string
+                      serialNumber:
+                        description: a string with the disk's serial number
+                        type: string
+                      storageController:
+                        description: the type of storage controller/drive, options
+                          are "SCSI", "IDE", "virtio", "MMC", or "NVMe"
+                        enum:
+                        - SCSI
+                        - IDE
+                        - virtio
+                        - MMC
+                        - NVMe
+                        - Unknown
+                        type: string
+                      uuid:
+                        description: UUID is a filesystem-level UUID, which is retrieved
+                          from the filesystem metadata inside the partition This would
+                          be volume UUID on macOS, PartUUID on linux, empty on Windows
+                        type: string
+                      vendor:
+                        description: a string with the name of the hardware vendor
+                          for the disk drive
+                        type: string
+                      wwn:
+                        description: a string with the disk's World Wide Name(WWN)
+                        type: string
+                    required:
+                    - deviceType
+                    - driveType
+                    - storageController
+                    type: object
+                  devPath:
+                    description: device path
+                    type: string
+                  fileSystem:
+                    properties:
+                      LastFormattedAt:
+                        description: the last force formatted timestamp, only exist
+                          when user operate device formatting through the CRD controller
+                        format: date-time
+                        type: string
+                      isReadOnly:
+                        description: a bool indicating the partition is read-only
+                        type: boolean
+                      mountPoint:
+                        description: a string with the partition's mount point, or
+                          "" if no mount point was discovered
+                        type: string
+                      type:
+                        description: a string indicated the filesystem type for the
+                          partition, or "" if the system could not determine the type.
+                        type: string
+                    required:
+                    - mountPoint
+                    - type
+                    type: object
+                  parentDevice:
+                    description: a string with the parent device path of the disk,
+                      e.g. "/dev/sda" e.g `/dev/sda` is the parent for `/dev/sda1`
+                    type: string
+                  partitioned:
+                    description: a bool indicating if the disk is partitioned
+                    type: boolean
+                required:
+                - capacity
+                - details
+                - devPath
+                - fileSystem
+                - partitioned
+                type: object
+              provisionPhase:
+                default: Unprovisioned
+                description: The current phase of the block device being provisioned.
+                enum:
+                - Provisioned
+                - Unprovisioned
+                - Unprovisioning
+                type: string
+              state:
+                description: the current state of the block device, options are "Active",
+                  "Inactive", or "Unknown"
+                enum:
+                - Active
+                - Inactive
+                - Unknown
+                type: string
+            required:
+            - provisionPhase
+            - state
+            type: object
+        required:
+        - metadata
+        - spec
+        - status
+        type: object
+    served: true
+    storage: true
+    subresources: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
