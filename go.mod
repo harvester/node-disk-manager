@@ -35,8 +35,10 @@ replace (
 require (
 	github.com/ehazlett/simplelog v0.0.0-20200226020431-d374894e92a4
 	github.com/jaypipes/ghw v0.8.1-0.20210701154532-dd036bd38c40
+	github.com/kevinburke/ssh_config v1.2.0
 	github.com/longhorn/go-iscsi-helper v0.0.0-20210330030558-49a327fb024e
 	github.com/longhorn/longhorn-manager v1.1.1
+	github.com/melbahja/goph v1.3.0
 	github.com/pilebones/go-udev v0.0.0-20210126000448-a3c2a7a4afb7
 	github.com/rancher/lasso v0.0.0-20210408231703-9ddd9378d08d
 	github.com/rancher/wrangler v0.8.0
@@ -68,9 +70,11 @@ require (
 	github.com/hashicorp/golang-lru v0.5.3 // indirect
 	github.com/imdario/mergo v0.3.8 // indirect
 	github.com/json-iterator/go v1.1.10 // indirect
+	github.com/kr/fs v0.1.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pkg/sftp v1.13.4 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/russross/blackfriday/v2 v2.0.1 // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect
