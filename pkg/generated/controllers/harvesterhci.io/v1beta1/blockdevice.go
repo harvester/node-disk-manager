@@ -360,6 +360,10 @@ func (a *blockDeviceGeneratingHandler) Remove(key string, obj *v1beta1.BlockDevi
 }
 
 func (a *blockDeviceGeneratingHandler) Handle(obj *v1beta1.BlockDevice, status v1beta1.BlockDeviceStatus) (v1beta1.BlockDeviceStatus, error) {
+	if !obj.DeletionTimestamp.IsZero() {
+		return status, nil
+	}
+
 	objs, newStatus, err := a.BlockDeviceGeneratingHandler(obj, status)
 	if err != nil {
 		return newStatus, err
