@@ -14,8 +14,6 @@ import (
 	_ "net/http/pprof"
 	"os"
 
-	"github.com/harvester/node-disk-manager/pkg/filter"
-
 	"github.com/ehazlett/simplelog"
 	"github.com/rancher/wrangler/pkg/kubeconfig"
 	"github.com/rancher/wrangler/pkg/signals"
@@ -26,6 +24,7 @@ import (
 	"github.com/harvester/node-disk-manager/pkg/block"
 	blockdevicev1 "github.com/harvester/node-disk-manager/pkg/controller/blockdevice"
 	nodev1 "github.com/harvester/node-disk-manager/pkg/controller/node"
+	"github.com/harvester/node-disk-manager/pkg/filter"
 	ctldisk "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io"
 	ctllonghorn "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io"
 	"github.com/harvester/node-disk-manager/pkg/option"
@@ -184,7 +183,7 @@ func run(opt *option.Option) error {
 		return errors.New("either node name or namespace is empty")
 	}
 
-	ctx := signals.SetupSignalHandler(context.Background())
+	ctx := signals.SetupSignalContext()
 
 	// register block device detector
 	block, err := block.New()
