@@ -3,9 +3,10 @@ package filter
 import (
 	"path/filepath"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/harvester/node-disk-manager/pkg/block"
 	"github.com/harvester/node-disk-manager/pkg/util"
-	"github.com/sirupsen/logrus"
 )
 
 const (
