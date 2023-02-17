@@ -2,17 +2,31 @@ name: Harvester-Node-Disk-Manager CI
 
 # synchronize for pull request update
 on:
+  push:
+    branches:
+      - master
+      - 'v**'
   pull_request:
     types: [opened, reopened, synchronize]
 
 jobs:
-  build:
+  validation:
     runs-on:
       - self-hosted
       - Linux
     steps:
       - name: "Clone and check"
         uses: actions/checkout@v3
+      - name: "Run validations"
+        run: |
+          make validate
+          make validate-ci
+  build:
+    needs: validation
+    runs-on:
+      - self-hosted
+      - Linux
+    steps:
       - name: "Local Build for next stage"
         run: |
           BUILD_FOR_CI=true make
