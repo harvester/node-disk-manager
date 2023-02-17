@@ -5,6 +5,7 @@ go 1.18
 replace (
 	golang.org/x/net => golang.org/x/net v0.4.0
 	golang.org/x/text => golang.org/x/text v0.3.8
+	gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.0-20220521103104-8f96da9f5d5e
 	k8s.io/api => k8s.io/api v0.21.1
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.21.1
 	k8s.io/apimachinery => k8s.io/apimachinery v0.21.1
