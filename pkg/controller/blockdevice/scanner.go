@@ -154,8 +154,15 @@ func (s *Scanner) scanBlockDevicesOnNode() error {
 	// This oldBds are leftover after running SaveBlockDevice.
 	// Clean up all previous registered block devices.
 	for _, oldBd := range oldBds {
-		logrus.Debugf("Delete device %s", oldBd.Name)
-		if err := s.Blockdevices.Delete(oldBd.Namespace, oldBd.Name, &metav1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
+		if oldBd.Status.State == diskv1.BlockDeviceInactive {
+			logrus.Debugf("The device %s is already inactive, continue.", oldBd.Name)
+			continue
+		}
+		logrus.Debugf("Change the device %s to inactive.", oldBd.Name)
+		newBd := oldBd.DeepCopy()
+		newBd.Status.State = diskv1.BlockDeviceInactive
+		if _, err := s.Blockdevices.Update(newBd); err != nil {
+			logrus.Fatalf("Update device %s status error", oldBd.Name)
 			return err
 		}
 	}
@@ -215,6 +222,11 @@ func (s *Scanner) SaveBlockDevice(bd *diskv1.BlockDevice, autoProvisioned bool) 
 	if autoProvisioned {
 		bd.Spec.FileSystem.ForceFormatted = true
 		bd.Spec.FileSystem.Provisioned = true
+	}
+	if curBd, err := s.Blockdevices.Get(bd.Namespace, bd.Name, metav1.GetOptions{}); err == nil {
+		logrus.Infof("The inactive block device %s is coming back", bd.Name)
+		curBd.Status.State = diskv1.BlockDeviceActive
+		return s.Blockdevices.Update(curBd)
 	}
 	logrus.Infof("Add new block device %s with device: %s", bd.Name, bd.Spec.DevPath)
 	return s.Blockdevices.Create(bd)
