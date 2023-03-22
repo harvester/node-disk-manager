@@ -224,6 +224,10 @@ spec:
                           when user operate device formatting through the CRD controller
                         format: date-time
                         type: string
+                      corrupted:
+                        description: idicating whether the filesystem is corrupted
+                          or not
+                        type: boolean
                       isReadOnly:
                         description: a bool indicating the partition is read-only
                         type: boolean

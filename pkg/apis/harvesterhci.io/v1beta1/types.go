@@ -159,6 +159,9 @@ type FilesystemStatus struct {
 
 	// the last force formatted timestamp, only exist when user operate device formatting through the CRD controller
 	LastFormattedAt *metav1.Time `json:"LastFormattedAt,omitempty"`
+
+	// idicating whether the filesystem is corrupted or not
+	Corrupted bool `json:"corrupted,omitempty"`
 }
 
 type StorageController string
