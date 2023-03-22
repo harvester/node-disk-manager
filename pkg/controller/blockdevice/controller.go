@@ -245,6 +245,17 @@ func (c *Controller) updateDeviceMount(device *diskv1.BlockDevice, devPath strin
 		expectedMountPoint := extraDiskMountPoint(device)
 		logrus.Infof("Mount deivce %s to %s", device.Name, expectedMountPoint)
 		if err := util.MountDisk(devPath, expectedMountPoint); err != nil {
+			if util.IsFSCorrupted(err) {
+				logrus.Errorf("Target device may be corrupted, update FS info.")
+				devCopy := device.DeepCopy()
+				// need to remove before merge, just for test
+				devCopy.Status.DeviceStatus.FileSystem.LastFormattedAt = nil
+				//device.Status.DeviceStatus.FileSystem.Corrupted = true
+				if !reflect.DeepEqual(device, devCopy) {
+					logrus.Debugf("Update block device %s for new DeviceStatus state", device.Name)
+					c.Blockdevices.Update(devCopy)
+				}
+			}
 			return err
 		}
 		diskv1.DeviceMounted.SetError(device, "", nil)
