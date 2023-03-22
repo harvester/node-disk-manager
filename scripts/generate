@@ -1,0 +1,17 @@
+#!/bin/bash
+set -e
+
+cd $(dirname $0)/..
+
+echo running go generate
+
+if [[ ! -z $(git diff --name-only |grep -v pkg/apis/harvesterhci.io/v1beta1/types.go) ]]
+then
+    echo skip generate code, you only can modify the "pkg/apis/harvesterhci.io/v1beta1/types.go"
+    exit 0
+fi
+
+go generate
+
+echo generate the patch file to  generated_patch/generated.patch
+git diff -- ':!pkg/apis/harvesterhci.io/v1beta1/types.go' > generated_patch/generated.patch
