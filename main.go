@@ -13,6 +13,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"sync"
 
 	"github.com/ehazlett/simplelog"
 	"github.com/rancher/wrangler/pkg/kubeconfig"
@@ -208,18 +209,22 @@ func run(opt *option.Option) error {
 
 	excludeFilters := filter.SetExcludeFilters(opt.VendorFilter, opt.PathFilter, opt.LabelFilter)
 	autoProvisionFilters := filter.SetAutoProvisionFilters(opt.AutoProvisionFilter)
+	locker := &sync.Mutex{}
+	cond := sync.NewCond(locker)
+	bds := disks.Harvesterhci().V1beta1().BlockDevice()
+	nodes := lhs.Longhorn().V1beta1().Node()
+	scanner := blockdevicev1.NewScanner(
+		opt.NodeName,
+		opt.Namespace,
+		bds,
+		block,
+		excludeFilters,
+		autoProvisionFilters,
+		cond,
+		false,
+	)
 
 	start := func(ctx context.Context) {
-		bds := disks.Harvesterhci().V1beta1().BlockDevice()
-		nodes := lhs.Longhorn().V1beta1().Node()
-		scanner := blockdevicev1.NewScanner(
-			opt.NodeName,
-			opt.Namespace,
-			bds,
-			block,
-			excludeFilters,
-			autoProvisionFilters,
-		)
 		if err := blockdevicev1.Register(
 			ctx,
 			nodes,
@@ -250,5 +255,10 @@ func run(opt *option.Option) error {
 	start(ctx)
 
 	<-ctx.Done()
+	logrus.Infof("NDM is going shutdown")
+	scanner.Cond.L.Lock()
+	scanner.Cond.Signal()
+	scanner.Cond.L.Unlock()
+	scanner.Shutdown = true
 	return nil
 }

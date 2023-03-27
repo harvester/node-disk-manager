@@ -110,11 +110,19 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 			logrus.Infof("Skip adding non-identifiable block device %s", bd.Spec.DevPath)
 			return
 		}
+		u.scanner.Cond.L.Lock()
 		autoProvisioned := udevDevice.IsDisk() && u.scanner.ApplyAutoProvisionFiltersForDisk(disk)
 		u.AddBlockDevice(bd, autoProvisioned)
+		logrus.Infof("Wake up scanner with %s operation", netlink.ADD)
+		u.scanner.Cond.Signal()
+		u.scanner.Cond.L.Unlock()
 	case netlink.REMOVE:
 		if udevDevice.IsDisk() {
+			u.scanner.Cond.L.Lock()
+			logrus.Infof("Wake up scanner with %s operation", netlink.REMOVE)
 			u.RemoveBlockDevice(bd, &udevDevice, disk)
+			u.scanner.Cond.Signal()
+			u.scanner.Cond.L.Unlock()
 		}
 	}
 }
