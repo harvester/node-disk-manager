@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kevinburke/ssh_config"
 	"github.com/melbahja/goph"
@@ -17,11 +18,12 @@ import (
 	clientset "github.com/harvester/node-disk-manager/pkg/generated/clientset/versioned"
 )
 
-type Suite struct {
+type SingleDiskSuite struct {
 	suite.Suite
 	SSHClient      *goph.Client
 	clientSet      *clientset.Clientset
 	targetNodeName string
+	targetDiskName string
 }
 
 type ProvisionedDisk struct {
@@ -29,7 +31,7 @@ type ProvisionedDisk struct {
 	UUID    string
 }
 
-func (s *Suite) SetupSuite() {
+func (s *SingleDiskSuite) SetupSuite() {
 	nodeName := ""
 	f, _ := os.Open(filepath.Join(os.Getenv("HOME"), "ssh-config"))
 	cfg, _ := ssh_config.Decode(f)
@@ -63,20 +65,19 @@ func (s *Suite) SetupSuite() {
 
 	s.clientSet, err = clientset.NewForConfig(config)
 	require.Equal(s.T(), err, nil, "New clientset should not get error")
-
 }
 
-func (s *Suite) AfterTest(_, _ string) {
+func (s *SingleDiskSuite) AfterTest(_, _ string) {
 	if s.SSHClient != nil {
 		s.SSHClient.Close()
 	}
 }
 
-func TestAddDisks(t *testing.T) {
-	suite.Run(t, new(Suite))
+func TestSingleDiskOperation(t *testing.T) {
+	suite.Run(t, new(SingleDiskSuite))
 }
 
-func (s *Suite) TestAddSingleDisk() {
+func (s *SingleDiskSuite) Test_0_AutoProvisionSingleDisk() {
 	// prepare to check the added disk
 	var provisionedDisk ProvisionedDisk
 	bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
@@ -89,6 +90,7 @@ func (s *Suite) TestAddSingleDisk() {
 		}
 		bdStatus := blockdevice.Status
 		if bdStatus.State == "Active" && bdStatus.ProvisionPhase == "Provisioned" {
+			s.targetDiskName = blockdevice.Name
 			// get from blockdevice resource
 			provisionedDisk.devPath = bdStatus.DeviceStatus.DevPath
 			provisionedDisk.UUID = bdStatus.DeviceStatus.Details.UUID
@@ -102,4 +104,43 @@ func (s *Suite) TestAddSingleDisk() {
 			require.Equal(s.T(), provisionedDisk.UUID, convertOutPut, "Provisioned disk UUID should be the same")
 		}
 	}
+}
+
+func (s *SingleDiskSuite) Test_1_UnprovisionSingleDisk() {
+	require.NotEqual(s.T(), s.targetDiskName, "", "target disk name should not be empty before we do the remove test")
+	bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
+	curBlockdevice, err := bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
+	require.Equal(s.T(), err, nil, "Get Blockdevices should not get error")
+
+	newBlockdevice := curBlockdevice.DeepCopy()
+	newBlockdevice.Spec.FileSystem.Provisioned = false
+	bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
+
+	// sleep 3 seconds to wait controller handle
+	time.Sleep(3 * time.Second)
+
+	// check for the removed status
+	curBlockdevice, err = bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
+	require.Equal(s.T(), err, nil, "Get BlockdevicesList should not get error before we want to check remove")
+	require.Equal(s.T(), curBlockdevice.Status.DeviceStatus.FileSystem.MountPoint, "", "Mountpoint should be empty after we remove disk!")
+
+}
+
+func (s *SingleDiskSuite) Test_2_ManuallyProvisionSingleDisk() {
+	require.NotEqual(s.T(), s.targetDiskName, "", "target disk name should not be empty before we do the remove test")
+	bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
+	curBlockdevice, err := bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
+	require.Equal(s.T(), err, nil, "Get Blockdevices should not get error")
+
+	newBlockdevice := curBlockdevice.DeepCopy()
+	newBlockdevice.Spec.FileSystem.Provisioned = true
+	bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
+
+	// sleep 3 seconds to wait controller handle
+	time.Sleep(3 * time.Second)
+
+	// check for the added status
+	curBlockdevice, err = bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
+	require.Equal(s.T(), err, nil, "Get BlockdevicesList should not get error before we want to check remove")
+	require.NotEqual(s.T(), curBlockdevice.Status.DeviceStatus.FileSystem.MountPoint, "", "Mountpoint should be empty after we remove disk!")
 }
