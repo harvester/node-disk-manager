@@ -77,6 +77,7 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 	if !udevDevice.IsDisk() && !udevDevice.IsPartition() {
 		return
 	}
+	logrus.Debugf("Prepare to handle event: %s, env: %+v", uevent.Action, uevent.Env)
 
 	var disk *block.Disk
 	var part *block.Partition

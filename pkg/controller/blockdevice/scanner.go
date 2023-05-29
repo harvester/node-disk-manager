@@ -3,6 +3,7 @@ package blockdevice
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -143,7 +144,7 @@ func (s *Scanner) scanBlockDevicesOnNode() error {
 			// remove blockdevice from old device so we can delete missing devices afterward
 			delete(oldBds, bd.Name)
 		} else {
-			logrus.Debugf("Create new device %s", bd.Name)
+			logrus.Infof("Create new device %s with wwn: %s", bd.Name, bd.Status.DeviceStatus.Details.WWN)
 			// persist newly detected block device
 			if _, err := s.SaveBlockDevice(bd, autoProvisioned); err != nil && !errors.IsAlreadyExists(err) {
 				return err
@@ -151,12 +152,22 @@ func (s *Scanner) scanBlockDevicesOnNode() error {
 		}
 	}
 
-	// This oldBds are leftover after running SaveBlockDevice.
-	// Clean up all previous registered block devices.
+	// We do not remove the block device that maybe just temporily not available.
+	// Set it to inactive and give the chance to recover.
 	for _, oldBd := range oldBds {
-		logrus.Debugf("Delete device %s", oldBd.Name)
-		if err := s.Blockdevices.Delete(oldBd.Namespace, oldBd.Name, &metav1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
-			return err
+		if oldBd.Status.State == diskv1.BlockDeviceInactive {
+			logrus.Debugf("The device %s is already inactive, continue.", oldBd.Name)
+			continue
+		}
+		logrus.Debugf("Change the device %s to inactive.", oldBd.Name)
+		newBd := oldBd.DeepCopy()
+		newBd.Status.State = diskv1.BlockDeviceInactive
+		if !reflect.DeepEqual(oldBd, newBd) {
+			logrus.Debugf("Update block device %s for new formatting and mount state", oldBd.Name)
+			if _, err := s.Blockdevices.Update(newBd); err != nil {
+				logrus.Errorf("Update device %s status error", oldBd.Name)
+				return err
+			}
 		}
 	}
 	return nil
@@ -212,12 +223,21 @@ func (s *Scanner) ApplyAutoProvisionFiltersForDisk(disk *block.Disk) bool {
 
 // SaveBlockDevice persists the blockedevice information.
 func (s *Scanner) SaveBlockDevice(bd *diskv1.BlockDevice, autoProvisioned bool) (*diskv1.BlockDevice, error) {
-	if autoProvisioned {
-		bd.Spec.FileSystem.ForceFormatted = true
-		bd.Spec.FileSystem.Provisioned = true
+	curBd, err := s.Blockdevices.Get(bd.Namespace, bd.Name, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			if autoProvisioned {
+				bd.Spec.FileSystem.ForceFormatted = true
+				bd.Spec.FileSystem.Provisioned = true
+			}
+			logrus.Infof("Add new block device %s with device: %s", bd.Name, bd.Spec.DevPath)
+			return s.Blockdevices.Create(bd)
+		}
+		return nil, err
 	}
-	logrus.Infof("Add new block device %s with device: %s", bd.Name, bd.Spec.DevPath)
-	return s.Blockdevices.Create(bd)
+	logrus.Infof("The inactive block device %s with wwn %s is coming back", bd.Name, bd.Status.DeviceStatus.Details.WWN)
+	curBd.Status.State = diskv1.BlockDeviceActive
+	return s.Blockdevices.Update(curBd)
 }
 
 // NeedsAutoProvision returns true if the current block device needs to be auto-provisioned.
