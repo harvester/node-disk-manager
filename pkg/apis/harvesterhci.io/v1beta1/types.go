@@ -16,7 +16,7 @@ var (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:resource:shortName=bd;bds,scope=Namespaced
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=`.status.deviceStatus.details.deviceType`
-// +kubebuilder:printcolumn:name="DevPath",type="string",JSONPath=`.spec.devPath`
+// +kubebuilder:printcolumn:name="DevPath",type="string",JSONPath=`.status.deviceStatus.devPath`
 // +kubebuilder:printcolumn:name="MountPoint",type="string",JSONPath=`.status.deviceStatus.fileSystem.mountPoint`
 // +kubebuilder:printcolumn:name="NodeName",type="string",JSONPath=`.spec.nodeName`
 // +kubebuilder:printcolumn:name="ProvisionPhase",type="string",JSONPath=`.status.provisionPhase`
@@ -159,6 +159,9 @@ type FilesystemStatus struct {
 
 	// the last force formatted timestamp, only exist when user operate device formatting through the CRD controller
 	LastFormattedAt *metav1.Time `json:"LastFormattedAt,omitempty"`
+
+	// indicating whether the filesystem is corrupted or not
+	Corrupted bool `json:"corrupted,omitempty"`
 }
 
 type StorageController string
