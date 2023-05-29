@@ -117,7 +117,7 @@ func (c *FakeBlockDevices) UpdateStatus(ctx context.Context, blockDevice *v1beta
 // Delete takes name of the blockDevice and deletes it. Returns an error if one occurs.
 func (c *FakeBlockDevices) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewDeleteAction(blockdevicesResource, c.ns, name), &v1beta1.BlockDevice{})
+		Invokes(testing.NewDeleteActionWithOptions(blockdevicesResource, c.ns, name, opts), &v1beta1.BlockDevice{})
 
 	return err
 }

@@ -1,11 +1,9 @@
 package blockdevice
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 	"sync"
-	"time"
 
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
@@ -56,7 +54,7 @@ func NewScanner(
 	}
 }
 
-func (s *Scanner) Start(ctx context.Context, rescanInterval time.Duration) error {
+func (s *Scanner) Start() error {
 	if err := s.scanBlockDevicesOnNode(); err != nil {
 		return err
 	}

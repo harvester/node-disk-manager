@@ -3,13 +3,13 @@ package node
 import (
 	"context"
 
-	longhornv1 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta1"
+	longhornv1 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
-	ctllonghornv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta1"
+	ctllonghornv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta2"
 	"github.com/harvester/node-disk-manager/pkg/option"
 )
 
@@ -40,7 +40,7 @@ func Register(ctx context.Context, nodes ctllonghornv1.NodeController, bds ctldi
 }
 
 // OnNodeDelete watch the node CR on remove and delete node related block devices
-func (c *Controller) OnNodeDelete(key string, node *longhornv1.Node) (*longhornv1.Node, error) {
+func (c *Controller) OnNodeDelete(_ string, node *longhornv1.Node) (*longhornv1.Node, error) {
 	if node == nil {
 		return nil, nil
 	}
