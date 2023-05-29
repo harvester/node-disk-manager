@@ -22,7 +22,11 @@ import (
 	ndmutil "github.com/harvester/node-disk-manager/pkg/util"
 )
 
-// borrowed from https://github.com/jaypipes/ghw/blob/master/pkg/block/block_linux.go
+/* borrowed from https://github.com/jaypipes/ghw/blob/master/pkg/block/block_linux.go
+ * two function are changed with introducing context
+ * 1. partitionInfo()
+ * 2. openProcMounts()
+ */
 const (
 	sectorSize = 512
 
@@ -301,10 +305,7 @@ func diskIsRemovable(paths *linuxpath.Paths, disk string) bool {
 		return false
 	}
 	removable := strings.TrimSpace(string(contents))
-	if removable == "1" {
-		return true
-	}
-	return false
+	return removable == "1"
 }
 
 func getDisk(ctx *context.Context, paths *linuxpath.Paths, dname string) *Disk {
@@ -463,14 +464,14 @@ func partitionInfo(ctx *context.Context, paths *linuxpath.Paths, part string) (s
 
 	// mount entries for mounted partitions look like this:
 	// /dev/sda6 / ext4 rw,relatime,errors=remount-ro,data=ordered 0 0
-	var r io.ReadCloser
-	r, err := openProcMounts(ctx, paths)
+	var filer io.ReadCloser
+	filer, err := openProcMounts(ctx, paths)
 	if err != nil {
 		return "", "", true
 	}
-	defer util.SafeClose(r)
+	defer util.SafeClose(filer)
 
-	scanner := bufio.NewScanner(r)
+	scanner := bufio.NewScanner(filer)
 	for scanner.Scan() {
 		line := scanner.Text()
 		entry := parseMountEntry(line)
