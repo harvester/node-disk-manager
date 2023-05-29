@@ -213,7 +213,7 @@ func run(opt *option.Option) error {
 	locker := &sync.Mutex{}
 	cond := sync.NewCond(locker)
 	bds := disks.Harvesterhci().V1beta1().BlockDevice()
-	nodes := lhs.Longhorn().V1beta1().Node()
+	nodes := lhs.Longhorn().V1beta2().Node()
 	scanner := blockdevicev1.NewScanner(
 		opt.NodeName,
 		opt.Namespace,

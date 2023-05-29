@@ -20,7 +20,7 @@ package fake
 
 import (
 	harvesterhciv1beta1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
-	longhornv1beta1 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta1"
+	longhornv1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
@@ -33,7 +33,7 @@ var codecs = serializer.NewCodecFactory(scheme)
 
 var localSchemeBuilder = runtime.SchemeBuilder{
 	harvesterhciv1beta1.AddToScheme,
-	longhornv1beta1.AddToScheme,
+	longhornv1beta2.AddToScheme,
 }
 
 // AddToScheme adds all types of this clientset into the given scheme. This allows composition

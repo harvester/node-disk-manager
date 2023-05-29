@@ -11,8 +11,7 @@ import (
 	"time"
 
 	ghwutil "github.com/jaypipes/ghw/pkg/util"
-	lhtypes "github.com/longhorn/longhorn-manager/types"
-	lhutil "github.com/longhorn/longhorn-manager/util"
+	longhornv1 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -22,7 +21,7 @@ import (
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
-	ctllonghornv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta1"
+	ctllonghornv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta2"
 	"github.com/harvester/node-disk-manager/pkg/option"
 	"github.com/harvester/node-disk-manager/pkg/util"
 )
@@ -117,7 +116,7 @@ func Register(
 		semaphore:        newSemaphore(opt.MaxConcurrentOps),
 	}
 
-	if err := scanner.Start(ctx, time.Duration(opt.RescanInterval)); err != nil {
+	if err := scanner.Start(); err != nil {
 		return err
 	}
 
@@ -128,7 +127,7 @@ func Register(
 
 // OnBlockDeviceChange watch the block device CR on change and performing disk operations
 // like mounting the disks to a desired path via ext4
-func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
+func (c *Controller) OnBlockDeviceChange(_ string, device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
 	if device == nil || device.DeletionTimestamp != nil || device.Spec.NodeName != c.NodeName || device.Status.State == diskv1.BlockDeviceInactive {
 		return nil, nil
 	}
@@ -266,7 +265,7 @@ func (c *Controller) updateDeviceFileSystem(device *diskv1.BlockDevice, devPath 
 	if filesystem == nil {
 		return fmt.Errorf("failed to get filesystem info from devPath %s", devPath)
 	}
-	if filesystem.MountPoint != "" && filesystem.Type != "" && !lhutil.IsSupportedFileSystem(filesystem.Type) {
+	if filesystem.MountPoint != "" && filesystem.Type != "" && !util.IsSupportedFileSystem(filesystem.Type) {
 		return fmt.Errorf("unsupported filesystem type %s", filesystem.Type)
 	}
 
@@ -362,7 +361,7 @@ func (c *Controller) provisionDeviceToNode(device *diskv1.BlockDevice) error {
 	}
 
 	nodeCpy := node.DeepCopy()
-	diskSpec := lhtypes.DiskSpec{
+	diskSpec := longhornv1.DiskSpec{
 		Path:              extraDiskMountPoint(device),
 		AllowScheduling:   true,
 		EvictionRequested: false,
@@ -509,7 +508,7 @@ func (c *Controller) updateDeviceStatus(device *diskv1.BlockDevice, devPath stri
 }
 
 // OnBlockDeviceDelete will delete the block devices that belongs to the same parent device
-func (c *Controller) OnBlockDeviceDelete(key string, device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
+func (c *Controller) OnBlockDeviceDelete(_ string, device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
 	if device == nil {
 		return nil, nil
 	}

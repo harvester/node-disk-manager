@@ -2,11 +2,14 @@ package util
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"io"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
@@ -14,18 +17,22 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/handlers"
 	"github.com/pkg/errors"
-	uuid "github.com/satori/go.uuid"
 	"github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v2"
 
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -45,7 +52,8 @@ const (
 
 	HostProcPath                 = "/host/proc"
 	ReplicaDirectory             = "/replicas/"
-	DeviceDirectory              = "/dev/longhorn/"
+	RegularDeviceDirectory       = "/dev/longhorn/"
+	EncryptedDeviceDirectory     = "/dev/mapper/"
 	TemporaryMountPointDirectory = "/tmp/mnt/"
 
 	DefaultKubernetesTolerationKey = "kubernetes.io"
@@ -54,14 +62,17 @@ const (
 
 	SizeAlignment     = 2 * 1024 * 1024
 	MinimalVolumeSize = 10 * 1024 * 1024
+
+	RandomIDLenth = 8
 )
 
 var (
 	cmdTimeout     = time.Minute // one minute by default
 	reservedLabels = []string{"KubernetesStatus", "ranchervm-base-image"}
 
-	ConflictRetryInterval = 20 * time.Millisecond
-	ConflictRetryCounts   = 100
+	APIRetryInterval       = 500 * time.Millisecond
+	APIRetryJitterInterval = 50 * time.Millisecond
+	APIRetryCounts         = 10
 )
 
 type MetadataConfig struct {
@@ -71,7 +82,7 @@ type MetadataConfig struct {
 	DriverContainerName string
 }
 
-type DiskInfo struct {
+type DiskStat struct {
 	Fsid             string
 	Path             string
 	Type             string
@@ -117,7 +128,7 @@ func Backoff(maxDuration time.Duration, timeoutMessage string, f func() (bool, e
 	waitTime := 150 * time.Millisecond
 	maxWaitTime := 2 * time.Second
 	for {
-		if time.Now().Sub(startTime) > maxDuration {
+		if time.Since(startTime) > maxDuration {
 			return errors.New(timeoutMessage)
 		}
 
@@ -137,7 +148,7 @@ func Backoff(maxDuration time.Duration, timeoutMessage string, f func() (bool, e
 }
 
 func UUID() string {
-	return uuid.NewV4().String()
+	return uuid.New().String()
 }
 
 // WaitForDevice timeout in second
@@ -146,7 +157,7 @@ func WaitForDevice(dev string, timeout int) error {
 		st, err := os.Stat(dev)
 		if err == nil {
 			if st.Mode()&os.ModeDevice == 0 {
-				return fmt.Errorf("Invalid mode for %v: 0x%x", dev, st.Mode())
+				return fmt.Errorf("invalid mode for %v: 0x%x", dev, st.Mode())
 			}
 			return nil
 		}
@@ -156,7 +167,13 @@ func WaitForDevice(dev string, timeout int) error {
 }
 
 func RandomID() string {
-	return UUID()[:8]
+	return UUID()[:RandomIDLenth]
+}
+
+func ValidateRandomID(id string) bool {
+	regex := fmt.Sprintf(`^[a-zA-Z0-9]{%d}$`, RandomIDLenth)
+	validName := regexp.MustCompile(regex)
+	return validName.MatchString(id)
 }
 
 func GetLocalIPs() ([]string, error) {
@@ -225,12 +242,12 @@ func ExecuteWithTimeout(timeout time.Duration, envs []string, binary string, arg
 			}
 
 		}
-		return "", fmt.Errorf("Timeout executing: %v %v, output %s, stderr, %s, error %v",
+		return "", fmt.Errorf("timeout executing: %v %v, output %s, stderr, %s, error %v",
 			binary, args, output.String(), stderr.String(), err)
 	}
 
 	if err != nil {
-		return "", fmt.Errorf("Failed to execute: %v %v, output %s, stderr, %s, error %v",
+		return "", fmt.Errorf("failed to execute: %v %v, output %s, stderr, %s, error %v",
 			binary, args, output.String(), stderr.String(), err)
 	}
 	return output.String(), nil
@@ -277,6 +294,11 @@ func ValidateName(name string) bool {
 	return validName.MatchString(name)
 }
 
+func ValidateChecksumSHA512(checksum string) bool {
+	validChecksum := regexp.MustCompile(`^[a-f0-9]{128}$`)
+	return validChecksum.MatchString(checksum)
+}
+
 func GetBackupID(backupURL string) (string, error) {
 	u, err := url.Parse(backupURL)
 	if err != nil {
@@ -286,7 +308,7 @@ func GetBackupID(backupURL string) (string, error) {
 	volumeName := v.Get("volume")
 	backupName := v.Get("backup")
 	if !ValidateName(volumeName) || !ValidateName(backupName) {
-		return "", fmt.Errorf("Invalid name parsed, got %v and %v", backupName, volumeName)
+		return "", fmt.Errorf("invalid name parsed, got %v and %v", backupName, volumeName)
 	}
 	return backupName, nil
 }
@@ -347,6 +369,20 @@ func SplitStringToMap(str, separator string) map[string]struct{} {
 	return ret
 }
 
+func GetSortedKeysFromMap(maps interface{}) []string {
+	v := reflect.ValueOf(maps)
+	if v.Kind() != reflect.Map {
+		return nil
+	}
+	mapKeys := v.MapKeys()
+	keys := make([]string, 0, len(mapKeys))
+	for _, k := range mapKeys {
+		keys = append(keys, k.String())
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 // AutoCorrectName converts name to lowercase, and correct overlength name by
 // replaces the name suffix with 8 char from its checksum to ensure uniquenedoss.
 func AutoCorrectName(name string, maxLength int) string {
@@ -373,6 +409,21 @@ func GetChecksumSHA512(data []byte) string {
 	return hex.EncodeToString(checksum[:])
 }
 
+func GetStringChecksumSHA256(data string) string {
+	return GetChecksumSHA256([]byte(data))
+}
+
+func GetChecksumSHA256(data []byte) string {
+	checksum := sha256.Sum256(data)
+	return hex.EncodeToString(checksum[:])
+}
+
+func GetStringHash(data string) string {
+	hash := fnv.New32a()
+	hash.Write([]byte(data))
+	return fmt.Sprint(strconv.FormatInt(int64(hash.Sum32()), 16))
+}
+
 func CheckBackupType(backupTarget string) (string, error) {
 	u, err := url.Parse(backupTarget)
 	if err != nil {
@@ -382,9 +433,9 @@ func CheckBackupType(backupTarget string) (string, error) {
 	return u.Scheme, nil
 }
 
-func GetDiskInfo(directory string) (info *DiskInfo, err error) {
+func GetDiskStat(directory string) (stat *DiskStat, err error) {
 	defer func() {
-		err = errors.Wrapf(err, "cannot get disk info of directory %v", directory)
+		err = errors.Wrapf(err, "cannot get disk stat of directory %v", directory)
 	}()
 	initiatorNSPath := iscsi_util.GetHostNamespacePath(HostProcPath)
 	mountPath := fmt.Sprintf("--mount=%s/mnt", initiatorNSPath)
@@ -394,30 +445,38 @@ func GetDiskInfo(directory string) (info *DiskInfo, err error) {
 	}
 	output = strings.Replace(output, "\n", "", -1)
 
-	diskInfo := &DiskInfo{}
-	err = json.Unmarshal([]byte(output), diskInfo)
+	diskStat := &DiskStat{}
+	err = json.Unmarshal([]byte(output), diskStat)
 	if err != nil {
 		return nil, err
 	}
 
-	diskInfo.StorageMaximum = diskInfo.TotalBlock * diskInfo.BlockSize
-	diskInfo.StorageAvailable = diskInfo.FreeBlock * diskInfo.BlockSize
+	diskStat.StorageMaximum = diskStat.TotalBlock * diskStat.BlockSize
+	diskStat.StorageAvailable = diskStat.FreeBlock * diskStat.BlockSize
 
-	return diskInfo, nil
+	return diskStat, nil
 }
 
-func RetryOnConflictCause(fn func() (interface{}, error)) (obj interface{}, err error) {
-	for i := 0; i < ConflictRetryCounts; i++ {
-		obj, err = fn()
+func RetryOnConflictCause(fn func() (interface{}, error)) (interface{}, error) {
+	return RetryOnErrorCondition(fn, apierrors.IsConflict)
+}
+
+func RetryOnNotFoundCause(fn func() (interface{}, error)) (interface{}, error) {
+	return RetryOnErrorCondition(fn, apierrors.IsNotFound)
+}
+
+func RetryOnErrorCondition(fn func() (interface{}, error), predicate func(error) bool) (interface{}, error) {
+	for i := 0; i < APIRetryCounts; i++ {
+		obj, err := fn()
 		if err == nil {
 			return obj, nil
 		}
-		if !apierrors.IsConflict(errors.Cause(err)) {
+		if !predicate(err) {
 			return nil, err
 		}
-		time.Sleep(ConflictRetryInterval)
+		time.Sleep(APIRetryInterval + APIRetryJitterInterval*time.Duration(rand.Intn(5)))
 	}
-	return nil, errors.Wrapf(err, "cannot finish API request due to too many conflicts")
+	return nil, fmt.Errorf("cannot finish API request due to too many error retries")
 }
 
 func RunAsync(wg *sync.WaitGroup, f func()) {
@@ -601,10 +660,7 @@ func DeleteDiskPathReplicaSubdirectoryAndDiskCfgFile(
 }
 
 func IsKubernetesDefaultToleration(toleration v1.Toleration) bool {
-	if strings.Contains(toleration.Key, DefaultKubernetesTolerationKey) {
-		return true
-	}
-	return false
+	return strings.Contains(toleration.Key, DefaultKubernetesTolerationKey)
 }
 
 func GetAnnotation(obj runtime.Object, annotationKey string) (string, error) {
@@ -658,116 +714,6 @@ func TolerationListToMap(tolerationList []v1.Toleration) map[string]v1.Toleratio
 
 func GetTolerationChecksum(t v1.Toleration) string {
 	return GetStringChecksum(string(t.Key) + string(t.Operator) + string(t.Value) + string(t.Effect))
-}
-
-func ExpandFileSystem(volumeName string) (err error) {
-	devicePath := filepath.Join(DeviceDirectory, volumeName)
-	nsPath := iscsi_util.GetHostNamespacePath(HostProcPath)
-	nsExec, err := iscsi_util.NewNamespaceExecutor(nsPath)
-	if err != nil {
-		return err
-	}
-
-	fsType, err := DetectFileSystem(volumeName)
-	if err != nil {
-		return err
-	}
-	if !IsSupportedFileSystem(fsType) {
-		return fmt.Errorf("volume %v is using unsupported file system %v", volumeName, fsType)
-	}
-
-	// make sure there is a mount point for the volume before file system expansion
-	tmpMountNeeded := true
-	mountPoint := ""
-	mountRes, err := nsExec.Execute("bash", []string{"-c", "mount | grep \"/" + volumeName + " \" | awk '{print $3}'"})
-	if err != nil {
-		logrus.Warnf("failed to use command mount to get the mount info of volume %v, consider the volume as unmounted: %v", volumeName, err)
-	} else {
-		// For empty `mountRes`, `mountPoints` is [""]
-		mountPoints := strings.Split(strings.TrimSpace(mountRes), "\n")
-		if !(len(mountPoints) == 1 && strings.TrimSpace(mountPoints[0]) == "") {
-			// pick up a random mount point
-			for _, m := range mountPoints {
-				mountPoint = strings.TrimSpace(m)
-				if mountPoint != "" {
-					tmpMountNeeded = false
-					break
-				}
-			}
-			if tmpMountNeeded {
-				logrus.Errorf("BUG: Found mount point records %v for volume %v but there is no valid(non-empty) mount point", mountRes, volumeName)
-			}
-		}
-	}
-	if tmpMountNeeded {
-		mountPoint = filepath.Join(TemporaryMountPointDirectory, volumeName)
-		logrus.Infof("The volume %v is unmounted, hence it will be temporarily mounted on %v for file system expansion", volumeName, mountPoint)
-		if _, err := nsExec.Execute("mkdir", []string{"-p", mountPoint}); err != nil {
-			return errors.Wrapf(err, "failed to create a temporary mount point %v before file system expansion", mountPoint)
-		}
-		if _, err := nsExec.Execute("mount", []string{devicePath, mountPoint}); err != nil {
-			return errors.Wrapf(err, "failed to temporarily mount volume %v on %v before file system expansion", volumeName, mountPoint)
-		}
-	}
-
-	switch fsType {
-	case "ext2":
-		fallthrough
-	case "ext3":
-		fallthrough
-	case "ext4":
-		if _, err = nsExec.Execute("resize2fs", []string{devicePath}); err != nil {
-			return err
-		}
-	case "xfs":
-		if _, err = nsExec.Execute("xfs_growfs", []string{mountPoint}); err != nil {
-			return err
-		}
-	default:
-		return fmt.Errorf("volume %v is using unsupported file system %v", volumeName, fsType)
-	}
-
-	// cleanup
-	if tmpMountNeeded {
-		if _, err := nsExec.Execute("umount", []string{mountPoint}); err != nil {
-			return errors.Wrapf(err, "failed to unmount volume %v on the temporary mount point %v after file system expansion", volumeName, mountPoint)
-		}
-		if _, err := nsExec.Execute("rm", []string{"-r", mountPoint}); err != nil {
-			return errors.Wrapf(err, "failed to remove the temporary mount point %v after file system expansion", mountPoint)
-		}
-	}
-
-	return nil
-}
-
-func DetectFileSystem(volumeName string) (string, error) {
-	devicePath := filepath.Join(DeviceDirectory, volumeName)
-	nsPath := iscsi_util.GetHostNamespacePath(HostProcPath)
-	nsExec, err := iscsi_util.NewNamespaceExecutor(nsPath)
-	if err != nil {
-		return "", err
-	}
-
-	// The output schema of `blkid` can be different.
-	// For filesystem `btrfs`, the schema is: `<device path>: UUID="<filesystem UUID>" UUID_SUB="<filesystem UUID_SUB>" TYPE="<filesystem type>"`
-	// For filesystem `ext4` or `xfs`, the schema is: `<device path>: UUID="<filesystem UUID>" TYPE="<filesystem type>"`
-	cmd := fmt.Sprintf("blkid %s | sed 's/.*TYPE=//g'", devicePath)
-	output, err := nsExec.Execute("bash", []string{"-c", cmd})
-	if err != nil {
-		return "", errors.Wrapf(err, "failed to get the file system info for volume %v, maybe there is no Linux file system on the volume", volumeName)
-	}
-	fsType := strings.Trim(strings.TrimSpace(output), "\"")
-	if fsType == "" {
-		return "", fmt.Errorf("cannot get the filesystem type by using the command %v", cmd)
-	}
-	return fsType, nil
-}
-
-func IsSupportedFileSystem(fsType string) bool {
-	if fsType == "ext4" || fsType == "ext3" || fsType == "ext2" || fsType == "xfs" {
-		return true
-	}
-	return false
 }
 
 func IsKubernetesVersionAtLeast(kubeClient clientset.Interface, vers string) (bool, error) {
@@ -849,4 +795,203 @@ func MinInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func Contains(list []string, item string) bool {
+	for _, i := range list {
+		if i == item {
+			return true
+		}
+	}
+	return false
+}
+
+// HasLocalStorageInDeployment returns true if deployment has any local storage.
+func HasLocalStorageInDeployment(deployment *appsv1.Deployment) bool {
+	for _, volume := range deployment.Spec.Template.Spec.Volumes {
+		if isLocalVolume(&volume) {
+			return true
+		}
+	}
+	return false
+}
+
+func isLocalVolume(volume *v1.Volume) bool {
+	return volume.HostPath != nil || volume.EmptyDir != nil
+}
+
+func GetPossibleReplicaDirectoryNames(diskPath string) (replicaDirectoryNames map[string]string, err error) {
+	defer func() {
+		err = errors.Wrapf(err, "cannot list replica directories in the disk %v", diskPath)
+	}()
+
+	replicaDirectoryNames = make(map[string]string, 0)
+
+	directory := filepath.Join(diskPath, "replicas")
+
+	initiatorNSPath := iscsi_util.GetHostNamespacePath(HostProcPath)
+	mountPath := fmt.Sprintf("--mount=%s/mnt", initiatorNSPath)
+	command := fmt.Sprintf("find %s -type d -maxdepth 1 -mindepth 1 -regextype posix-extended -regex \".*-[a-zA-Z0-9]{8}$\" -exec basename {} \\;", directory)
+	output, err := Execute([]string{}, "nsenter", mountPath, "sh", "-c", command)
+	if err != nil {
+		return replicaDirectoryNames, err
+	}
+
+	names := strings.Split(output, "\n")
+	for _, name := range names {
+		if name != "" {
+			replicaDirectoryNames[name] = ""
+		}
+	}
+
+	return replicaDirectoryNames, nil
+}
+
+func DeleteReplicaDirectoryName(diskPath, replicaDirectoryName string) (err error) {
+	defer func() {
+		err = errors.Wrapf(err, "cannot delete replica directory %v in disk %v", replicaDirectoryName, diskPath)
+	}()
+
+	path := filepath.Join(diskPath, "replicas", replicaDirectoryName)
+
+	initiatorNSPath := iscsi_util.GetHostNamespacePath(HostProcPath)
+	mountPath := fmt.Sprintf("--mount=%s/mnt", initiatorNSPath)
+	_, err = Execute([]string{}, "nsenter", mountPath, "rm", "-rf", path)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+type VolumeMeta struct {
+	Size            int64
+	Head            string
+	Dirty           bool
+	Rebuilding      bool
+	Error           string
+	Parent          string
+	SectorSize      int64
+	BackingFilePath string
+	BackingFile     interface{}
+}
+
+func GetVolumeMeta(path string) (*VolumeMeta, error) {
+	nsPath := iscsi_util.GetHostNamespacePath(HostProcPath)
+	nsExec, err := iscsi_util.NewNamespaceExecutor(nsPath)
+	if err != nil {
+		return nil, err
+	}
+
+	output, err := nsExec.Execute("cat", []string{path})
+	if err != nil {
+		return nil, fmt.Errorf("cannot find volume meta %v on host: %v", path, err)
+	}
+
+	meta := &VolumeMeta{}
+	if err := json.Unmarshal([]byte(output), meta); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal %v content %v on host: %v", path, output, err)
+	}
+	return meta, nil
+}
+
+func CapitalizeFirstLetter(input string) string {
+	return strings.ToUpper(input[:1]) + input[1:]
+}
+
+func GetPodIP(pod *v1.Pod) (string, error) {
+	if pod.Status.PodIP == "" {
+		return "", fmt.Errorf("%v pod IP is empty", pod.Name)
+	}
+	return pod.Status.PodIP, nil
+}
+
+func TrimFilesystem(volumeName string, isEncryptedDevice bool) error {
+	nsPath := iscsi_util.GetHostNamespacePath(HostProcPath)
+	nsExec, err := iscsi_util.NewNamespaceExecutor(nsPath)
+	if err != nil {
+		return err
+	}
+
+	deviceDir := RegularDeviceDirectory
+	if isEncryptedDevice {
+		deviceDir = EncryptedDeviceDirectory
+	}
+
+	mountOutput, err := nsExec.Execute("bash", []string{"-c", fmt.Sprintf("cat /proc/mounts | grep %s%s | awk '{print $2}'", deviceDir, volumeName)})
+	if err != nil {
+		return fmt.Errorf("cannot find volume %v mount info on host: %v", volumeName, err)
+	}
+
+	mountList := strings.Split(strings.TrimSpace(mountOutput), "\n")
+
+	var mountpoint string
+	for _, m := range mountList {
+		_, err = nsExec.Execute("stat", []string{m})
+		if err == nil {
+			mountpoint = m
+			break
+		}
+
+		logrus.WithError(err).Warnf("failed to get volume %v mountpoint %v info", volumeName, m)
+	}
+	if mountpoint == "" {
+		return fmt.Errorf("cannot find a valid mountpoint for volume %v", volumeName)
+	}
+
+	_, err = nsExec.Execute("fstrim", []string{mountpoint})
+	if err != nil {
+		return fmt.Errorf("cannot find volume %v mount info on host: %v", volumeName, err)
+	}
+
+	return nil
+}
+
+// SortKeys accepts a map with string keys and returns a sorted slice of keys
+func SortKeys(mapObj interface{}) ([]string, error) {
+	if mapObj == nil {
+		return []string{}, fmt.Errorf("BUG: mapObj was nil")
+	}
+	m := reflect.ValueOf(mapObj)
+	if m.Kind() != reflect.Map {
+		return []string{}, fmt.Errorf("BUG: expected map, got %v", m.Kind())
+	}
+
+	keys := make([]string, m.Len())
+	for i, key := range m.MapKeys() {
+		if key.Kind() != reflect.String {
+			return []string{}, fmt.Errorf("BUG: expect map[string]interface{}, got map[%v]interface{}", key.Kind())
+		}
+		keys[i] = key.String()
+	}
+	sort.Strings(keys)
+	return keys, nil
+}
+
+func EncodeToYAMLFile(obj interface{}, path string) (err error) {
+	defer func() {
+		err = errors.Wrapf(err, "failed to generate %v", path)
+	}()
+
+	err = os.MkdirAll(filepath.Dir(path), os.FileMode(0755))
+	if err != nil {
+		return
+	}
+
+	f, err := os.Create(path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	encoder := yaml.NewEncoder(f)
+	if err = encoder.Encode(obj); err != nil {
+		return
+	}
+
+	if err = encoder.Close(); err != nil {
+		return
+	}
+
+	return nil
 }

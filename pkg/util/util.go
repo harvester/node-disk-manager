@@ -165,3 +165,10 @@ func IsFSCorrupted(err error) bool {
 	errMsg := err.Error()
 	return strings.Contains(errMsg, "wrong fs type")
 }
+
+func IsSupportedFileSystem(fsType string) bool {
+	if fsType == "ext4" || fsType == "xfs" {
+		return true
+	}
+	return false
+}
