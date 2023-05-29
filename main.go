@@ -13,6 +13,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"sync"
 
 	"github.com/ehazlett/simplelog"
 	"github.com/rancher/wrangler/pkg/kubeconfig"
@@ -179,6 +180,7 @@ func initLogs(opt *option.Option) {
 
 func run(opt *option.Option) error {
 	logrus.Info("Starting node disk manager controller")
+	blockdevicev1.WaitGroup.Add(1)
 	if opt.NodeName == "" || opt.Namespace == "" {
 		return errors.New("either node name or namespace is empty")
 	}
@@ -208,18 +210,22 @@ func run(opt *option.Option) error {
 
 	excludeFilters := filter.SetExcludeFilters(opt.VendorFilter, opt.PathFilter, opt.LabelFilter)
 	autoProvisionFilters := filter.SetAutoProvisionFilters(opt.AutoProvisionFilter)
+	locker := &sync.Mutex{}
+	cond := sync.NewCond(locker)
+	bds := disks.Harvesterhci().V1beta1().BlockDevice()
+	nodes := lhs.Longhorn().V1beta1().Node()
+	scanner := blockdevicev1.NewScanner(
+		opt.NodeName,
+		opt.Namespace,
+		bds,
+		block,
+		excludeFilters,
+		autoProvisionFilters,
+		cond,
+		false,
+	)
 
 	start := func(ctx context.Context) {
-		bds := disks.Harvesterhci().V1beta1().BlockDevice()
-		nodes := lhs.Longhorn().V1beta1().Node()
-		scanner := blockdevicev1.NewScanner(
-			opt.NodeName,
-			opt.Namespace,
-			bds,
-			block,
-			excludeFilters,
-			autoProvisionFilters,
-		)
 		if err := blockdevicev1.Register(
 			ctx,
 			nodes,
@@ -250,5 +256,11 @@ func run(opt *option.Option) error {
 	start(ctx)
 
 	<-ctx.Done()
+	scanner.Shutdown = true
+	logrus.Infof("NDM is going shutdown")
+	scanner.Cond.L.Lock()
+	scanner.Cond.Signal()
+	scanner.Cond.L.Unlock()
+	blockdevicev1.WaitGroup.Wait()
 	return nil
 }

@@ -171,7 +171,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 			diskv1.DeviceMounted.SetStatusBool(deviceCpy, false)
 		}
 		if !reflect.DeepEqual(device, deviceCpy) {
-			logrus.Debugf("Update block device %s for new mount state", device.Name)
+			logrus.Debugf("Update block device %s for new formatting and mount state", device.Name)
 			return c.Blockdevices.Update(deviceCpy)
 		}
 		return device, err
@@ -221,7 +221,7 @@ func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice)
 	}
 
 	if !reflect.DeepEqual(device, deviceCpy) {
-		logrus.Debugf("Update block device %s for new status", device.Name)
+		logrus.Debugf("Update block device %s for new device status", device.Name)
 		return c.Blockdevices.Update(deviceCpy)
 	}
 
@@ -443,6 +443,7 @@ func (c *Controller) unprovisionDeviceFromNode(device *diskv1.BlockDevice) error
 		}
 	} else {
 		// Start unprovisioing
+		logrus.Debugf("Setup device %s to start unprovision", device.Name)
 		diskToRemove.AllowScheduling = false
 		diskToRemove.EvictionRequested = true
 		diskToRemove.Tags = append(diskToRemove.Tags, util.DiskRemoveTag)

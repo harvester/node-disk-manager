@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -17,9 +18,7 @@ import (
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
 )
 
-const (
-	defaultRescanInterval = 30 * time.Second
-)
+var WaitGroup sync.WaitGroup
 
 type Scanner struct {
 	NodeName             string
@@ -28,6 +27,8 @@ type Scanner struct {
 	BlockInfo            block.Info
 	ExcludeFilters       []*filter.Filter
 	AutoProvisionFilters []*filter.Filter
+	Cond                 *sync.Cond
+	Shutdown             bool
 }
 
 type deviceWithAutoProvision struct {
@@ -40,6 +41,8 @@ func NewScanner(
 	bds ctldiskv1.BlockDeviceController,
 	block block.Info,
 	excludeFilters, autoProvisionFilters []*filter.Filter,
+	cond *sync.Cond,
+	shutdown bool,
 ) *Scanner {
 	return &Scanner{
 		NodeName:             nodeName,
@@ -48,6 +51,8 @@ func NewScanner(
 		BlockInfo:            block,
 		ExcludeFilters:       excludeFilters,
 		AutoProvisionFilters: autoProvisionFilters,
+		Cond:                 cond,
+		Shutdown:             shutdown,
 	}
 }
 
@@ -55,23 +60,25 @@ func (s *Scanner) Start(ctx context.Context, rescanInterval time.Duration) error
 	if err := s.scanBlockDevicesOnNode(); err != nil {
 		return err
 	}
-	// Rescan devices on the node periodically.
-	interval := defaultRescanInterval
-	if rescanInterval > 0 {
-		interval = rescanInterval * time.Second
-	}
 	go func() {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
 		for {
-			select {
-			case <-ticker.C:
-				if err := s.scanBlockDevicesOnNode(); err != nil {
-					logrus.Errorf("Failed to rescan block devices on node %s: %v", s.NodeName, err)
-				}
-			case <-ctx.Done():
+			s.Cond.L.Lock()
+			logrus.Infof("Waiting new event to trigger...")
+			s.Cond.Wait()
+
+			if s.Shutdown {
+				logrus.Info("Prepare to stop scanner.")
+				s.Cond.L.Unlock()
+				logrus.Info("Receiver routine shutdown.")
+				WaitGroup.Done()
 				return
 			}
+
+			logrus.Infof("scanner waked up, do scan...")
+			if err := s.scanBlockDevicesOnNode(); err != nil {
+				logrus.Errorf("Failed to rescan block devices on node %s: %v", s.NodeName, err)
+			}
+			s.Cond.L.Unlock()
 		}
 	}()
 	return nil
