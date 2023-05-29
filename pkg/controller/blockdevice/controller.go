@@ -129,7 +129,7 @@ func Register(
 // OnBlockDeviceChange watch the block device CR on change and performing disk operations
 // like mounting the disks to a desired path via ext4
 func (c *Controller) OnBlockDeviceChange(key string, device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
-	if device == nil || device.DeletionTimestamp != nil || device.Spec.NodeName != c.NodeName {
+	if device == nil || device.DeletionTimestamp != nil || device.Spec.NodeName != c.NodeName || device.Status.State == diskv1.BlockDeviceInactive {
 		return nil, nil
 	}
 
