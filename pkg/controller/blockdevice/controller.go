@@ -245,6 +245,10 @@ func (c *Controller) updateDeviceMount(device *diskv1.BlockDevice, devPath strin
 		expectedMountPoint := extraDiskMountPoint(device)
 		logrus.Infof("Mount deivce %s to %s", device.Name, expectedMountPoint)
 		if err := util.MountDisk(devPath, expectedMountPoint); err != nil {
+			if util.IsFSCorrupted(err) {
+				logrus.Errorf("Target device may be corrupted, update FS info.")
+				device.Status.DeviceStatus.FileSystem.Corrupted = true
+			}
 			return err
 		}
 		diskv1.DeviceMounted.SetError(device, "", nil)
@@ -254,6 +258,10 @@ func (c *Controller) updateDeviceMount(device *diskv1.BlockDevice, devPath strin
 }
 
 func (c *Controller) updateDeviceFileSystem(device *diskv1.BlockDevice, devPath string) error {
+	if device.Status.DeviceStatus.FileSystem.Corrupted {
+		// do not need to update other fields, we only need to update the corrupted flag
+		return nil
+	}
 	filesystem := c.BlockInfo.GetFileSystemInfoByDevPath(devPath)
 	if filesystem == nil {
 		return fmt.Errorf("failed to get filesystem info from devPath %s", devPath)
