@@ -10,7 +10,6 @@ import (
 	"github.com/pilebones/go-udev/netlink"
 	"github.com/sirupsen/logrus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
@@ -110,11 +109,19 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 			logrus.Infof("Skip adding non-identifiable block device %s", bd.Spec.DevPath)
 			return
 		}
+		u.scanner.Cond.L.Lock()
 		autoProvisioned := udevDevice.IsDisk() && u.scanner.ApplyAutoProvisionFiltersForDisk(disk)
 		u.AddBlockDevice(bd, autoProvisioned)
+		logrus.Infof("Wake up scanner with %s operation", netlink.ADD)
+		u.scanner.Cond.Signal()
+		u.scanner.Cond.L.Unlock()
 	case netlink.REMOVE:
 		if udevDevice.IsDisk() {
-			u.RemoveBlockDevice(bd, &udevDevice, disk)
+			// just wake up scanner to check if the disk is removed, do no-op internally
+			u.scanner.Cond.L.Lock()
+			logrus.Infof("Wake up scanner with %s operation", netlink.REMOVE)
+			u.scanner.Cond.Signal()
+			u.scanner.Cond.L.Unlock()
 		}
 	}
 }
@@ -124,26 +131,6 @@ func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, autoProvisioned bool)
 	_, err := u.scanner.SaveBlockDevice(device, autoProvisioned)
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		logrus.Errorf("failed to save block device %s, error: %s", device.Name, err.Error())
-	}
-}
-
-// RemoveBlockDevice will set the existing block device to detached state
-func (u *Udev) RemoveBlockDevice(device *v1beta1.BlockDevice, udevDevice *Device, disk *block.Disk) {
-	logrus.Debugf("uevent remove block deivce %s", device.Spec.DevPath)
-
-	udevDevice.updateDiskFromUdev(disk)
-	if guid := block.GenerateDiskGUID(disk, u.nodeName); len(guid) > 0 {
-		device.ObjectMeta.Name = guid
-	}
-
-	if len(device.Name) == 0 {
-		logrus.Infof("Skip removing non-identifiable block device %s", disk.Name)
-		return
-	}
-
-	err := u.scanner.Blockdevices.Delete(u.namespace, device.Name, &metav1.DeleteOptions{})
-	if err != nil && !apierrors.IsNotFound(err) {
-		logrus.Errorf("failed to delete block device %s, error: %s", device.Name, err.Error())
 	}
 }
 
