@@ -30,6 +30,7 @@ spec:
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         command:
         - node-disk-manager
+        - --debug
         env:
         {{- with .Values.vendorFilter }}
         - name: NDM_VENDOR_FILTER

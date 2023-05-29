@@ -8,3 +8,7 @@ NDMPOD=$(kubectl get pods -n harvester-system --field-selector spec.nodeName=$TA
 
 # filter out the redundant Skip log
 kubectl logs $NDMPOD -n harvester-system |grep -v Skip
+
+# get blockdevices info
+echo "========== Dump blockdevices =========="
+kubectl get blockdevice -n longhorn-system -o yaml

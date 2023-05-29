@@ -439,7 +439,7 @@ func (c *Controller) unprovisionDeviceFromNode(device *diskv1.BlockDevice) error
 		} else {
 			// Still unprovisioning
 			c.Blockdevices.EnqueueAfter(c.Namespace, device.Name, jitterEnqueueDelay())
-			logrus.Debugf("device %s is unprovisioning", device.Name)
+			logrus.Debugf("device %s is unprovisioning, status: %+v, ScheduledReplica: %d", device.Name, node.Status.DiskStatus[device.Name], len(status.ScheduledReplica))
 		}
 	} else {
 		// Start unprovisioing
