@@ -160,3 +160,8 @@ func executeOnHostNamespace(cmd string, args []string) (string, error) {
 	}
 	return executor.Execute(cmd, args)
 }
+
+func IsFSCorrupted(err error) bool {
+	errMsg := err.Error()
+	return strings.Contains(errMsg, "wrong fs type")
+}
