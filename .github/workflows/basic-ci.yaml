@@ -9,6 +9,9 @@ on:
   pull_request:
     types: [opened, reopened, synchronize]
 
+env:
+  LIBVIRT_DEFAULT_URI: "qemu:///system"
+
 jobs:
   validation:
     runs-on:
@@ -31,7 +34,7 @@ jobs:
         run: |
           BUILD_FOR_CI=true make
           ./ci/scripts/patch-ttl-repo.sh
-  deploy:
+  main_jobs:
     needs: build
     runs-on:
       - self-hosted
@@ -48,35 +51,24 @@ jobs:
           cp ../ci/scripts/deploy_ndm.sh ./deploy_ndm.sh
           ./deploy_ndm.sh
           popd
-  tests:
-    needs: deploy
-    runs-on:
-      - self-hosted
-      - Linux
-    steps:
-      - name: Basic Test
+      - name: "Basic Test"
         id: basic-test
         run: |
           pushd ndm-vagrant-rancherd
           ./scripts/attach-disk.sh node1
+          sleep 30
           vagrant ssh-config node1 > ../ssh-config
           cp kubeconfig ../kubeconfig
           popd
-          make ci-integration
-      - name: The Test failed
-        if: ${{ failure() && steps.basic-test.conclusion == 'failure' }}
+          echo Running integration tests
+          NDM_HOME=`pwd` go test -v ./tests/...
+      - name: "The operations of failed"
+        if: steps.basic-test.conclusion == 'failure'
         run: |
-          ./ci/scripts/get-ndm-log.sh
-  teardown:
-    needs: tests
-    runs-on:
-      - self-hosted
-      - Linux
-    if: always()
-    steps:
-      - name: Tear Down / Cleanup
+          ./ci/scripts/get-debug-info.sh
+      - name: "Tear Down / Cleanup"
+        if: always()
         run: |
           pushd ndm-vagrant-rancherd
           vagrant destroy -f --parallel
           popd
-
