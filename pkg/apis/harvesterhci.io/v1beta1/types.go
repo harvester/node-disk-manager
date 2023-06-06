@@ -68,6 +68,9 @@ type FilesystemInfo struct {
 
 	// a bool indicating whether the filesystem can be provisioned as a disk for the node to store data.
 	Provisioned bool `json:"provisioned,omitempty"`
+
+	// a bool indicating whether the filesystem is manually repaired of not
+	Repaired bool `json:"repaired,omitempty"`
 }
 
 type DeviceStatus struct {
