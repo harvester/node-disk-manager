@@ -34,8 +34,10 @@ type ProvisionedDisk struct {
 
 func (s *SingleDiskSuite) SetupSuite() {
 	nodeName := ""
-	f, _ := os.Open(filepath.Join(os.Getenv("NDM_HOME"), "ssh-config"))
-	cfg, _ := ssh_config.Decode(f)
+	f, err := os.Open(filepath.Join(os.Getenv("NDM_HOME"), "ssh-config"))
+	require.Equal(s.T(), err, nil, "Open ssh-config should not get error")
+	cfg, err := ssh_config.Decode(f)
+	require.Equal(s.T(), err, nil, "Decode ssh-config should not get error")
 	// consider wildcard, so length shoule be 2
 	require.Equal(s.T(), len(cfg.Hosts), 2, "number of Hosts on SSH-config should be 1")
 	for _, host := range cfg.Hosts {
@@ -72,6 +74,7 @@ func (s *SingleDiskSuite) AfterTest(_, _ string) {
 	if s.SSHClient != nil {
 		s.SSHClient.Close()
 	}
+	time.Sleep(5 * time.Second)
 }
 
 func TestSingleDiskOperation(t *testing.T) {
@@ -91,7 +94,15 @@ func (s *SingleDiskSuite) Test_0_AutoProvisionSingleDisk() {
 			continue
 		}
 		bdStatus := blockdevice.Status
-		if bdStatus.State == "Active" && bdStatus.ProvisionPhase == "Provisioned" {
+		if bdStatus.State == "Active" {
+			if bdStatus.ProvisionPhase != "Provisioned" {
+				// wait for provisioned, 1 minute should be enough
+				time.Sleep(60 * time.Second)
+				bdNew, err := bdi.Get(context.TODO(), blockdevice.Name, v1.GetOptions{})
+				require.Equal(s.T(), err, nil, "Get Blockdevices should not get error")
+				bdStatus = bdNew.Status
+				require.Equal(s.T(), bdStatus.ProvisionPhase, "Provisioned", "Blockdevice provision phase should be Provisioned after enough time (1 minute)")
+			}
 			s.targetDiskName = blockdevice.Name
 			// get from blockdevice resource
 			provisionedDisk.devPath = bdStatus.DeviceStatus.DevPath
@@ -106,6 +117,7 @@ func (s *SingleDiskSuite) Test_0_AutoProvisionSingleDisk() {
 			require.Equal(s.T(), provisionedDisk.UUID, convertOutPut, "Provisioned disk UUID should be the same")
 		}
 	}
+	require.NotEqual(s.T(), s.targetDiskName, "", "target disk name should not be empty after we do the provision test")
 }
 
 func (s *SingleDiskSuite) Test_1_UnprovisionSingleDisk() {
@@ -114,6 +126,7 @@ func (s *SingleDiskSuite) Test_1_UnprovisionSingleDisk() {
 	curBlockdevice, err := bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
 	require.Equal(s.T(), err, nil, "Get Blockdevices should not get error")
 
+	require.Equal(s.T(), curBlockdevice.Status.State, diskv1.BlockDeviceActive, "Block device state should be Active")
 	newBlockdevice := curBlockdevice.DeepCopy()
 	newBlockdevice.Spec.FileSystem.Provisioned = false
 	bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
@@ -135,6 +148,7 @@ func (s *SingleDiskSuite) Test_2_ManuallyProvisionSingleDisk() {
 	curBlockdevice, err := bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
 	require.Equal(s.T(), err, nil, "Get Blockdevices should not get error")
 
+	require.Equal(s.T(), curBlockdevice.Status.State, diskv1.BlockDeviceActive, "Block device state should be Active")
 	newBlockdevice := curBlockdevice.DeepCopy()
 	newBlockdevice.Spec.FileSystem.Provisioned = true
 	bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})

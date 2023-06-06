@@ -76,3 +76,6 @@ maxConcurrentOps:
 # Perform auto GPT partition generating if a disk can not be globally identified
 # Default to false.
 autoGPTGenerate:
+
+# Enable debug logging
+debug: false

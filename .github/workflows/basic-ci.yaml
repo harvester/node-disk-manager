@@ -46,7 +46,7 @@ jobs:
           git clone https://github.com/harvester/vagrant-rancherd ndm-vagrant-rancherd
           pushd ndm-vagrant-rancherd
           ./new_cluster.sh
-          yq e -i ".longhorn_version = \"1.3.2\"" settings.yaml
+          yq e -i ".longhorn_version = \"1.4.2\"" settings.yaml
           ./scripts/deploy_longhorn.sh
           cp ../ci/scripts/deploy_ndm.sh ./deploy_ndm.sh
           ./deploy_ndm.sh
@@ -62,8 +62,8 @@ jobs:
           popd
           echo Running integration tests
           NDM_HOME=`pwd` go test -v ./tests/...
-      - name: "The operations of failed"
-        if: steps.basic-test.conclusion == 'failure'
+      - name: "Get NDM logs"
+        if: always()
         run: |
           ./ci/scripts/get-debug-info.sh
       - name: "Tear Down / Cleanup"
