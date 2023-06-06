@@ -48,8 +48,10 @@ type HotPlugTestSuite struct {
 
 func (s *HotPlugTestSuite) SetupSuite() {
 	nodeName := ""
-	f, _ := os.Open(filepath.Join(os.Getenv("NDM_HOME"), "ssh-config"))
-	cfg, _ := ssh_config.Decode(f)
+	f, err := os.Open(filepath.Join(os.Getenv("NDM_HOME"), "ssh-config"))
+	require.Equal(s.T(), err, nil, "Open ssh-config should not get error")
+	cfg, err := ssh_config.Decode(f)
+	require.Equal(s.T(), err, nil, "Decode ssh-config should not get error")
 	// consider wildcard, so length shoule be 2
 	require.Equal(s.T(), len(cfg.Hosts), 2, "number of Hosts on SSH-config should be 1")
 	for _, host := range cfg.Hosts {

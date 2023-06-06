@@ -5,3 +5,4 @@ image:
   tag: ""
 
 autoProvisionFilter: [/dev/sd*]
+debug: true
