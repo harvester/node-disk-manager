@@ -132,6 +132,11 @@ func (c *Controller) OnBlockDeviceChange(_ string, device *diskv1.BlockDevice) (
 		return nil, nil
 	}
 
+	// corrupted device could be skipped if we do not set ForceFormatted or Repaired
+	if device.Status.DeviceStatus.FileSystem.Corrupted && !device.Spec.FileSystem.ForceFormatted && !device.Spec.FileSystem.Repaired {
+		return nil, nil
+	}
+
 	deviceCpy := device.DeepCopy()
 	devPath, err := resolvePersistentDevPath(device)
 	if err != nil {
@@ -144,7 +149,7 @@ func (c *Controller) OnBlockDeviceChange(_ string, device *diskv1.BlockDevice) (
 	devPathStatus := convertFSInfoToString(filesystem)
 	logrus.Debugf("Get filesystem info from device %s, %s", devPath, devPathStatus)
 
-	needFormat := deviceCpy.Spec.FileSystem.ForceFormatted && deviceCpy.Status.DeviceStatus.FileSystem.LastFormattedAt == nil
+	needFormat := deviceCpy.Spec.FileSystem.ForceFormatted && (deviceCpy.Status.DeviceStatus.FileSystem.Corrupted || deviceCpy.Status.DeviceStatus.FileSystem.LastFormattedAt == nil)
 	if needFormat {
 		logrus.Infof("Prepare to force format device %s", device.Name)
 		err := c.forceFormat(deviceCpy, devPath, filesystem)
@@ -247,12 +252,14 @@ func (c *Controller) updateDeviceMount(device *diskv1.BlockDevice, devPath strin
 			if util.IsFSCorrupted(err) {
 				logrus.Errorf("Target device may be corrupted, update FS info.")
 				device.Status.DeviceStatus.FileSystem.Corrupted = true
+				device.Spec.FileSystem.Repaired = false
 			}
 			return err
 		}
 		diskv1.DeviceMounted.SetError(device, "", nil)
 		diskv1.DeviceMounted.SetStatusBool(device, true)
 	}
+	device.Status.DeviceStatus.FileSystem.Corrupted = false
 	return c.updateDeviceFileSystem(device, devPath)
 }
 
@@ -347,6 +354,7 @@ func (c *Controller) forceFormat(device *diskv1.BlockDevice, devPath string, fil
 	diskv1.DeviceFormatting.Message(device, "Done device ext4 filesystem formatting")
 	device.Status.DeviceStatus.FileSystem.LastFormattedAt = &metav1.Time{Time: time.Now()}
 	device.Status.DeviceStatus.Partitioned = false
+	device.Status.DeviceStatus.FileSystem.Corrupted = false
 	return nil
 }
 

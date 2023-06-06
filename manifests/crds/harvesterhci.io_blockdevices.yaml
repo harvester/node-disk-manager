@@ -74,6 +74,10 @@ spec:
                     description: a bool indicating whether the filesystem can be provisioned
                       as a disk for the node to store data.
                     type: boolean
+                  repaired:
+                    description: a bool indicating whether the filesystem is manually
+                      repaired of not
+                    type: boolean
                 required:
                 - mountPoint
                 type: object
