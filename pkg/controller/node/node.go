@@ -41,7 +41,7 @@ func Register(ctx context.Context, nodes ctllonghornv1.NodeController, bds ctldi
 
 // OnNodeDelete watch the node CR on remove and delete node related block devices
 func (c *Controller) OnNodeDelete(_ string, node *longhornv1.Node) (*longhornv1.Node, error) {
-	if node == nil {
+	if node == nil || node.DeletionTimestamp == nil {
 		return nil, nil
 	}
 
