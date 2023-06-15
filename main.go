@@ -30,6 +30,7 @@ import (
 	ctllonghorn "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io"
 	"github.com/harvester/node-disk-manager/pkg/option"
 	"github.com/harvester/node-disk-manager/pkg/udev"
+	"github.com/harvester/node-disk-manager/pkg/utils"
 	"github.com/harvester/node-disk-manager/pkg/version"
 )
 
@@ -208,6 +209,7 @@ func run(opt *option.Option) error {
 		return fmt.Errorf("error building node-disk-manager controllers: %s", err.Error())
 	}
 
+	terminatedChannel := make(chan bool, 1)
 	excludeFilters := filter.SetExcludeFilters(opt.VendorFilter, opt.PathFilter, opt.LabelFilter)
 	autoProvisionFilters := filter.SetAutoProvisionFilters(opt.AutoProvisionFilter)
 	locker := &sync.Mutex{}
@@ -223,6 +225,7 @@ func run(opt *option.Option) error {
 		autoProvisionFilters,
 		cond,
 		false,
+		&terminatedChannel,
 	)
 
 	start := func(ctx context.Context) {
@@ -257,10 +260,11 @@ func run(opt *option.Option) error {
 
 	<-ctx.Done()
 	scanner.Shutdown = true
-	logrus.Infof("NDM is going shutdown")
-	scanner.Cond.L.Lock()
-	scanner.Cond.Signal()
-	scanner.Cond.L.Unlock()
-	blockdevicev1.WaitGroup.Wait()
+	logrus.Infof("NDM is shutting down")
+	utils.CallerWithCondLock(scanner.Cond, func() any {
+		scanner.Cond.Signal()
+		return nil
+	})
+	<-terminatedChannel
 	return nil
 }

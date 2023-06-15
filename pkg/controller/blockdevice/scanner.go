@@ -27,6 +27,7 @@ type Scanner struct {
 	AutoProvisionFilters []*filter.Filter
 	Cond                 *sync.Cond
 	Shutdown             bool
+	TerminatedChannels   *chan bool
 }
 
 type deviceWithAutoProvision struct {
@@ -41,6 +42,7 @@ func NewScanner(
 	excludeFilters, autoProvisionFilters []*filter.Filter,
 	cond *sync.Cond,
 	shutdown bool,
+	ch *chan bool,
 ) *Scanner {
 	return &Scanner{
 		NodeName:             nodeName,
@@ -51,6 +53,7 @@ func NewScanner(
 		AutoProvisionFilters: autoProvisionFilters,
 		Cond:                 cond,
 		Shutdown:             shutdown,
+		TerminatedChannels:   ch,
 	}
 }
 
@@ -68,7 +71,7 @@ func (s *Scanner) Start() error {
 				logrus.Info("Prepare to stop scanner.")
 				s.Cond.L.Unlock()
 				logrus.Info("Receiver routine shutdown.")
-				WaitGroup.Done()
+				*s.TerminatedChannels <- true
 				return
 			}
 

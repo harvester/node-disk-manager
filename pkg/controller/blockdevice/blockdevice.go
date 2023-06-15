@@ -6,7 +6,7 @@ import (
 
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
-	"github.com/harvester/node-disk-manager/pkg/util"
+	"github.com/harvester/node-disk-manager/pkg/utils"
 )
 
 const (
@@ -23,7 +23,7 @@ func GetDiskBlockDevice(disk *block.Disk, nodeName, namespace string) *diskv1.Bl
 		Type:       disk.FileSystemInfo.Type,
 		IsReadOnly: disk.FileSystemInfo.IsReadOnly,
 	}
-	devPath := util.GetFullDevPath(disk.Name)
+	devPath := utils.GetFullDevPath(disk.Name)
 	status := diskv1.BlockDeviceStatus{
 		State:          diskv1.BlockDeviceActive,
 		ProvisionPhase: diskv1.ProvisionPhaseUnprovisioned,
@@ -82,7 +82,7 @@ func GetPartitionBlockDevice(part *block.Partition, nodeName, namespace string) 
 		MountPoint: part.FileSystemInfo.MountPoint,
 		IsReadOnly: part.FileSystemInfo.IsReadOnly,
 	}
-	devPath := util.GetFullDevPath(part.Name)
+	devPath := utils.GetFullDevPath(part.Name)
 	status := diskv1.BlockDeviceStatus{
 		State:          diskv1.BlockDeviceActive,
 		ProvisionPhase: diskv1.ProvisionPhaseUnprovisioned,
@@ -102,7 +102,7 @@ func GetPartitionBlockDevice(part *block.Partition, nodeName, namespace string) 
 			},
 			FileSystem:   fileSystemInfo,
 			DevPath:      devPath,
-			ParentDevice: util.GetFullDevPath(part.Disk.Name),
+			ParentDevice: utils.GetFullDevPath(part.Disk.Name),
 		},
 	}
 

@@ -6,7 +6,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/harvester/node-disk-manager/pkg/block"
-	"github.com/harvester/node-disk-manager/pkg/util"
+	"github.com/harvester/node-disk-manager/pkg/utils"
 )
 
 const (
@@ -40,7 +40,7 @@ func RegisterDevicePathFilter(filters ...string) *Filter {
 
 // Match returns true if given device path matches the pattern.
 func (f *partDevicePathFilter) Match(part *block.Partition) bool {
-	devPath := util.GetFullDevPath(part.Name)
+	devPath := utils.GetFullDevPath(part.Name)
 	if devPath == "" {
 		return false
 	}
@@ -49,7 +49,7 @@ func (f *partDevicePathFilter) Match(part *block.Partition) bool {
 
 // Match returns true if given device path matches the pattern.
 func (f *diskDevicePathFilter) Match(disk *block.Disk) bool {
-	devPath := util.GetFullDevPath(disk.Name)
+	devPath := utils.GetFullDevPath(disk.Name)
 	if devPath == "" {
 		return false
 	}

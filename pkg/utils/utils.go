@@ -1,11 +1,11 @@
-package util
+package utils
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"syscall"
 
 	iscsiutil "github.com/longhorn/go-iscsi-helper/util"
@@ -69,11 +69,8 @@ func MakeExt4DiskFormatting(devPath, uuid string) error {
 		args = append(args, "-U", uuid)
 	}
 	cmd := exec.Command("mkfs.ext4", args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("stderr: %s, err: %s", stderr.String(), err.Error())
+	if _, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to format %s. err: %v", devPath, err)
 	}
 	return nil
 }
@@ -171,4 +168,11 @@ func IsSupportedFileSystem(fsType string) bool {
 		return true
 	}
 	return false
+}
+
+// CallerWithLock is a helper function to call a function with a condition lock
+func CallerWithCondLock[T any](cond *sync.Cond, f func() T) T {
+	cond.L.Lock()
+	defer cond.L.Unlock()
+	return f()
 }

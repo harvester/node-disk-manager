@@ -2,7 +2,7 @@ package filter
 
 import (
 	"github.com/harvester/node-disk-manager/pkg/block"
-	"github.com/harvester/node-disk-manager/pkg/util"
+	"github.com/harvester/node-disk-manager/pkg/utils"
 )
 
 const (
@@ -43,7 +43,7 @@ func (f *partPartTypeFilter) Match(part *block.Partition) bool {
 	if part.PartType == "" {
 		return false
 	}
-	return util.MatchesIgnoredCase(f.partType, part.PartType)
+	return utils.MatchesIgnoredCase(f.partType, part.PartType)
 }
 
 // Match returns true if any of its partitions matches.
