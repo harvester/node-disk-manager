@@ -181,7 +181,6 @@ func initLogs(opt *option.Option) {
 
 func run(opt *option.Option) error {
 	logrus.Info("Starting node disk manager controller")
-	blockdevicev1.WaitGroup.Add(1)
 	if opt.NodeName == "" || opt.Namespace == "" {
 		return errors.New("either node name or namespace is empty")
 	}

@@ -16,8 +16,6 @@ import (
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
 )
 
-var WaitGroup sync.WaitGroup
-
 type Scanner struct {
 	NodeName             string
 	Namespace            string
