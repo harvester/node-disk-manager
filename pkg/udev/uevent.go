@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"sync"
 
 	"github.com/pilebones/go-udev/netlink"
@@ -143,7 +143,7 @@ func getOptionalMatcher(filePath *string) (matcher netlink.Matcher, err error) {
 		return nil, nil
 	}
 
-	stream, err := ioutil.ReadFile(*filePath)
+	stream, err := os.ReadFile(*filePath)
 	if err != nil {
 		return nil, err
 	}

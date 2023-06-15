@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/hex"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -110,7 +109,7 @@ func diskPhysicalBlockSizeBytes(paths *linuxpath.Paths, disk string) uint64 {
 	// We can find the sector size in Linux by looking at the
 	// /sys/block/$DEVICE/queue/physical_block_size file in sysfs
 	path := filepath.Join(paths.SysBlock, disk, "queue", "physical_block_size")
-	contents, err := ioutil.ReadFile(path)
+	contents, err := os.ReadFile(path)
 	if err != nil {
 		return 0
 	}
@@ -125,7 +124,7 @@ func diskSizeBytes(paths *linuxpath.Paths, disk string) uint64 {
 	// We can find the number of 512-byte sectors by examining the contents of
 	// /sys/block/$DEVICE/size and calculate the physical bytes accordingly.
 	path := filepath.Join(paths.SysBlock, disk, "size")
-	contents, err := ioutil.ReadFile(path)
+	contents, err := os.ReadFile(path)
 	if err != nil {
 		return 0
 	}
@@ -142,7 +141,7 @@ func diskNUMANodeID(paths *linuxpath.Paths, disk string) int {
 		return -1
 	}
 	for partial := link; strings.HasPrefix(partial, "../devices/"); partial = filepath.Base(partial) {
-		if nodeContents, err := ioutil.ReadFile(filepath.Join(paths.SysBlock, partial, "numa_node")); err != nil {
+		if nodeContents, err := os.ReadFile(filepath.Join(paths.SysBlock, partial, "numa_node")); err != nil {
 			if nodeInt, err := strconv.Atoi(string(nodeContents)); err != nil {
 				return nodeInt
 			}
@@ -155,7 +154,7 @@ func diskVendor(paths *linuxpath.Paths, disk string) string {
 	// In Linux, the vendor for a disk device is found in the
 	// /sys/block/$DEVICE/device/vendor file in sysfs
 	path := filepath.Join(paths.SysBlock, disk, "device", "vendor")
-	contents, err := ioutil.ReadFile(path)
+	contents, err := os.ReadFile(path)
 	if err != nil {
 		return util.UNKNOWN
 	}
@@ -164,14 +163,14 @@ func diskVendor(paths *linuxpath.Paths, disk string) string {
 
 func udevInfo(paths *linuxpath.Paths, disk string) (map[string]string, error) {
 	// Get device major:minor numbers
-	devNo, err := ioutil.ReadFile(filepath.Join(paths.SysBlock, disk, "dev"))
+	devNo, err := os.ReadFile(filepath.Join(paths.SysBlock, disk, "dev"))
 	if err != nil {
 		return nil, err
 	}
 
 	// Look up block device in udev runtime database
 	udevID := "b" + strings.TrimSpace(string(devNo))
-	udevBytes, err := ioutil.ReadFile(filepath.Join(paths.RunUdevData, udevID))
+	udevBytes, err := os.ReadFile(filepath.Join(paths.RunUdevData, udevID))
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +253,7 @@ func diskWWN(paths *linuxpath.Paths, disk string) string {
 func diskPartitions(ctx *context.Context, paths *linuxpath.Paths, disk string) []*Partition {
 	out := make([]*Partition, 0)
 	path := filepath.Join(paths.SysBlock, disk)
-	files, err := ioutil.ReadDir(path)
+	files, err := os.ReadDir(path)
 	if err != nil {
 		ctx.Warn("failed to read disk partitions: %s\n", err)
 		return out
@@ -300,7 +299,7 @@ func diskPartition(ctx *context.Context, paths *linuxpath.Paths, disk, fname str
 
 func diskIsRemovable(paths *linuxpath.Paths, disk string) bool {
 	path := filepath.Join(paths.SysBlock, disk, "removable")
-	contents, err := ioutil.ReadFile(path)
+	contents, err := os.ReadFile(path)
 	if err != nil {
 		return false
 	}
@@ -378,7 +377,7 @@ func disks(ctx *context.Context, paths *linuxpath.Paths) []*Disk {
 	// run. We can get all of this information by examining the /sys/block
 	// and /sys/class/block files
 	disks := make([]*Disk, 0)
-	files, err := ioutil.ReadDir(paths.SysBlock)
+	files, err := os.ReadDir(paths.SysBlock)
 	if err != nil {
 		return nil
 	}
@@ -442,7 +441,7 @@ func diskIsRotational(ctx *context.Context, paths *linuxpath.Paths, devName stri
 // paths.
 func partitionSizeBytes(paths *linuxpath.Paths, disk string, part string) uint64 {
 	path := filepath.Join(paths.SysBlock, disk, part, "size")
-	contents, err := ioutil.ReadFile(path)
+	contents, err := os.ReadFile(path)
 	if err != nil {
 		return 0
 	}
