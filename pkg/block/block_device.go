@@ -19,7 +19,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/blake2b"
 
-	ndmutil "github.com/harvester/node-disk-manager/pkg/util"
+	ndmutils "github.com/harvester/node-disk-manager/pkg/utils"
 )
 
 /* borrowed from https://github.com/jaypipes/ghw/blob/master/pkg/block/block_linux.go
@@ -56,14 +56,14 @@ type infoImpl struct {
 // New returns a pointer to an Info implementation that describes the block
 // storage resources of the host system.
 func New() (Info, error) {
-	isMounted, err := ndmutil.IsHostProcMounted()
+	isMounted, err := ndmutils.IsHostProcMounted()
 	if err != nil {
 		return nil, err
 	}
 	var ctx *context.Context
 	if isMounted {
 		ctx = context.New(option.WithPathOverrides(option.PathOverrides{
-			ndmutil.ProcPath: ndmutil.HostProcPath,
+			ndmutils.ProcPath: ndmutils.HostProcPath,
 		}))
 	} else {
 		ctx = context.New()
@@ -493,7 +493,7 @@ func partitionInfo(ctx *context.Context, paths *linuxpath.Paths, part string) (s
 
 func openProcMounts(ctx *context.Context, paths *linuxpath.Paths) (*os.File, error) {
 	file := paths.ProcMounts
-	if path, ok := ctx.PathOverrides[ndmutil.ProcPath]; ok {
+	if path, ok := ctx.PathOverrides[ndmutils.ProcPath]; ok {
 		ns := iscsiutil.GetHostNamespacePath(path)
 		file = strings.TrimSuffix(ns, "ns/") + "mounts"
 	}

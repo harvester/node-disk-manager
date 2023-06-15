@@ -23,7 +23,7 @@ import (
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	ctllonghornv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta2"
 	"github.com/harvester/node-disk-manager/pkg/option"
-	"github.com/harvester/node-disk-manager/pkg/util"
+	"github.com/harvester/node-disk-manager/pkg/utils"
 )
 
 const (
@@ -235,11 +235,11 @@ func (c *Controller) OnBlockDeviceChange(_ string, device *diskv1.BlockDevice) (
 func (c *Controller) updateDeviceMount(device *diskv1.BlockDevice, devPath string, filesystem *block.FileSystemInfo, needMountUpdate NeedMountUpdateOP) error {
 	logrus.Infof("Prepare to try %s", convertMountStr(needMountUpdate))
 	if device.Status.DeviceStatus.Partitioned {
-		return fmt.Errorf("not support the partitioned device now")
+		return fmt.Errorf("partitioned device is not supported, please use raw block device instead")
 	}
 	if needMountUpdate.Has(NeedMountUpdateUnmount) {
 		logrus.Infof("Unmount device %s from path %s", device.Name, filesystem.MountPoint)
-		if err := util.UmountDisk(filesystem.MountPoint); err != nil {
+		if err := utils.UmountDisk(filesystem.MountPoint); err != nil {
 			return err
 		}
 		diskv1.DeviceMounted.SetError(device, "", nil)
@@ -248,8 +248,8 @@ func (c *Controller) updateDeviceMount(device *diskv1.BlockDevice, devPath strin
 	if needMountUpdate.Has(NeedMountUpdateMount) {
 		expectedMountPoint := extraDiskMountPoint(device)
 		logrus.Infof("Mount deivce %s to %s", device.Name, expectedMountPoint)
-		if err := util.MountDisk(devPath, expectedMountPoint); err != nil {
-			if util.IsFSCorrupted(err) {
+		if err := utils.MountDisk(devPath, expectedMountPoint); err != nil {
+			if utils.IsFSCorrupted(err) {
 				logrus.Errorf("Target device may be corrupted, update FS info.")
 				device.Status.DeviceStatus.FileSystem.Corrupted = true
 				device.Spec.FileSystem.Repaired = false
@@ -272,7 +272,7 @@ func (c *Controller) updateDeviceFileSystem(device *diskv1.BlockDevice, devPath 
 	if filesystem == nil {
 		return fmt.Errorf("failed to get filesystem info from devPath %s", devPath)
 	}
-	if filesystem.MountPoint != "" && filesystem.Type != "" && !util.IsSupportedFileSystem(filesystem.Type) {
+	if filesystem.MountPoint != "" && filesystem.Type != "" && !utils.IsSupportedFileSystem(filesystem.Type) {
 		return fmt.Errorf("unsupported filesystem type %s", filesystem.Type)
 	}
 
@@ -302,7 +302,7 @@ func (c *Controller) forceFormat(device *diskv1.BlockDevice, devPath string, fil
 	// umount the disk if it is mounted
 	if filesystem != nil && filesystem.MountPoint != "" {
 		logrus.Infof("unmount %s for %s", filesystem.MountPoint, device.Name)
-		if err := util.UmountDisk(filesystem.MountPoint); err != nil {
+		if err := utils.UmountDisk(filesystem.MountPoint); err != nil {
 			return err
 		}
 	}
@@ -330,7 +330,7 @@ func (c *Controller) forceFormat(device *diskv1.BlockDevice, devPath string, fil
 			uuid = ""
 		}
 	}
-	if err := util.MakeExt4DiskFormatting(devPath, uuid); err != nil {
+	if err := utils.MakeExt4DiskFormatting(devPath, uuid); err != nil {
 		return err
 	}
 
@@ -427,7 +427,7 @@ func (c *Controller) unprovisionDeviceFromNode(device *diskv1.BlockDevice) error
 
 	isUnprovisioning := false
 	for _, tag := range diskToRemove.Tags {
-		if tag == util.DiskRemoveTag {
+		if tag == utils.DiskRemoveTag {
 			isUnprovisioning = true
 			break
 		}
@@ -453,7 +453,7 @@ func (c *Controller) unprovisionDeviceFromNode(device *diskv1.BlockDevice) error
 		logrus.Debugf("Setup device %s to start unprovision", device.Name)
 		diskToRemove.AllowScheduling = false
 		diskToRemove.EvictionRequested = true
-		diskToRemove.Tags = append(diskToRemove.Tags, util.DiskRemoveTag)
+		diskToRemove.Tags = append(diskToRemove.Tags, utils.DiskRemoveTag)
 		nodeCpy := node.DeepCopy()
 		nodeCpy.Spec.Disks[device.Name] = diskToRemove
 		if _, err := c.Nodes.Update(nodeCpy); err != nil {
@@ -557,7 +557,7 @@ func (c *Controller) OnBlockDeviceDelete(_ string, device *diskv1.BlockDevice) (
 		}
 		existingMount := bd.Status.DeviceStatus.FileSystem.MountPoint
 		if existingMount != "" {
-			if err := util.UmountDisk(existingMount); err != nil {
+			if err := utils.UmountDisk(existingMount); err != nil {
 				logrus.Warnf("cannot umount disk %s from mount point %s, err: %s", bd.Name, existingMount, err.Error())
 			}
 		}

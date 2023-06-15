@@ -2,7 +2,7 @@ package filter
 
 import (
 	"github.com/harvester/node-disk-manager/pkg/block"
-	"github.com/harvester/node-disk-manager/pkg/util"
+	"github.com/harvester/node-disk-manager/pkg/utils"
 )
 
 const (
@@ -33,8 +33,8 @@ func RegisterVendorFilter(filters ...string) *Filter {
 
 // Match returns true if vendor of the disk is matched
 func (vf *vendorFilter) Match(blockDevice *block.Disk) bool {
-	if blockDevice.Vendor != "" && util.MatchesIgnoredCase(vf.vendors, blockDevice.Vendor) {
+	if blockDevice.Vendor != "" && utils.MatchesIgnoredCase(vf.vendors, blockDevice.Vendor) {
 		return true
 	}
-	return blockDevice.BusPath != "" && util.ContainsIgnoredCase(vf.vendors, blockDevice.BusPath)
+	return blockDevice.BusPath != "" && utils.ContainsIgnoredCase(vf.vendors, blockDevice.BusPath)
 }

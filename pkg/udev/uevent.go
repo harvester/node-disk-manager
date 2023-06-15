@@ -15,6 +15,7 @@ import (
 	"github.com/harvester/node-disk-manager/pkg/block"
 	"github.com/harvester/node-disk-manager/pkg/controller/blockdevice"
 	"github.com/harvester/node-disk-manager/pkg/option"
+	"github.com/harvester/node-disk-manager/pkg/utils"
 )
 
 type Udev struct {
@@ -109,19 +110,21 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 			logrus.Infof("Skip adding non-identifiable block device %s", bd.Spec.DevPath)
 			return
 		}
-		u.scanner.Cond.L.Lock()
-		autoProvisioned := udevDevice.IsDisk() && u.scanner.ApplyAutoProvisionFiltersForDisk(disk)
-		u.AddBlockDevice(bd, autoProvisioned)
-		logrus.Infof("Wake up scanner with %s operation", netlink.ADD)
-		u.scanner.Cond.Signal()
-		u.scanner.Cond.L.Unlock()
+		utils.CallerWithCondLock(u.scanner.Cond, func() any {
+			autoProvisioned := udevDevice.IsDisk() && u.scanner.ApplyAutoProvisionFiltersForDisk(disk)
+			u.AddBlockDevice(bd, autoProvisioned)
+			logrus.Infof("Wake up scanner with %s operation with blockdevice: %s", netlink.ADD, bd.Name)
+			u.scanner.Cond.Signal()
+			return nil
+		})
 	case netlink.REMOVE:
 		if udevDevice.IsDisk() {
 			// just wake up scanner to check if the disk is removed, do no-op internally
-			u.scanner.Cond.L.Lock()
-			logrus.Infof("Wake up scanner with %s operation", netlink.REMOVE)
-			u.scanner.Cond.Signal()
-			u.scanner.Cond.L.Unlock()
+			utils.CallerWithCondLock(u.scanner.Cond, func() any {
+				logrus.Infof("Wake up scanner with %s operation with blockdevice: %s", netlink.REMOVE, bd.Name)
+				u.scanner.Cond.Signal()
+				return nil
+			})
 		}
 	}
 }
