@@ -377,13 +377,23 @@ func (c *Controller) provisionDeviceToNode(device *diskv1.BlockDevice) error {
 		Tags:              []string{},
 	}
 
-	if disk, ok := node.Spec.Disks[device.Name]; !ok || !reflect.DeepEqual(disk, diskSpec) {
+	needUpdated := false
+	if disk, found := node.Spec.Disks[device.Name]; found {
 		/* we should respect the disk Tags from LH */
-		diskSpec.Tags = disk.Tags
 		logrus.Debugf("Previous disk tags on LH: %+v, we should respect it.", disk.Tags)
-		nodeCpy.Spec.Disks[device.Name] = diskSpec
-		if _, err = c.Nodes.Update(nodeCpy); err != nil {
-			return err
+		diskSpec.Tags = disk.Tags
+		needUpdated = reflect.DeepEqual(disk, diskSpec)
+	}
+	// **NOTE** we do the `DiskAddedToNode` check here if we failed to update the device.
+	// That means the device status is not `Provisioned` but the LH node already has the disk.
+	// That we would not do next update, to make the device `Provisioned`.
+	if !needUpdated || !diskv1.DiskAddedToNode.IsTrue(device) {
+		// not updated means empty or different, we should update it.
+		if !needUpdated {
+			nodeCpy.Spec.Disks[device.Name] = diskSpec
+			if _, err = c.Nodes.Update(nodeCpy); err != nil {
+				return err
+			}
 		}
 
 		if !diskv1.DiskAddedToNode.IsTrue(device) {
