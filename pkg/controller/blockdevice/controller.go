@@ -2,9 +2,10 @@ package blockdevice
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
-	"math/rand"
+	"math/big"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -101,9 +102,6 @@ func Register(
 	opt *option.Option,
 	scanner *Scanner,
 ) error {
-	// Initialize random seed.
-	rand.Seed(time.Now().UnixNano())
-
 	controller := &Controller{
 		Namespace:        opt.Namespace,
 		NodeName:         opt.NodeName,
@@ -662,7 +660,12 @@ func needUpdateMountPoint(bd *diskv1.BlockDevice, filesystem *block.FileSystemIn
 // jitterEnqueueDelay returns a random duration between 7 to 13.
 func jitterEnqueueDelay() time.Duration {
 	enqueueDelay := 10
-	return time.Duration(rand.Intn(3)+enqueueDelay) * time.Second
+	randInt, err := rand.Int(rand.Reader, big.NewInt(3))
+	if err != nil {
+		logrus.Errorf("Failed to generate random number: %v", err)
+		randInt = big.NewInt(0)
+	}
+	return time.Duration(randInt.Sign()+enqueueDelay) * time.Second
 }
 
 func convertMountStr(mountOP NeedMountUpdateOP) string {
