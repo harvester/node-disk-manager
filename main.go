@@ -14,6 +14,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/ehazlett/simplelog"
 	"github.com/rancher/wrangler/pkg/kubeconfig"
@@ -150,7 +151,11 @@ func initProfiling(opt *option.Option) {
 	// enable profiler
 	if opt.ProfilerAddress != "" {
 		go func() {
-			log.Println(http.ListenAndServe(opt.ProfilerAddress, nil))
+			profilerServer := &http.Server{
+				Addr:              opt.ProfilerAddress,
+				ReadHeaderTimeout: 10 * time.Second,
+			}
+			log.Println(profilerServer.ListenAndServe())
 		}()
 	}
 }

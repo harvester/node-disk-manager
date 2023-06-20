@@ -7,19 +7,22 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const (
+	BLKIDCMD = "blkid"
+)
+
 func doCommandBlkid(partition string, param string) ([]byte, error) {
 	if !strings.HasPrefix(partition, "/dev") {
 		partition = "/dev/" + partition
 	}
 	args := []string{
-		"blkid",
 		"-s",
 		param,
 		partition,
 		"-o",
 		"value",
 	}
-	return exec.Command(args[0], args[1:]...).Output()
+	return exec.Command(BLKIDCMD, args[0:]...).Output() // #nosec G204
 }
 
 func GetFileSystemType(part string) string {

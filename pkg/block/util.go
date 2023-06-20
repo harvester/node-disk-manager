@@ -9,6 +9,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const (
+	LSBLKCMD = "lsblk"
+)
+
 func GetParentDevName(devPath string) (string, error) {
 	return lsblk(devPath, "pkname")
 }
@@ -34,8 +38,8 @@ func GetPartType(devPath string) string {
 }
 
 func GetDevPathByPTUUID(ptUUID string) (string, error) {
-	args := []string{"lsblk", "-dJo", "PATH,PTUUID"}
-	out, err := exec.Command(args[0], args[1:]...).Output()
+	args := []string{"-dJo", "PATH,PTUUID"}
+	out, err := exec.Command(LSBLKCMD, args[0:]...).Output() // #nosec G204
 	if err != nil {
 		return "", fmt.Errorf("failed to execute `%s` for PTUUID %s: %w", strings.Join(args, " "), ptUUID, err)
 	}
@@ -64,12 +68,11 @@ func lsblk(devPath, output string) (string, error) {
 		devPath = "/dev/" + devPath
 	}
 	args := []string{
-		"lsblk",
 		"-dno",
 		output,
 		devPath,
 	}
-	out, err := exec.Command(args[0], args[1:]...).Output()
+	out, err := exec.Command(LSBLKCMD, args[0:]...).Output() // #nosec G204
 	if err != nil {
 		return "", fmt.Errorf("failed to execute `%s`: %s", strings.Join(args, " "), err.Error())
 	}
