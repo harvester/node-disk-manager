@@ -99,6 +99,23 @@ enqueue the CR instead.
 [DaemonSet]: https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/
 [helm chart definition]: https://github.com/harvester/charts/tree/master/charts/harvester-node-disk-manager
 
+## Appendix
+We recommend user use the SCSI device, which contains the `WWN` to test the NDM.
+
+Here we give the Sample XML for `libvirt` to create a SCSI device with `WWN`.
+
+``` xml
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2'/>
+      <source file='/tmp/libvirt_disks/harvester_harvester-node-0-sda.qcow2'/>
+      <target dev='sda' bus='scsi'/>
+      <wwn>0x5000c50015ac3bd9</wwn>
+    </disk>
+```
+
+**NOTE**: If we create w/o WWN, NDM will use filesystem UUID as a unique identifier.
+That has some limitations. For example, the UUID will be missed if the filesystem metadata is broken.
+
 ## License
 Copyright (c) 2022 [Rancher Labs, Inc.](http://rancher.com)
 
