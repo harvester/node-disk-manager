@@ -51,12 +51,22 @@ jobs:
           cp ../ci/scripts/deploy_ndm.sh ./deploy_ndm.sh
           ./deploy_ndm.sh
           popd
-      - name: "Basic Test"
-        id: basic-test
+      - name: "Add disk"
         run: |
           pushd ndm-vagrant-rancherd
           ./scripts/attach-disk.sh node1
           sleep 30
+          popd
+      - name: "Upgrade NDM"
+        run: |
+          pushd ndm-vagrant-rancherd
+          cp ../ci/scripts/upgrade_ndm.sh ./upgrade_ndm.sh
+          ./upgrade_ndm.sh
+          popd
+      - name: "Run Basic Test"
+        id: basic-test
+        run: |
+          pushd ndm-vagrant-rancherd
           vagrant ssh-config node1 > ../ssh-config
           cp kubeconfig ../kubeconfig
           popd
