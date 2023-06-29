@@ -83,24 +83,14 @@ echo "cluster nodes: $cluster_nodes"
 ensure_longhorn_ready
 
 pushd $TOP_DIR
-# cleanup first
-rm -rf harvester-node-disk-manager
 
-cp -r ../deploy/charts/harvester-node-disk-manager harvester-node-disk-manager
-cp ../ci/charts/ndm-override.yaml ndm-override.yaml
+cat >> ndm-override.yaml << 'EOF'
+autoProvisionFilter: [/dev/sd*]
+EOF
 
-$HELM install -f $TOP_DIR/ndm-override.yaml harvester-node-disk-manager harvester-node-disk-manager/ --create-namespace -n harvester-system
+$HELM pull harvester-node-disk-manager --repo https://charts.harvesterhci.io --untar
+$HELM install -f $TOP_DIR/ndm-override.yaml harvester-node-disk-manager ./harvester-node-disk-manager --create-namespace -n harvester-system
 
 wait_ndm_ready
-# check image
-pod_name=$(kubectl get pods -n harvester-system |grep ^harvester-node-disk-manager|head -n1 |awk '{print $1}')
-container_img=$(kubectl get pods ${pod_name} -n harvester-system -o yaml |yq -e .spec.containers[0].image |tr ":" \n)
-yaml_img=$(yq -e .image.repository ndm-override.yaml)
-if grep -q ${yaml_img} <<< ${container_img}; then
-  echo "Image is equal: ${yaml_img}"
-else
-  echo "Image is non-equal, container: ${container_img}, yaml file: ${yaml_img}"
-  exit 1
-fi
 echo "harvester-node-disk-manager is ready"
 popd
