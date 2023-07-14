@@ -2,15 +2,14 @@ package blockdevice
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
-	"math/big"
 	"os"
 	"path/filepath"
 	"reflect"
 	"time"
 
+	gocommon "github.com/harvester/go-common"
 	ghwutil "github.com/jaypipes/ghw/pkg/util"
 	longhornv1 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	"github.com/sirupsen/logrus"
@@ -660,12 +659,11 @@ func needUpdateMountPoint(bd *diskv1.BlockDevice, filesystem *block.FileSystemIn
 // jitterEnqueueDelay returns a random duration between 7 to 13.
 func jitterEnqueueDelay() time.Duration {
 	enqueueDelay := 10
-	randInt, err := rand.Int(rand.Reader, big.NewInt(3))
+	randNum, err := gocommon.GenRandNumber(3)
 	if err != nil {
-		logrus.Errorf("Failed to generate random number: %v", err)
-		randInt = big.NewInt(0)
+		logrus.Errorf("Failed to generate random number, set randnumber to `0`: %v", err)
 	}
-	return time.Duration(randInt.Sign()+enqueueDelay) * time.Second
+	return time.Duration(int(randNum)+enqueueDelay) * time.Second
 }
 
 func convertMountStr(mountOP NeedMountUpdateOP) string {
