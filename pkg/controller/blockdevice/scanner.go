@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/strings/slices"
 
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
@@ -131,7 +132,7 @@ func (s *Scanner) scanBlockDevicesOnNode() error {
 		return err
 	}
 
-	oldBds := convertBlockDeviceListToMap(oldBdList)
+	oldBds, existingWWNs := convertBlockDeviceListToMap(oldBdList)
 	for _, device := range allDevices {
 		bd := device.bd
 		autoProvisioned := device.AutoProvisioned
@@ -150,6 +151,15 @@ func (s *Scanner) scanBlockDevicesOnNode() error {
 			// remove blockdevice from old device so we can delete missing devices afterward
 			delete(oldBds, bd.Name)
 		} else {
+			/*
+			 * Prevent add duplicated wwn even if the device path is different.
+			 * That prevent the device from being formatted again.
+			 * We should use multiple device path (TBD) for the same wwn.
+			 */
+			if slices.Contains(existingWWNs, bd.Status.DeviceStatus.Details.WWN) {
+				logrus.Warnf("Skip adding duplicated WWN device %s, device path: %s", bd.Status.DeviceStatus.Details.WWN, bd.Spec.DevPath)
+				continue
+			}
 			logrus.Infof("Create new device %s with wwn: %s", bd.Name, bd.Status.DeviceStatus.Details.WWN)
 			// persist newly detected block device
 			if _, err := s.SaveBlockDevice(bd, autoProvisioned); err != nil && !errors.IsAlreadyExists(err) {
@@ -179,13 +189,15 @@ func (s *Scanner) scanBlockDevicesOnNode() error {
 	return nil
 }
 
-func convertBlockDeviceListToMap(bdList *diskv1.BlockDeviceList) map[string]*diskv1.BlockDevice {
+func convertBlockDeviceListToMap(bdList *diskv1.BlockDeviceList) (map[string]*diskv1.BlockDevice, []string) {
+	var wwns = make([]string, len(bdList.Items))
 	bdMap := make(map[string]*diskv1.BlockDevice, len(bdList.Items))
-	for _, bd := range bdList.Items {
+	for order, bd := range bdList.Items {
 		bd := bd
 		bdMap[bd.Name] = &bd
+		wwns[order] = bd.Status.DeviceStatus.Details.WWN
 	}
-	return bdMap
+	return bdMap, wwns
 }
 
 // ApplyExcludeFiltersForPartition check the status of disk for every
