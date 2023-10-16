@@ -8,12 +8,12 @@ RUN zypper -n rm container-suseconnect && \
 
 ## install golangci
 RUN if [ "${ARCH}" == "amd64" ]; then \
-        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.52.0; \
+    curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.52.0; \
     fi
 
 ## install controller-gen
 RUN if [ "${ARCH}" = "amd64" ]; then \
-        go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.6.2; \
+    go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.6.2; \
     fi
 
 # install openapi-gen
