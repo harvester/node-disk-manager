@@ -1,4 +1,4 @@
-FROM registry.suse.com/bci/bci-base:15.4
+FROM registry.suse.com/bci/bci-base:15.5
 
 # util-linux-systemd -> for `lsblk` command
 # e2fsprogs -> for `mkfs.ext4` command
