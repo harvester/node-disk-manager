@@ -46,7 +46,7 @@ jobs:
           git clone https://github.com/harvester/vagrant-rancherd ndm-vagrant-rancherd
           pushd ndm-vagrant-rancherd
           ./new_cluster.sh
-          yq e -i ".longhorn_version = \"1.4.2\"" settings.yaml
+          yq e -i ".longhorn_version = \"1.5.3\"" settings.yaml
           ./scripts/deploy_longhorn.sh
           cp ../ci/scripts/deploy_ndm.sh ./deploy_ndm.sh
           ./deploy_ndm.sh
