@@ -54,6 +54,8 @@ rm -rf ndm-override.yaml
 cp -r ../deploy/charts/harvester-node-disk-manager harvester-node-disk-manager
 cp ../ci/charts/ndm-override.yaml ndm-override.yaml
 
+target_img=$(yq -e .image.repository ndm-override.yaml)
+echo "upgrade target image: ${target_img}, upgrading ..."
 $HELM upgrade -f $TOP_DIR/ndm-override.yaml harvester-node-disk-manager harvester-node-disk-manager/ -n harvester-system
 
 sleep 10 # wait 10 seconds for ndm start to respwan pods

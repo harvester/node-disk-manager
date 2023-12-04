@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	gocommon "github.com/harvester/go-common"
 	"github.com/kevinburke/ssh_config"
 	"github.com/melbahja/goph"
 	"github.com/stretchr/testify/require"
@@ -151,15 +152,72 @@ func (s *SingleDiskSuite) Test_2_ManuallyProvisionSingleDisk() {
 	require.Equal(s.T(), curBlockdevice.Status.State, diskv1.BlockDeviceActive, "Block device state should be Active")
 	newBlockdevice := curBlockdevice.DeepCopy()
 	newBlockdevice.Spec.FileSystem.Provisioned = true
+	targetTags := []string{"default", "test-disk"}
+	newBlockdevice.Spec.Tags = targetTags
 	bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
 
-	// sleep 3 seconds to wait controller handle
-	time.Sleep(3 * time.Second)
+	// sleep 30 seconds to wait controller handle
+	time.Sleep(30 * time.Second)
 
 	// check for the added status
 	curBlockdevice, err = bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
 	require.Equal(s.T(), err, nil, "Get BlockdevicesList should not get error before we want to check remove")
-	require.NotEqual(s.T(), curBlockdevice.Status.DeviceStatus.FileSystem.MountPoint, "", "Mountpoint should be empty after we remove disk!")
+	require.NotEqual(s.T(), curBlockdevice.Status.DeviceStatus.FileSystem.MountPoint, "", "Mountpoint should not be empty after we provision disk!")
 	require.Equal(s.T(), diskv1.ProvisionPhaseProvisioned, curBlockdevice.Status.ProvisionPhase, "Block device provisionPhase should be Provisioned")
 	require.Equal(s.T(), diskv1.BlockDeviceActive, curBlockdevice.Status.State, "Block device State should be Active")
+	require.Eventually(s.T(), func() bool {
+		return gocommon.SliceContentCmp(targetTags, curBlockdevice.Status.Tags)
+	}, 60*time.Second, 3*time.Second, "Block device tags should be the same")
+}
+
+func (s *SingleDiskSuite) Test_3_RemoveTags() {
+	require.NotEqual(s.T(), s.targetDiskName, "", "target disk name should not be empty before we do the remove test")
+	bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
+	curBlockdevice, err := bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
+	require.Equal(s.T(), err, nil, "Get Blockdevices should not get error")
+
+	require.Equal(s.T(), curBlockdevice.Status.State, diskv1.BlockDeviceActive, "Block device state should be Active")
+	newBlockdevice := curBlockdevice.DeepCopy()
+	targetTags := []string{"default"}
+	newBlockdevice.Spec.Tags = targetTags
+	bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
+
+	// sleep 30 seconds to wait controller handle
+	time.Sleep(30 * time.Second)
+
+	// check for the added status
+	curBlockdevice, err = bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
+	require.Equal(s.T(), err, nil, "Get BlockdevicesList should not get error before we want to check remove")
+	require.NotEqual(s.T(), curBlockdevice.Status.DeviceStatus.FileSystem.MountPoint, "", "Mountpoint should not be empty after we provision disk!")
+	require.Equal(s.T(), diskv1.ProvisionPhaseProvisioned, curBlockdevice.Status.ProvisionPhase, "Block device provisionPhase should be Provisioned")
+	require.Equal(s.T(), diskv1.BlockDeviceActive, curBlockdevice.Status.State, "Block device State should be Active")
+	require.Eventually(s.T(), func() bool {
+		return gocommon.SliceContentCmp(targetTags, curBlockdevice.Status.Tags)
+	}, 60*time.Second, 3*time.Second, "Block device tags should be the same")
+}
+
+func (s *SingleDiskSuite) Test_4_AddTags() {
+	require.NotEqual(s.T(), s.targetDiskName, "", "target disk name should not be empty before we do the remove test")
+	bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
+	curBlockdevice, err := bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
+	require.Equal(s.T(), err, nil, "Get Blockdevices should not get error")
+
+	require.Equal(s.T(), curBlockdevice.Status.State, diskv1.BlockDeviceActive, "Block device state should be Active")
+	newBlockdevice := curBlockdevice.DeepCopy()
+	targetTags := []string{"default", "test-disk-2"}
+	newBlockdevice.Spec.Tags = targetTags
+	bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
+
+	// sleep 30 seconds to wait controller handle
+	time.Sleep(30 * time.Second)
+
+	// check for the added status
+	curBlockdevice, err = bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
+	require.Equal(s.T(), err, nil, "Get BlockdevicesList should not get error before we want to check remove")
+	require.NotEqual(s.T(), curBlockdevice.Status.DeviceStatus.FileSystem.MountPoint, "", "Mountpoint should not be empty after we provision disk!")
+	require.Equal(s.T(), diskv1.ProvisionPhaseProvisioned, curBlockdevice.Status.ProvisionPhase, "Block device provisionPhase should be Provisioned")
+	require.Equal(s.T(), diskv1.BlockDeviceActive, curBlockdevice.Status.State, "Block device State should be Active")
+	require.Eventually(s.T(), func() bool {
+		return gocommon.SliceContentCmp(targetTags, curBlockdevice.Status.Tags)
+	}, 60*time.Second, 3*time.Second, "Block device tags should be the same")
 }
