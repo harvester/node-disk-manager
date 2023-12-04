@@ -37,23 +37,12 @@ ensure_longhorn_ready() {
 
   # ensure instance-manager-e ready
   while [ true ]; do
-    running_num=$(kubectl get pods -n longhorn-system |grep ^instance-manager-e |grep Running |awk '{print $3}' |wc -l)
+    running_num=$(kubectl get pods -n longhorn-system |grep ^instance-manager |grep Running |awk '{print $3}' |wc -l)
     if [[ $running_num -eq ${cluster_nodes} ]]; then
-      echo "instance-manager-e pods are ready!"
+      echo "instance-manager pods are ready!"
       break
     fi
-    echo "check instance-manager-e failure, please deploy longhorn first."
-    exit 1
-  done
-
-  # ensure instance-manager-r ready
-  while [ true ]; do
-    running_num=$(kubectl get pods -n longhorn-system |grep ^instance-manager-r |grep Running |awk '{print $3}' |wc -l)
-    if [[ $running_num -eq ${cluster_nodes} ]]; then
-      echo "instance-manager-r pods are ready!"
-      break
-    fi
-    echo "check instance-manager-r failure, please deploy longhorn first."
+    echo "check instance-manager failure, please deploy longhorn first."
     exit 1
   done
 }
