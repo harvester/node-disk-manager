@@ -84,6 +84,12 @@ spec:
               nodeName:
                 description: name of the node to which the block device is attached
                 type: string
+              tags:
+                description: a string list with device tag for provisioner, e.g. ["default",
+                  "small", "ssd"]
+                items:
+                  type: string
+                type: array
             required:
             - devPath
             - fileSystem
@@ -277,6 +283,11 @@ spec:
                 - Inactive
                 - Unknown
                 type: string
+              tags:
+                description: The current Tags of the blockdevice
+                items:
+                  type: string
+                type: array
             required:
             - provisionPhase
             - state

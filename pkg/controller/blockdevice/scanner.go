@@ -148,6 +148,10 @@ func (s *Scanner) scanBlockDevicesOnNode() error {
 			} else {
 				logrus.Debugf("Skip updating device %s", bd.Name)
 			}
+			// only first time to update the cache
+			if !CacheDiskTags.Initialized() && oldBd.Spec.Tags != nil && len(oldBd.Spec.Tags) > 0 {
+				CacheDiskTags.UpdateDiskTags(oldBd.Name, oldBd.Spec.Tags)
+			}
 			// remove blockdevice from old device so we can delete missing devices afterward
 			delete(oldBds, bd.Name)
 		} else {
@@ -166,6 +170,10 @@ func (s *Scanner) scanBlockDevicesOnNode() error {
 				return err
 			}
 		}
+	}
+	if !CacheDiskTags.Initialized() {
+		CacheDiskTags.UpdateInitialized()
+		logrus.Debugf("CacheDiskTags initialized: %+v", CacheDiskTags)
 	}
 
 	// We do not remove the block device that maybe just temporily not available.
