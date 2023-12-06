@@ -94,6 +94,11 @@ func (in *BlockDeviceSpec) DeepCopyInto(out *BlockDeviceSpec) {
 		*out = new(FilesystemInfo)
 		**out = **in
 	}
+	if in.Tags != nil {
+		in, out := &in.Tags, &out.Tags
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	return
 }
 
@@ -116,6 +121,11 @@ func (in *BlockDeviceStatus) DeepCopyInto(out *BlockDeviceStatus) {
 		copy(*out, *in)
 	}
 	in.DeviceStatus.DeepCopyInto(&out.DeviceStatus)
+	if in.Tags != nil {
+		in, out := &in.Tags, &out.Tags
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	return
 }
 
