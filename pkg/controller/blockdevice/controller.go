@@ -656,10 +656,10 @@ func needUpdateMountPoint(bd *diskv1.BlockDevice, filesystem *block.FileSystemIn
 	return NeedMountUpdateNoOp
 }
 
-// jitterEnqueueDelay returns a random duration between 7 to 13.
+// jitterEnqueueDelay returns a random duration between 3 to 7.
 func jitterEnqueueDelay() time.Duration {
-	enqueueDelay := 10
-	randNum, err := gocommon.GenRandNumber(3)
+	enqueueDelay := 5
+	randNum, err := gocommon.GenRandNumber(2)
 	if err != nil {
 		logrus.Errorf("Failed to generate random number, set randnumber to `0`: %v", err)
 	}
