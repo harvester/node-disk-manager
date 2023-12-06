@@ -7,12 +7,14 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sync"
 	"time"
 
 	gocommon "github.com/harvester/go-common"
 	ghwutil "github.com/jaypipes/ghw/pkg/util"
 	longhornv1 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/exp/slices"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -65,6 +67,12 @@ func (s *semaphore) release() bool {
 	}
 }
 
+type DiskTags struct {
+	diskTags    map[string][]string
+	lock        *sync.RWMutex
+	initialized bool
+}
+
 type Controller struct {
 	Namespace string
 	NodeName  string
@@ -86,10 +94,57 @@ const (
 	NeedMountUpdateNoOp NeedMountUpdateOP = 1 << iota
 	NeedMountUpdateMount
 	NeedMountUpdateUnmount
+
+	errorCacheDiskTagsNotInitialized = "CacheDiskTags is not initialized"
 )
 
 func (f NeedMountUpdateOP) Has(flag NeedMountUpdateOP) bool {
 	return f&flag != 0
+}
+
+var CacheDiskTags *DiskTags
+
+func (d *DiskTags) DeleteDiskTags(dev string) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	delete(d.diskTags, dev)
+}
+
+func (d *DiskTags) UpdateDiskTags(dev string, tags []string) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	d.diskTags[dev] = tags
+}
+
+func (d *DiskTags) UpdateInitialized() {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	d.initialized = true
+}
+
+func (d *DiskTags) Initialized() bool {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
+
+	return d.initialized
+}
+
+func (d *DiskTags) GetDiskTags(dev string) []string {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
+
+	return d.diskTags[dev]
+}
+
+func (d *DiskTags) DevExist(dev string) bool {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
+
+	_, found := d.diskTags[dev]
+	return found
 }
 
 // Register register the block device CRD controller
@@ -101,6 +156,11 @@ func Register(
 	opt *option.Option,
 	scanner *Scanner,
 ) error {
+	CacheDiskTags = &DiskTags{
+		diskTags:    make(map[string][]string),
+		lock:        &sync.RWMutex{},
+		initialized: false,
+	}
 	controller := &Controller{
 		Namespace:        opt.Namespace,
 		NodeName:         opt.NodeName,
@@ -117,6 +177,12 @@ func Register(
 		return err
 	}
 
+	utils.CallerWithCondLock(scanner.Cond, func() any {
+		logrus.Infof("Wake up scanner first time to update CacheDiskTags ...")
+		scanner.Cond.Signal()
+		return nil
+	})
+
 	bds.OnChange(ctx, blockDeviceHandlerName, controller.OnBlockDeviceChange)
 	bds.OnRemove(ctx, blockDeviceHandlerName, controller.OnBlockDeviceDelete)
 	return nil
@@ -132,6 +198,10 @@ func (c *Controller) OnBlockDeviceChange(_ string, device *diskv1.BlockDevice) (
 	// corrupted device could be skipped if we do not set ForceFormatted or Repaired
 	if device.Status.DeviceStatus.FileSystem.Corrupted && !device.Spec.FileSystem.ForceFormatted && !device.Spec.FileSystem.Repaired {
 		return nil, nil
+	}
+
+	if !CacheDiskTags.Initialized() {
+		return nil, errors.New(errorCacheDiskTagsNotInitialized)
 	}
 
 	deviceCpy := device.DeepCopy()
@@ -190,6 +260,31 @@ func (c *Controller) OnBlockDeviceChange(_ string, device *diskv1.BlockDevice) (
 	 */
 	needProvision := deviceCpy.Spec.FileSystem.Provisioned
 	switch {
+	case needProvision && device.Status.ProvisionPhase == diskv1.ProvisionPhaseProvisioned:
+		logrus.Infof("Prepare to check the new device tags %v with device: %s", deviceCpy.Spec.Tags, device.Name)
+		DiskTagsSynced := gocommon.SliceContentCmp(deviceCpy.Spec.Tags, CacheDiskTags.GetDiskTags(device.Name))
+		DiskTagsOnNodeMissed := func() bool {
+			node, err := c.NodeCache.Get(c.Namespace, c.NodeName)
+			if err != nil {
+				// dont check, just provision
+				return true
+			}
+			nodeDisk := node.Spec.Disks[device.Name]
+			for _, tag := range deviceCpy.Spec.Tags {
+				if !slices.Contains(nodeDisk.Tags, tag) {
+					return true
+				}
+			}
+			return false
+		}
+		if !DiskTagsSynced || (DiskTagsSynced && DiskTagsOnNodeMissed()) {
+			logrus.Debugf("Prepare to update device %s because the Tags changed, Spec: %v, CacheDiskTags: %v", deviceCpy.Name, deviceCpy.Spec.Tags, CacheDiskTags.GetDiskTags(device.Name))
+			if err := c.provisionDeviceToNode(deviceCpy); err != nil {
+				err := fmt.Errorf("failed to update tags %v with device %s to node %s: %w", deviceCpy.Spec.Tags, device.Name, c.NodeName, err)
+				logrus.Error(err)
+				c.Blockdevices.EnqueueAfter(c.Namespace, device.Name, jitterEnqueueDelay())
+			}
+		}
 	case needProvision && device.Status.ProvisionPhase == diskv1.ProvisionPhaseUnprovisioned:
 		logrus.Infof("Prepare to provision device %s to node %s", device.Name, c.NodeName)
 		if err := c.provisionDeviceToNode(deviceCpy); err != nil {
@@ -371,22 +466,34 @@ func (c *Controller) provisionDeviceToNode(device *diskv1.BlockDevice) error {
 		AllowScheduling:   true,
 		EvictionRequested: false,
 		StorageReserved:   0,
-		Tags:              []string{},
+		Tags:              device.Spec.Tags,
 	}
 
-	needUpdated := false
+	updated := false
 	if disk, found := node.Spec.Disks[device.Name]; found {
-		/* we should respect the disk Tags from LH */
-		logrus.Debugf("Previous disk tags on LH: %+v, we should respect it.", disk.Tags)
-		diskSpec.Tags = disk.Tags
-		needUpdated = reflect.DeepEqual(disk, diskSpec)
+		respectedTags := []string{}
+		if disk.Tags != nil {
+			/* we should respect the disk Tags from LH */
+			if CacheDiskTags.DevExist(device.Name) {
+				for _, tag := range disk.Tags {
+					if !slices.Contains(CacheDiskTags.GetDiskTags(device.Name), tag) {
+						respectedTags = append(respectedTags, tag)
+					}
+				}
+			} else {
+				respectedTags = disk.Tags
+			}
+			logrus.Debugf("Previous disk tags only on LH: %+v, we should respect it.", respectedTags)
+			diskSpec.Tags = gocommon.SliceDedupe(append(respectedTags, device.Spec.Tags...))
+			updated = reflect.DeepEqual(disk, diskSpec)
+		}
 	}
 	// **NOTE** we do the `DiskAddedToNode` check here if we failed to update the device.
 	// That means the device status is not `Provisioned` but the LH node already has the disk.
 	// That we would not do next update, to make the device `Provisioned`.
-	if !needUpdated || !diskv1.DiskAddedToNode.IsTrue(device) {
+	if !updated || !diskv1.DiskAddedToNode.IsTrue(device) {
 		// not updated means empty or different, we should update it.
-		if !needUpdated {
+		if !updated {
 			nodeCpy.Spec.Disks[device.Name] = diskSpec
 			if _, err = c.Nodes.Update(nodeCpy); err != nil {
 				return err
@@ -402,6 +509,9 @@ func (c *Controller) provisionDeviceToNode(device *diskv1.BlockDevice) error {
 			diskv1.DiskAddedToNode.Message(device, msg)
 		}
 	}
+
+	// update oldDiskTags
+	CacheDiskTags.UpdateDiskTags(device.Name, device.Spec.Tags)
 
 	return nil
 }
@@ -524,6 +634,11 @@ func (c *Controller) updateDeviceStatus(device *diskv1.BlockDevice, devPath stri
 
 // OnBlockDeviceDelete will delete the block devices that belongs to the same parent device
 func (c *Controller) OnBlockDeviceDelete(_ string, device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
+
+	if !CacheDiskTags.Initialized() {
+		return nil, errors.New(errorCacheDiskTagsNotInitialized)
+	}
+
 	if device == nil {
 		return nil, nil
 	}
@@ -573,6 +688,8 @@ func (c *Controller) OnBlockDeviceDelete(_ string, device *diskv1.BlockDevice) (
 	if _, err := c.Nodes.Update(nodeCpy); err != nil {
 		return device, err
 	}
+
+	CacheDiskTags.DeleteDiskTags(device.Name)
 
 	return nil, nil
 }
@@ -684,4 +801,14 @@ func convertFSInfoToString(fsInfo *block.FileSystemInfo) string {
 		return "device is not mounted"
 	}
 	return fmt.Sprintf("mountpoint: %s, fsType: %s", fsInfo.MountPoint, fsInfo.Type)
+}
+
+func removeUnNeeded[T string | int](x []T, y []T) []T {
+	result := make([]T, 0)
+	for _, item := range x {
+		if !slices.Contains(y, item) {
+			result = append(result, item)
+		}
+	}
+	return result
 }

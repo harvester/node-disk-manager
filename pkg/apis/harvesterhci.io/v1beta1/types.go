@@ -39,6 +39,9 @@ type BlockDeviceSpec struct {
 	DevPath string `json:"devPath"`
 
 	FileSystem *FilesystemInfo `json:"fileSystem"`
+
+	// a string list with device tag for provisioner, e.g. ["default", "small", "ssd"]
+	Tags []string `json:"tags,omitempty"`
 }
 
 type BlockDeviceStatus struct {
@@ -56,6 +59,9 @@ type BlockDeviceStatus struct {
 
 	// +optional
 	DeviceStatus DeviceStatus `json:"deviceStatus,omitempty"`
+
+	// The current Tags of the blockdevice
+	Tags []string `json:"tags,omitempty"`
 }
 
 type FilesystemInfo struct {
