@@ -20,6 +20,7 @@ import (
 
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	clientset "github.com/harvester/node-disk-manager/pkg/generated/clientset/versioned"
+	"github.com/harvester/node-disk-manager/pkg/utils"
 )
 
 /*
@@ -44,6 +45,7 @@ type HotPlugTestSuite struct {
 	clientSet      *clientset.Clientset
 	targetNodeName string
 	targetDiskName string
+	curBusPath     string // to make sure which path we deployed
 }
 
 func (s *HotPlugTestSuite) SetupSuite() {
@@ -148,6 +150,43 @@ func (s *HotPlugTestSuite) Test_2_HotPlugAddDisk() {
 	require.Equal(s.T(), err, nil, "Get Blockdevices should not get error")
 
 	require.Equal(s.T(), curBlockdevice.Status.State, diskv1.BlockDeviceActive, "Disk status should be inactive after we add disk")
+	s.curBusPath = curBlockdevice.Status.DeviceStatus.Details.BusPath
+}
+
+func (s *HotPlugTestSuite) Test_3_AddDuplicatedWWNDsik() {
+	// create another another disk raw file and xml
+	const (
+		originalDeviceRaw   = "/tmp/hotplug_disks/node1-sda.qcow2"
+		duplicatedDeviceXML = "/tmp/hotplug_disks/node1-sdb.xml"
+		duplicatedDeviceRaw = "/tmp/hotplug_disks/node1-sdb.qcow2"
+	)
+	cmdCpyRawFile := fmt.Sprintf("cp %s %s", originalDeviceRaw, duplicatedDeviceRaw)
+	_, _, err := doCommand(cmdCpyRawFile)
+	require.Equal(s.T(), err, nil, "Running command `cp the raw device file` should not get error")
+
+	disk, err := utils.DiskXMLReader(hotplugDiskXMLFileName)
+	require.Equal(s.T(), err, nil, "Read xml file should not get error")
+	disk.Source.File = duplicatedDeviceRaw
+	disk.Target.Dev = "sdb"
+	err = utils.XMLWriter(duplicatedDeviceXML, disk)
+	require.Equal(s.T(), err, nil, "Write xml file should not get error")
+
+	cmd := fmt.Sprintf("virsh attach-device --domain %s --file %s --live", hotplugTargetNodeName, duplicatedDeviceXML)
+	_, _, err = doCommand(cmd)
+	require.Equal(s.T(), err, nil, "Running command `virsh attach-device` should not get error")
+
+	// wait for controller handling
+	time.Sleep(5 * time.Second)
+
+	// check disk status
+	require.NotEqual(s.T(), s.targetDiskName, "", "target disk name should not be empty before we start hotplug (add) test")
+	bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
+	blockdeviceList, err := bdi.List(context.TODO(), v1.ListOptions{})
+	require.Equal(s.T(), err, nil, "Get BlockdevicesList should not get error")
+	require.Equal(s.T(), 1, len(blockdeviceList.Items), "We should have one disks because duplicated wwn should not added")
+	curBlockdevice, err := bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
+	require.Equal(s.T(), err, nil, "Get Blockdevices should not get error")
+	require.Equal(s.T(), s.curBusPath, curBlockdevice.Status.DeviceStatus.Details.BusPath, "Disk path should not replace by duplicated wwn disk")
 
 }
 
