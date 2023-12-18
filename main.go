@@ -69,9 +69,8 @@ func main() {
 		},
 		&cli.StringFlag{
 			Name:        "profile-listen-address",
-			Value:       "0.0.0.0:6060",
-			DefaultText: "0.0.0.0:6060",
-			Usage:       "Address to listen on for profiling",
+			Value:       "",
+			Usage:       "Address to listen on for profiling, e.g. `:6060`",
 			Destination: &opt.ProfilerAddress,
 		},
 		&cli.BoolFlag{
