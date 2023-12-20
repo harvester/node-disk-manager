@@ -7,14 +7,12 @@ RUN zypper -n rm container-suseconnect && \
     zypper -n install git curl docker gzip tar wget awk
 
 ## install golangci
-RUN if [ "${ARCH}" == "amd64" ]; then \
-    curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.52.0; \
-    fi
+RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.52.0
 
 ## install controller-gen
-RUN if [ "${ARCH}" = "amd64" ]; then \
-    go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.6.2; \
-    fi
+
+RUN go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.6.2
+
 
 # install openapi-gen
 RUN  go install k8s.io/code-generator/cmd/openapi-gen@v0.23.7
