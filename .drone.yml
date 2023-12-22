@@ -150,7 +150,7 @@ volumes:
 kind: pipeline
 name: manifest
 
-env:
+environment:
   IMAGE_NAME: "rancher/harvester-node-disk-manager"
 
 steps:
