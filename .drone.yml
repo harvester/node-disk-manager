@@ -150,9 +150,6 @@ volumes:
 kind: pipeline
 name: manifest
 
-environment:
-  IMAGE_NAME: "rancher/harvester-node-disk-manager"
-
 steps:
   - name: push-manifest-head
     image: plugins/manifest
@@ -161,8 +158,8 @@ steps:
         from_secret: docker_username
       password:
         from_secret: docker_password
-      target: "${IMAGE_NAME}:${DRONE_BRANCH}-head"
-      template: "${IMAGE_NAME}:${DRONE_BRANCH}-head-OS-ARCH"
+      target: "rancher/harvester-node-disk-manager:${DRONE_BRANCH}-head"
+      template: "rancher/harvester-node-disk-manager:${DRONE_BRANCH}-head-OS-ARCH"
       ignore_missing: true
       platforms:
         - linux/amd64
@@ -182,8 +179,8 @@ steps:
         from_secret: docker_username
       password:
         from_secret: docker_password
-      target: "${IMAGE_NAME}:${DRONE_TAG}"
-      template: "${IMAGE_NAME}:${DRONE_TAG}-OS-ARCH"
+      target: "rancher/harvester-node-disk-manager:${DRONE_TAG}"
+      template: "rancher/harvester-node-disk-manager:${DRONE_TAG}-OS-ARCH"
       ignore_missing: true
       platforms:
         - linux/amd64
