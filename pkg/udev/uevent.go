@@ -19,28 +19,45 @@ import (
 )
 
 type Udev struct {
-	namespace string
-	nodeName  string
-	startOnce sync.Once
-	scanner   *blockdevice.Scanner
+	namespace   string
+	nodeName    string
+	startOnce   sync.Once
+	scanner     *blockdevice.Scanner
+	injectError bool
 }
 
 func NewUdev(opt *option.Option, scanner *blockdevice.Scanner) *Udev {
 	return &Udev{
-		startOnce: sync.Once{},
-		namespace: opt.Namespace,
-		nodeName:  opt.NodeName,
-		scanner:   scanner,
+		startOnce:   sync.Once{},
+		namespace:   opt.Namespace,
+		nodeName:    opt.NodeName,
+		scanner:     scanner,
+		injectError: opt.InjectUdevMonitorError,
 	}
 }
 
 func (u *Udev) Monitor(ctx context.Context) {
-	u.startOnce.Do(func() {
-		u.monitor(ctx)
-	})
+	// we need to respawn the monitor with any error.
+	// because any error will break the monitor loop.
+	errChan := make(chan error)
+	go u.spawnMonitor(ctx, errChan)
+
 }
 
-func (u *Udev) monitor(ctx context.Context) {
+func (u *Udev) spawnMonitor(ctx context.Context, errChan chan error) {
+	go u.monitor(ctx, errChan)
+	for {
+		select {
+		case err := <-errChan:
+			logrus.Errorf("failed to monitor udev events, error: %s", err.Error())
+			go u.monitor(ctx, errChan)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (u *Udev) monitor(ctx context.Context, errors chan error) {
 	logrus.Infoln("Start monitoring udev processed events")
 
 	matcher, err := getOptionalMatcher(nil)
@@ -55,16 +72,24 @@ func (u *Udev) monitor(ctx context.Context) {
 	defer conn.Close()
 
 	uqueue := make(chan netlink.UEvent)
-	errors := make(chan error)
-	quit := conn.Monitor(uqueue, errors, matcher)
+	errChan := make(chan error)
+	quit := conn.Monitor(uqueue, errChan, matcher)
 
+	// simulator the error from udev monitor
+	if u.injectError {
+		logrus.Infof("Injecting error to udev monitor for testing")
+		errors <- fmt.Errorf("testing error")
+		u.injectError = false
+		return
+	}
 	// Handling message from udev queue
 	for {
 		select {
 		case uevent := <-uqueue:
 			u.ActionHandler(uevent)
-		case err := <-errors:
-			logrus.Errorf("failed to parse udev event, error: %s", err.Error())
+		case err := <-errChan:
+			errors <- err
+			return
 		case <-ctx.Done():
 			close(quit)
 			return
