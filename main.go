@@ -134,6 +134,13 @@ func main() {
 			DefaultText: "5",
 			Destination: &opt.MaxConcurrentOps,
 		},
+		&cli.BoolFlag{
+			Name:        "inject-udev-monitor-error",
+			EnvVars:     []string{"NDM_INJECT_UDEV_MONITOR_ERROR"},
+			Usage:       "Inject error when monitoring udev events",
+			Value:       false,
+			Destination: &opt.InjectUdevMonitorError,
+		},
 	}
 
 	app.Action = func(c *cli.Context) error {
@@ -172,8 +179,8 @@ func initLogs(opt *option.Option) {
 	logrus.SetOutput(os.Stdout)
 	logrus.Infof("Node Disk Manager %s is starting", version.FriendlyVersion())
 	logrus.Infof("Notable parameters are following:")
-	logrus.Infof("Namespace: %s, ConcurrentOps: %d, RescanInterval: %d",
-		opt.Namespace, opt.MaxConcurrentOps, opt.RescanInterval)
+	logrus.Infof("Namespace: %s, ConcurrentOps: %d, RescanInterval: %d, InjectUdevMonitorError: %v",
+		opt.Namespace, opt.MaxConcurrentOps, opt.RescanInterval, opt.InjectUdevMonitorError)
 	if opt.Debug {
 		logrus.SetLevel(logrus.DebugLevel)
 		logrus.Debugf("Loglevel set to [%v]", logrus.DebugLevel)
