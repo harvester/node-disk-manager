@@ -74,6 +74,7 @@ func (u *Udev) monitor(ctx context.Context, errors chan error) {
 	uqueue := make(chan netlink.UEvent)
 	errChan := make(chan error)
 	quit := conn.Monitor(uqueue, errChan, matcher)
+	defer close(quit)
 
 	// simulator the error from udev monitor
 	if u.injectError {
@@ -91,7 +92,6 @@ func (u *Udev) monitor(ctx context.Context, errors chan error) {
 			errors <- err
 			return
 		case <-ctx.Done():
-			close(quit)
 			return
 		}
 	}
