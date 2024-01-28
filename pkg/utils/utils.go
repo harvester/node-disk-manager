@@ -8,7 +8,6 @@ import (
 	"sync"
 	"syscall"
 
-	iscsiutil "github.com/longhorn/go-iscsi-helper/util"
 	"github.com/longhorn/longhorn-manager/util"
 )
 
@@ -134,8 +133,8 @@ func mountExt4(device, path string, readonly bool) error {
 
 // mountExt4OnHostNamespace provides the same functionality as mountExt4 but on host namespace.
 func mountExt4OnHostNamespace(device, path string, readonly bool) error {
-	ns := iscsiutil.GetHostNamespacePath(util.HostProcPath)
-	executor, err := iscsiutil.NewNamespaceExecutor(ns)
+	ns := GetHostNamespacePath(util.HostProcPath)
+	executor, err := NewExecutorWithNS(ns)
 	if err != nil {
 		return err
 	}
@@ -150,8 +149,8 @@ func mountExt4OnHostNamespace(device, path string, readonly bool) error {
 }
 
 func executeOnHostNamespace(cmd string, args []string) (string, error) {
-	ns := iscsiutil.GetHostNamespacePath(util.HostProcPath)
-	executor, err := iscsiutil.NewNamespaceExecutor(ns)
+	ns := GetHostNamespacePath(util.HostProcPath)
+	executor, err := NewExecutorWithNS(ns)
 	if err != nil {
 		return "", err
 	}
