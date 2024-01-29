@@ -7,18 +7,21 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"sync"
 	"time"
 
 	gocommon "github.com/harvester/go-common"
 	ghwutil "github.com/jaypipes/ghw/pkg/util"
 	longhornv1 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
+	lhclientset "github.com/longhorn/longhorn-manager/k8s/pkg/client/clientset/versioned"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/exp/slices"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/rest"
 
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
@@ -29,7 +32,9 @@ import (
 )
 
 const (
-	blockDeviceHandlerName = "harvester-block-device-handler"
+	blockDeviceHandlerName          = "harvester-block-device-handler"
+	longhornNS                      = "longhorn-system"
+	longhornStorageReservedSettings = "storage-reserved-percentage-for-default-disk"
 )
 
 // semaphore is a simple semaphore implementation in channel
@@ -460,12 +465,28 @@ func (c *Controller) provisionDeviceToNode(device *diskv1.BlockDevice) error {
 		return err
 	}
 
+	lhclient, err := getLonghornClientset()
+	if err != nil {
+		return err
+	}
+	storageReservedRatio := 30
+	storageReservedRatioObj, err := lhclient.LonghornV1beta2().Settings(longhornNS).Get(context.TODO(), string(longhornStorageReservedSettings), metav1.GetOptions{})
+	if err != nil {
+		logrus.Warnf("Failed to get longhorn setting %s: %v", longhornStorageReservedSettings, err)
+	} else {
+		logrus.Debugf("Get longhorn setting %s: %v", longhornStorageReservedSettings, storageReservedRatio)
+		value, err := strconv.Atoi(storageReservedRatioObj.Value)
+		if err == nil {
+			storageReservedRatio = value
+		}
+	}
+
 	nodeCpy := node.DeepCopy()
 	diskSpec := longhornv1.DiskSpec{
 		Path:              extraDiskMountPoint(device),
 		AllowScheduling:   true,
 		EvictionRequested: false,
-		StorageReserved:   0,
+		StorageReserved:   int64(device.Status.DeviceStatus.Capacity.SizeBytes * uint64(storageReservedRatio) / 100),
 		Tags:              device.Spec.Tags,
 	}
 
@@ -494,6 +515,7 @@ func (c *Controller) provisionDeviceToNode(device *diskv1.BlockDevice) error {
 	if !updated || !diskv1.DiskAddedToNode.IsTrue(device) {
 		// not updated means empty or different, we should update it.
 		if !updated {
+			logrus.Debugf("Update disk %v to longhorn node `%s` as an additional disk", diskSpec, node.Name)
 			nodeCpy.Spec.Disks[device.Name] = diskSpec
 			if _, err = c.Nodes.Update(nodeCpy); err != nil {
 				return err
@@ -811,4 +833,12 @@ func removeUnNeeded[T string | int](x []T, y []T) []T {
 		}
 	}
 	return result
+}
+
+func getLonghornClientset() (*lhclientset.Clientset, error) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, fmt.Errorf("unable to get client config, %v", err)
+	}
+	return lhclientset.NewForConfig(config)
 }

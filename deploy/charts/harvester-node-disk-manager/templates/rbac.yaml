@@ -15,7 +15,7 @@ rules:
     resources: [ "blockdevices" ]
     verbs: [ "*" ]
   - apiGroups: [ "longhorn.io" ]
-    resources: [ "nodes" ]
+    resources: [ "nodes", "settings" ]
     verbs: [ "get", "list", "watch", "update", "patch" ]
   - apiGroups: [ "" ]
     resources: [ "configmaps", "events" ]
