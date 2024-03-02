@@ -30,6 +30,7 @@ import (
 
 const (
 	blockDeviceHandlerName = "harvester-block-device-handler"
+	defaultProvisioner     = "longhornv1"
 )
 
 // semaphore is a simple semaphore implementation in channel
@@ -212,12 +213,16 @@ func (c *Controller) OnBlockDeviceChange(_ string, device *diskv1.BlockDevice) (
 	if devPath == "" {
 		return nil, fmt.Errorf("failed to resolve persistent dev path for block device %s", device.Name)
 	}
+	if device.Spec.Provisioner == "" {
+		deviceCpy.Spec.Provisioner = defaultProvisioner
+	}
+
 	filesystem := c.BlockInfo.GetFileSystemInfoByDevPath(devPath)
 	devPathStatus := convertFSInfoToString(filesystem)
 	logrus.Debugf("Get filesystem info from device %s, %s", devPath, devPathStatus)
 
 	needFormat := deviceCpy.Spec.FileSystem.ForceFormatted && (deviceCpy.Status.DeviceStatus.FileSystem.Corrupted || deviceCpy.Status.DeviceStatus.FileSystem.LastFormattedAt == nil)
-	if needFormat {
+	if deviceCpy.Spec.Provisioner == defaultProvisioner && needFormat {
 		logrus.Infof("Prepare to force format device %s", device.Name)
 		err := c.forceFormat(deviceCpy, devPath, filesystem)
 		if err != nil {
@@ -233,7 +238,8 @@ func (c *Controller) OnBlockDeviceChange(_ string, device *diskv1.BlockDevice) (
 		return device, err
 	}
 
-	if needMountUpdate := needUpdateMountPoint(deviceCpy, filesystem); needMountUpdate != NeedMountUpdateNoOp {
+	needMountUpdate := needUpdateMountPoint(deviceCpy, filesystem)
+	if deviceCpy.Spec.Provisioner == defaultProvisioner && needMountUpdate != NeedMountUpdateNoOp {
 		err := c.updateDeviceMount(deviceCpy, devPath, filesystem, needMountUpdate)
 		if err != nil {
 			err := fmt.Errorf("failed to update device mount %s: %s", device.Name, err.Error())
@@ -461,13 +467,14 @@ func (c *Controller) provisionDeviceToNode(device *diskv1.BlockDevice) error {
 	}
 
 	nodeCpy := node.DeepCopy()
-	diskSpec := longhornv1.DiskSpec{
-		Path:              extraDiskMountPoint(device),
-		AllowScheduling:   true,
-		EvictionRequested: false,
-		StorageReserved:   0,
-		Tags:              device.Spec.Tags,
+
+	diskSpec := generateDiskSpec(device.Spec.Provisioner)
+	if device.Spec.Provisioner == defaultProvisioner {
+		diskSpec.Path = extraDiskMountPoint(device)
+	} else {
+		diskSpec.Path = device.Status.DeviceStatus.DevPath
 	}
+	diskSpec.Tags = device.Spec.Tags
 
 	updated := false
 	if disk, found := node.Spec.Disks[device.Name]; found {
@@ -811,4 +818,18 @@ func removeUnNeeded[T string | int](x []T, y []T) []T {
 		}
 	}
 	return result
+}
+
+func generateDiskSpec(provisioner string) longhornv1.DiskSpec {
+	diskType := longhornv1.DiskTypeFilesystem
+	if provisioner == "longhornv2" {
+		diskType = longhornv1.DiskTypeBlock
+	}
+	spec := longhornv1.DiskSpec{
+		Type:              diskType,
+		AllowScheduling:   true,
+		EvictionRequested: false,
+		StorageReserved:   0,
+	}
+	return spec
 }
