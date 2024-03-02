@@ -84,6 +84,10 @@ spec:
               nodeName:
                 description: name of the node to which the block device is attached
                 type: string
+              provisioner:
+                description: a string with the provisioner name, e.g. "longhornv1",
+                  longhornv2"
+                type: string
               tags:
                 description: a string list with device tag for provisioner, e.g. ["default",
                   "small", "ssd"]

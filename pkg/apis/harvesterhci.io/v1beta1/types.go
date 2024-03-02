@@ -42,6 +42,9 @@ type BlockDeviceSpec struct {
 
 	// a string list with device tag for provisioner, e.g. ["default", "small", "ssd"]
 	Tags []string `json:"tags,omitempty"`
+
+	// a string with the provisioner name, e.g. "longhornv1", longhornv2"
+	Provisioner string `json:"provisioner,omitempty"`
 }
 
 type BlockDeviceStatus struct {
