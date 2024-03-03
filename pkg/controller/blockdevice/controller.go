@@ -810,16 +810,6 @@ func convertFSInfoToString(fsInfo *block.FileSystemInfo) string {
 	return fmt.Sprintf("mountpoint: %s, fsType: %s", fsInfo.MountPoint, fsInfo.Type)
 }
 
-func removeUnNeeded[T string | int](x []T, y []T) []T {
-	result := make([]T, 0)
-	for _, item := range x {
-		if !slices.Contains(y, item) {
-			result = append(result, item)
-		}
-	}
-	return result
-}
-
 func generateDiskSpec(provisioner string) longhornv1.DiskSpec {
 	diskType := longhornv1.DiskTypeFilesystem
 	if provisioner == "longhornv2" {

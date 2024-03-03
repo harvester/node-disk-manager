@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -174,4 +175,15 @@ func CallerWithCondLock[T any](cond *sync.Cond, f func() T) T {
 	cond.L.Lock()
 	defer cond.L.Unlock()
 	return f()
+}
+
+// DoCommand executes a command and returns the stdout, stderr and error
+func DoCommand(cmdString string) (string, string, error) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd := exec.Command("bash", "-c", cmdString)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return stdout.String(), stderr.String(), err
 }

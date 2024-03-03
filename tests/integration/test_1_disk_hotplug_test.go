@@ -1,11 +1,9 @@
 package integration
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -118,7 +116,7 @@ func (s *HotPlugTestSuite) Test_0_PreCheckForDiskCount() {
 func (s *HotPlugTestSuite) Test_1_HotPlugRemoveDisk() {
 	// remove disk dynamically
 	cmd := fmt.Sprintf("virsh detach-disk %s %s --live", hotplugTargetNodeName, hotplugTargetDiskName)
-	_, _, err := doCommand(cmd)
+	_, _, err := utils.DoCommand(cmd)
 	require.Equal(s.T(), err, nil, "Running command `virsh detach-disk` should not get error")
 
 	// wait for controller handling
@@ -137,7 +135,7 @@ func (s *HotPlugTestSuite) Test_1_HotPlugRemoveDisk() {
 func (s *HotPlugTestSuite) Test_2_HotPlugAddDisk() {
 	// remove disk dynamically
 	cmd := fmt.Sprintf("virsh attach-device --domain %s --file %s --live", hotplugTargetNodeName, hotplugDiskXMLFileName)
-	_, _, err := doCommand(cmd)
+	_, _, err := utils.DoCommand(cmd)
 	require.Equal(s.T(), err, nil, "Running command `virsh attach-device` should not get error")
 
 	// wait for controller handling
@@ -161,7 +159,7 @@ func (s *HotPlugTestSuite) Test_3_AddDuplicatedWWNDsik() {
 		duplicatedDeviceRaw = "/tmp/hotplug_disks/node1-sdb.qcow2"
 	)
 	cmdCpyRawFile := fmt.Sprintf("cp %s %s", originalDeviceRaw, duplicatedDeviceRaw)
-	_, _, err := doCommand(cmdCpyRawFile)
+	_, _, err := utils.DoCommand(cmdCpyRawFile)
 	require.Equal(s.T(), err, nil, "Running command `cp the raw device file` should not get error")
 
 	disk, err := utils.DiskXMLReader(hotplugDiskXMLFileName)
@@ -172,7 +170,7 @@ func (s *HotPlugTestSuite) Test_3_AddDuplicatedWWNDsik() {
 	require.Equal(s.T(), err, nil, "Write xml file should not get error")
 
 	cmd := fmt.Sprintf("virsh attach-device --domain %s --file %s --live", hotplugTargetNodeName, duplicatedDeviceXML)
-	_, _, err = doCommand(cmd)
+	_, _, err = utils.DoCommand(cmd)
 	require.Equal(s.T(), err, nil, "Running command `virsh attach-device` should not get error")
 
 	// wait for controller handling
@@ -188,14 +186,4 @@ func (s *HotPlugTestSuite) Test_3_AddDuplicatedWWNDsik() {
 	require.Equal(s.T(), err, nil, "Get Blockdevices should not get error")
 	require.Equal(s.T(), s.curBusPath, curBlockdevice.Status.DeviceStatus.Details.BusPath, "Disk path should not replace by duplicated wwn disk")
 
-}
-
-func doCommand(cmdString string) (string, string, error) {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd := exec.Command("bash", "-c", cmdString)
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	return stdout.String(), stderr.String(), err
 }
