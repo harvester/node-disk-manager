@@ -142,7 +142,7 @@ func main() {
 		},
 	}
 
-	app.Action = func(c *cli.Context) error {
+	app.Action = func(_ *cli.Context) error {
 		initProfiling(&opt)
 		initLogs(&opt)
 		return run(&opt)
