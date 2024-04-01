@@ -58,7 +58,7 @@ target_img=$(yq -e .image.repository ndm-override.yaml)
 echo "upgrade target image: ${target_img}, upgrading ..."
 $HELM upgrade -f $TOP_DIR/ndm-override.yaml harvester-node-disk-manager harvester-node-disk-manager/ -n harvester-system
 
-sleep 30 # wait 30 seconds for ndm respwan pods
+sleep 30 # wait 30 seconds for ndm respawn pods
 
 wait_ndm_ready
 # check image
