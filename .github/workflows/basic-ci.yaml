@@ -16,7 +16,7 @@ jobs:
   validation:
     runs-on:
       - self-hosted
-      - Linux
+      - golang
     steps:
       - name: "Clone and check"
         uses: actions/checkout@v3
@@ -34,6 +34,8 @@ jobs:
         run: |
           BUILD_FOR_CI=true make
           ./ci/scripts/patch-ttl-repo.sh
+          echo "NDM override result as below:"
+          cat ci/charts/ndm-override.yaml
   main_jobs:
     needs: build
     runs-on:
@@ -57,6 +59,11 @@ jobs:
           ./scripts/attach-disk.sh node1
           sleep 30
           popd
+      - name: "Patch Image target (for upgrade)"
+        run: |
+          ./ci/scripts/patch-ttl-repo.sh
+          echo "NDM override result as below:"
+          cat ci/charts/ndm-override.yaml 
       - name: "Upgrade NDM"
         run: |
           pushd ndm-vagrant-rancherd
