@@ -28,7 +28,7 @@ jobs:
     needs: validation
     runs-on:
       - self-hosted
-      - Linux
+      - golang
     steps:
       - name: "Local Build for next stage"
         run: |
@@ -40,7 +40,7 @@ jobs:
     needs: build
     runs-on:
       - self-hosted
-      - Linux
+      - golang
     steps:
       - name: "Local Deployment (Harvester+Longhorn+Node-Disk-Manager) for testing"
         run: |
