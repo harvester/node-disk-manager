@@ -5,9 +5,6 @@ source $(dirname $0)/version
 
 cd $(dirname $0)/..
 
-mkdir -p dist/artifacts
-cp bin/node-disk-manager dist/artifacts/node-disk-manager${SUFFIX}
-
 IMAGE=${REPO}/node-disk-manager:${TAG}
 if [[ -n ${BUILD_FOR_CI} ]]; then
     IMAGE=ttl.sh/node-disk-manager-${TAG}:1h
