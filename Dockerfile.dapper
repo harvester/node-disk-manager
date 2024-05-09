@@ -9,10 +9,13 @@ RUN zypper -n rm container-suseconnect && \
 ## install golangci
 RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.57.1
 
+# The docker version in dapper is too old to have buildx. Install it manually.
+RUN curl -sSfL https://github.com/docker/buildx/releases/download/v0.13.1/buildx-v0.13.1.linux-${ARCH} -o buildx-v0.13.1.linux-${ARCH} && \
+    chmod +x buildx-v0.13.1.linux-${ARCH} && \
+    mv buildx-v0.13.1.linux-${ARCH} /usr/local/bin/buildx
+
 ## install controller-gen
-
 RUN go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.6.2
-
 
 # install openapi-gen
 RUN  go install k8s.io/code-generator/cmd/openapi-gen@v0.23.7
