@@ -188,14 +188,41 @@ func Register(
 	return nil
 }
 
+func (c *Controller) handleDeviceRemove(device *diskv1.BlockDevice) error {
+	logrus.Infof("Prepare to stop provisioning device %s to node %s", device.Name, c.NodeName)
+	if err := c.unprovisionDeviceFromNode(device); err != nil {
+		err := fmt.Errorf("failed to stop provisioning device %s to node %s: %w", device.Name, c.NodeName, err)
+		logrus.Warnf("Removing disk %v error: %v", device.Name, err)
+		return err
+	}
+	return nil
+}
+
 // OnBlockDeviceChange watch the block device CR on change and performing disk operations
 // like mounting the disks to a desired path via ext4
 func (c *Controller) OnBlockDeviceChange(_ string, device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
-	if device == nil || device.DeletionTimestamp != nil || device.Spec.NodeName != c.NodeName || device.Status.State == diskv1.BlockDeviceInactive {
+	if device == nil || device.DeletionTimestamp != nil || device.Spec.NodeName != c.NodeName {
 		return nil, nil
 	}
 
+	// handle remove device no matter inactive or corrupted, we will set `device.Spec.FileSystem.Provisioned` to false
+	if !device.Spec.FileSystem.Provisioned && device.Status.ProvisionPhase != diskv1.ProvisionPhaseUnprovisioned {
+		deviceCpy := device.DeepCopy()
+		if err := c.handleDeviceRemove(deviceCpy); err != nil {
+			diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
+			diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
+			c.Blockdevices.EnqueueAfter(c.Namespace, device.Name, jitterEnqueueDelay())
+		}
+		if !reflect.DeepEqual(device, deviceCpy) {
+			logrus.Debugf("Update block device %s after removing", device.Name)
+			return c.Blockdevices.Update(deviceCpy)
+		}
+	}
+
 	// corrupted device could be skipped if we do not set ForceFormatted or Repaired
+	if device.Status.State == diskv1.BlockDeviceInactive {
+		return nil, nil
+	}
 	if device.Status.DeviceStatus.FileSystem.Corrupted && !device.Spec.FileSystem.ForceFormatted && !device.Spec.FileSystem.Repaired {
 		return nil, nil
 	}
@@ -289,15 +316,6 @@ func (c *Controller) OnBlockDeviceChange(_ string, device *diskv1.BlockDevice) (
 		logrus.Infof("Prepare to provision device %s to node %s", device.Name, c.NodeName)
 		if err := c.provisionDeviceToNode(deviceCpy); err != nil {
 			err := fmt.Errorf("failed to provision device %s to node %s: %w", device.Name, c.NodeName, err)
-			logrus.Error(err)
-			diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
-			diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
-			c.Blockdevices.EnqueueAfter(c.Namespace, device.Name, jitterEnqueueDelay())
-		}
-	case !needProvision && device.Status.ProvisionPhase != diskv1.ProvisionPhaseUnprovisioned:
-		logrus.Infof("Prepare to stop provisioning device %s to node %s", device.Name, c.NodeName)
-		if err := c.unprovisionDeviceFromNode(deviceCpy); err != nil {
-			err := fmt.Errorf("failed to stop provisioning device %s to node %s: %w", device.Name, c.NodeName, err)
 			logrus.Error(err)
 			diskv1.DiskAddedToNode.SetError(deviceCpy, "", err)
 			diskv1.DiskAddedToNode.SetStatusBool(deviceCpy, false)
@@ -535,9 +553,33 @@ func (c *Controller) unprovisionDeviceFromNode(device *diskv1.BlockDevice) error
 		diskv1.DiskAddedToNode.Message(device, msg)
 	}
 
+	removeDiskFromNode := func() error {
+		nodeCpy := node.DeepCopy()
+		delete(nodeCpy.Spec.Disks, device.Name)
+		if _, err := c.Nodes.Update(nodeCpy); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	isValidateToDelete := func(lhDisk longhornv1.DiskSpec) bool {
+		return !lhDisk.AllowScheduling
+	}
+
 	diskToRemove, ok := node.Spec.Disks[device.Name]
 	if !ok {
 		logrus.Infof("disk %s not in disks of longhorn node %s/%s", device.Name, c.Namespace, c.NodeName)
+		updateProvisionPhaseUnprovisioned()
+		return nil
+	}
+
+	// for inactive/corrupted disk, we could remove it from node directly
+	if isValidateToDelete(diskToRemove) &&
+		(device.Status.State == diskv1.BlockDeviceInactive || device.Status.DeviceStatus.FileSystem.Corrupted) {
+		logrus.Infof("disk (%s) is inactive or corrupted, remove it from node directly", device.Name)
+		if err := removeDiskFromNode(); err != nil {
+			return err
+		}
 		updateProvisionPhaseUnprovisioned()
 		return nil
 	}
@@ -553,9 +595,7 @@ func (c *Controller) unprovisionDeviceFromNode(device *diskv1.BlockDevice) error
 	if isUnprovisioning {
 		if status, ok := node.Status.DiskStatus[device.Name]; ok && len(status.ScheduledReplica) == 0 {
 			// Unprovision finished. Remove the disk.
-			nodeCpy := node.DeepCopy()
-			delete(nodeCpy.Spec.Disks, device.Name)
-			if _, err := c.Nodes.Update(nodeCpy); err != nil {
+			if err := removeDiskFromNode(); err != nil {
 				return err
 			}
 			updateProvisionPhaseUnprovisioned()
