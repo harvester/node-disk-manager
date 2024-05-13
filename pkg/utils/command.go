@@ -62,6 +62,7 @@ func execute(command string, args []string, timeout time.Duration) (string, erro
 	cmd := exec.Command(command, args...)
 
 	var output, stderr bytes.Buffer
+	cmdTimeout := false
 	cmd.Stdout = &output
 	cmd.Stderr = &stderr
 
@@ -69,12 +70,16 @@ func execute(command string, args []string, timeout time.Duration) (string, erro
 	if timeout != cmdTimeoutNone {
 		// add timer to kill the process if timeout
 		timer = time.AfterFunc(timeout, func() {
+			cmdTimeout = true
 			cmd.Process.Kill()
 		})
 	}
 	defer timer.Stop()
 
 	if err := cmd.Run(); err != nil {
+		if cmdTimeout {
+			return "", errors.Wrapf(CmdTimeoutError, "timeout after %v: %v %v", timeout, command, args)
+		}
 		return "", errors.Wrapf(err, "failed to execute: %v %v, output %s, stderr %s",
 			command, args, output.String(), stderr.String())
 	}

@@ -573,23 +573,36 @@ func (c *Controller) unprovisionDeviceFromNode(device *diskv1.BlockDevice) error
 		return nil
 	}
 
+	isUnprovisioning := false
+	for _, tag := range device.Status.Tags {
+		if tag == utils.DiskRemoveTag {
+			isUnprovisioning = true
+			break
+		}
+	}
+
 	// for inactive/corrupted disk, we could remove it from node directly
-	if isValidateToDelete(diskToRemove) &&
+	if isUnprovisioning && isValidateToDelete(diskToRemove) &&
 		(device.Status.State == diskv1.BlockDeviceInactive || device.Status.DeviceStatus.FileSystem.Corrupted) {
 		logrus.Infof("disk (%s) is inactive or corrupted, remove it from node directly", device.Name)
+		// handle mountpoint first
+		filesystem := c.BlockInfo.GetFileSystemInfoByDevPath(device.Status.DeviceStatus.DevPath)
+		if filesystem != nil && filesystem.MountPoint != "" {
+			timeout := 30 * time.Second
+			if err := utils.ForceUmountWithTimeout(filesystem.MountPoint, timeout); err != nil {
+				logrus.Warnf("Force umount %v error: %v", filesystem.MountPoint, err)
+			}
+			// reset related fields
+			c.updateDeviceFileSystem(device, device.Status.DeviceStatus.DevPath)
+			device.Spec.Tags = []string{}
+			device.Status.Tags = []string{}
+		}
+		// remove the disk from node
 		if err := removeDiskFromNode(); err != nil {
 			return err
 		}
 		updateProvisionPhaseUnprovisioned()
 		return nil
-	}
-
-	isUnprovisioning := false
-	for _, tag := range diskToRemove.Tags {
-		if tag == utils.DiskRemoveTag {
-			isUnprovisioning = true
-			break
-		}
 	}
 
 	if isUnprovisioning {
