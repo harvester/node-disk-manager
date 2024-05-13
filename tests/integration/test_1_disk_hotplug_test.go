@@ -188,6 +188,45 @@ func (s *HotPlugTestSuite) Test_3_AddDuplicatedWWNDsik() {
 	require.Equal(s.T(), err, nil, "Get Blockdevices should not get error")
 	require.Equal(s.T(), s.curBusPath, curBlockdevice.Status.DeviceStatus.Details.BusPath, "Disk path should not replace by duplicated wwn disk")
 
+	// cleanup this disk
+	cmd = fmt.Sprintf("virsh detach-disk %s %s --live", hotplugTargetNodeName, "sdb")
+	_, _, err = doCommand(cmd)
+	require.Equal(s.T(), err, nil, "Running command `virsh detach-disk` should not get error")
+
+	// wait for controller handling
+	time.Sleep(5 * time.Second)
+}
+
+func (s *HotPlugTestSuite) Test_4_RemoveInactiveDisk() {
+	// remove disk dynamically
+	cmd := fmt.Sprintf("virsh detach-disk %s %s --live", hotplugTargetNodeName, hotplugTargetDiskName)
+	_, _, err := doCommand(cmd)
+	require.Equal(s.T(), err, nil, "Running command `virsh detach-disk` should not get error")
+
+	// wait for controller handling
+	time.Sleep(5 * time.Second)
+
+	// check disk status
+	require.NotEqual(s.T(), s.targetDiskName, "", "target disk name should not be empty before we start hotplug (remove) test")
+	bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
+	curBlockdevice, err := bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
+	require.Equal(s.T(), nil, err, "Get Blockdevices should not get error")
+
+	require.Equal(s.T(), diskv1.BlockDeviceInactive, curBlockdevice.Status.State, "Disk status should be inactive after we remove disk")
+
+	// remove this inactive device from Harvester
+	newBlockdevice := curBlockdevice.DeepCopy()
+	newBlockdevice.Spec.FileSystem.Provisioned = false
+	bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
+
+	// sleep 30 seconds to wait controller handle. jitter is between 7~13 seconds so 30 seconds would be enough to run twice
+	time.Sleep(30 * time.Second)
+
+	// check for the removed status
+	curBlockdevice, err = bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
+	require.Equal(s.T(), err, nil, "Get BlockdevicesList should not get error before we want to check remove")
+	require.Equal(s.T(), curBlockdevice.Status.DeviceStatus.FileSystem.MountPoint, "", "Mountpoint should be empty after we remove disk!")
+	require.Equal(s.T(), diskv1.ProvisionPhaseUnprovisioned, curBlockdevice.Status.ProvisionPhase, "Block device provisionPhase should be Provisioned")
 }
 
 func doCommand(cmdString string) (string, string, error) {
