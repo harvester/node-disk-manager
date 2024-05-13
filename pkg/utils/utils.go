@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/longhorn/longhorn-manager/util"
 )
@@ -19,6 +20,8 @@ const (
 	// DiskRemoveTag indicates a Longhorn is pending to remove.
 	DiskRemoveTag = "harvester-ndm-disk-remove"
 )
+
+var CmdTimeoutError error
 
 var ext4MountOptions = strings.Join([]string{
 	"journal_checksum",
@@ -121,6 +124,20 @@ func UmountDisk(path string) error {
 	return os.NewSyscallError("umount", err)
 }
 
+func ForceUmountWithTimeout(path string, timeout time.Duration) error {
+	isHostProcMounted, err := IsHostProcMounted()
+	if err != nil {
+		return err
+	}
+	if isHostProcMounted {
+		_, err := executeOnHostNamespaceWithTimeout("umount", []string{"-f", path}, timeout)
+		return err
+	}
+	// flags, MNT_FORCE -> 1
+	err = syscall.Unmount(path, 1)
+	return os.NewSyscallError("umount", err)
+}
+
 func mountExt4(device, path string, readonly bool) error {
 	var flags uintptr
 	flags = syscall.MS_RELATIME
@@ -151,6 +168,16 @@ func mountExt4OnHostNamespace(device, path string, readonly bool) error {
 func executeOnHostNamespace(cmd string, args []string) (string, error) {
 	ns := GetHostNamespacePath(util.HostProcPath)
 	executor, err := NewExecutorWithNS(ns)
+	if err != nil {
+		return "", err
+	}
+	return executor.Execute(cmd, args)
+}
+
+func executeOnHostNamespaceWithTimeout(cmd string, args []string, cmdTimeout time.Duration) (string, error) {
+	ns := GetHostNamespacePath(util.HostProcPath)
+	executor, err := NewExecutorWithNS(ns)
+	executor.SetTimeout(cmdTimeout)
 	if err != nil {
 		return "", err
 	}
