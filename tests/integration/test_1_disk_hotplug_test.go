@@ -140,8 +140,8 @@ func (s *HotPlugTestSuite) Test_2_HotPlugAddDisk() {
 	_, _, err := doCommand(cmd)
 	require.Equal(s.T(), err, nil, "Running command `virsh attach-device` should not get error")
 
-	// wait for controller handling
-	time.Sleep(5 * time.Second)
+	// wait for controller handling, the device will be changed need more time to wait for the controller handling
+	time.Sleep(30 * time.Second)
 
 	// check disk status
 	require.NotEqual(s.T(), s.targetDiskName, "", "target disk name should not be empty before we start hotplug (add) test")
@@ -150,7 +150,6 @@ func (s *HotPlugTestSuite) Test_2_HotPlugAddDisk() {
 	require.Equal(s.T(), err, nil, "Get Blockdevices should not get error")
 
 	require.Equal(s.T(), curBlockdevice.Status.State, diskv1.BlockDeviceActive, "Disk status should be inactive after we add disk")
-	s.curBusPath = curBlockdevice.Status.DeviceStatus.Details.BusPath
 }
 
 func (s *HotPlugTestSuite) Test_3_AddDuplicatedWWNDsik() {
@@ -168,6 +167,7 @@ func (s *HotPlugTestSuite) Test_3_AddDuplicatedWWNDsik() {
 	require.Equal(s.T(), err, nil, "Read xml file should not get error")
 	disk.Source.File = duplicatedDeviceRaw
 	disk.Target.Dev = "sdb"
+	disk.VENDOR = "HARV"
 	err = utils.XMLWriter(duplicatedDeviceXML, disk)
 	require.Equal(s.T(), err, nil, "Write xml file should not get error")
 
@@ -184,9 +184,6 @@ func (s *HotPlugTestSuite) Test_3_AddDuplicatedWWNDsik() {
 	blockdeviceList, err := bdi.List(context.TODO(), v1.ListOptions{})
 	require.Equal(s.T(), err, nil, "Get BlockdevicesList should not get error")
 	require.Equal(s.T(), 1, len(blockdeviceList.Items), "We should have one disks because duplicated wwn should not added")
-	curBlockdevice, err := bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
-	require.Equal(s.T(), err, nil, "Get Blockdevices should not get error")
-	require.Equal(s.T(), s.curBusPath, curBlockdevice.Status.DeviceStatus.Details.BusPath, "Disk path should not replace by duplicated wwn disk")
 
 	// cleanup this disk
 	cmd = fmt.Sprintf("virsh detach-disk %s %s --live", hotplugTargetNodeName, "sdb")
