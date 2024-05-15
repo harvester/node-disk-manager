@@ -14,6 +14,7 @@ type Disk struct {
 	Source  Source   `xml:"source"`
 	Target  Target   `xml:"target"`
 	WWN     string   `xml:"wwn"`
+	VENDOR  string   `xml:"vendor"`
 }
 
 type Driver struct {
