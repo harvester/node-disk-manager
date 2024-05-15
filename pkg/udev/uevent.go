@@ -9,7 +9,6 @@ import (
 
 	"github.com/pilebones/go-udev/netlink"
 	"github.com/sirupsen/logrus"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
@@ -136,8 +135,7 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 			return
 		}
 		utils.CallerWithCondLock(u.scanner.Cond, func() any {
-			autoProvisioned := udevDevice.IsDisk() && u.scanner.ApplyAutoProvisionFiltersForDisk(disk)
-			u.AddBlockDevice(bd, autoProvisioned)
+			// just wake up scanner to check if the disk is added, do no-op internally
 			logrus.Infof("Wake up scanner with %s operation with blockdevice: %s", netlink.ADD, bd.Name)
 			u.scanner.Cond.Signal()
 			return nil
@@ -151,14 +149,6 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 				return nil
 			})
 		}
-	}
-}
-
-// AddBlockDevice add new block device and partitions by watching the udev add action
-func (u *Udev) AddBlockDevice(device *v1beta1.BlockDevice, autoProvisioned bool) {
-	_, err := u.scanner.SaveBlockDevice(device, autoProvisioned)
-	if err != nil && !apierrors.IsAlreadyExists(err) {
-		logrus.Errorf("failed to save block device %s, error: %s", device.Name, err.Error())
 	}
 }
 
