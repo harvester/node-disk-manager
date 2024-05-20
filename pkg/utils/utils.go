@@ -39,6 +39,7 @@ func IsHostProcMounted() (bool, error) {
 	return err == nil, nil
 }
 
+// GetFullDevPath will return full path with `/dev/` prefix
 func GetFullDevPath(shortPath string) string {
 	if shortPath == "" {
 		return ""
@@ -46,6 +47,7 @@ func GetFullDevPath(shortPath string) string {
 	return fmt.Sprintf("/dev/%s", shortPath)
 }
 
+// MatchesIgnoredCase checks if the item of string slice fully match the key with case-insensitive
 func MatchesIgnoredCase(s []string, k string) bool {
 	for _, e := range s {
 		if strings.EqualFold(e, k) {
@@ -55,6 +57,7 @@ func MatchesIgnoredCase(s []string, k string) bool {
 	return false
 }
 
+// ContainsIgnoredCase checks if the item of string slice contains the key with case-insensitive
 func ContainsIgnoredCase(s []string, k string) bool {
 	k = strings.ToLower(k)
 	for _, e := range s {
@@ -65,6 +68,8 @@ func ContainsIgnoredCase(s []string, k string) bool {
 	return false
 }
 
+// MakeExt4DiskFormatting formats the specified volume device to ext4 with the specified UUID
+// return error if failed
 func MakeExt4DiskFormatting(devPath, uuid string) error {
 	args := []string{"-F", devPath}
 	if uuid != "" {
@@ -124,6 +129,7 @@ func UmountDisk(path string) error {
 	return os.NewSyscallError("umount", err)
 }
 
+// ForceUmountWithTimeout umounts the specific device with timeout to the specified path
 func ForceUmountWithTimeout(path string, timeout time.Duration) error {
 	isHostProcMounted, err := IsHostProcMounted()
 	if err != nil {
@@ -138,6 +144,7 @@ func ForceUmountWithTimeout(path string, timeout time.Duration) error {
 	return os.NewSyscallError("umount", err)
 }
 
+// mountExt4 mount the ext4 volume device to the specified path with readonly option
 func mountExt4(device, path string, readonly bool) error {
 	var flags uintptr
 	flags = syscall.MS_RELATIME
@@ -165,6 +172,8 @@ func mountExt4OnHostNamespace(device, path string, readonly bool) error {
 	return err
 }
 
+// executeOnHostNamespace executes the command in the host namespace
+// return the command result and error
 func executeOnHostNamespace(cmd string, args []string) (string, error) {
 	ns := GetHostNamespacePath(util.HostProcPath)
 	executor, err := NewExecutorWithNS(ns)
@@ -174,6 +183,8 @@ func executeOnHostNamespace(cmd string, args []string) (string, error) {
 	return executor.Execute(cmd, args)
 }
 
+// executeOnHostNamespace executes the command with timeout value in the host namespace
+// return the command result and error
 func executeOnHostNamespaceWithTimeout(cmd string, args []string, cmdTimeout time.Duration) (string, error) {
 	ns := GetHostNamespacePath(util.HostProcPath)
 	executor, err := NewExecutorWithNS(ns)
@@ -184,11 +195,13 @@ func executeOnHostNamespaceWithTimeout(cmd string, args []string, cmdTimeout tim
 	return executor.Execute(cmd, args)
 }
 
+// IsFSCorrupted checks if the error is caused by a corrupted filesystem
 func IsFSCorrupted(err error) bool {
 	errMsg := err.Error()
 	return strings.Contains(errMsg, "wrong fs type")
 }
 
+// IsSupportedFileSystem checks if the filesystem type is supported
 func IsSupportedFileSystem(fsType string) bool {
 	if fsType == "ext4" || fsType == "xfs" {
 		return true
