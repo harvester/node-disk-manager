@@ -98,6 +98,11 @@ func (s *Scanner) collectAllDevices() []*deviceWithAutoProvision {
 			logrus.Infof("Skip adding non-identifiable block device /dev/%s", disk.Name)
 			continue
 		}
+		logrus.Infof("Adding the disk with block device /dev/%s, id(Name): %s on node %s", disk.Name, bd.Name, s.NodeName)
+		logrus.Infof("  - wwn: %v", bd.Status.DeviceStatus.Details.WWN)
+		logrus.Infof("  - vendor: %v", bd.Status.DeviceStatus.Details.Vendor)
+		logrus.Infof("  - model: %v", bd.Status.DeviceStatus.Details.Model)
+		logrus.Infof("  - SerialNumber: %v", bd.Status.DeviceStatus.Details.SerialNumber)
 		autoProv := s.ApplyAutoProvisionFiltersForDisk(disk)
 		allDevices = append(allDevices, &deviceWithAutoProvision{bd: bd, AutoProvisioned: autoProv})
 
@@ -118,6 +123,40 @@ func (s *Scanner) collectAllDevices() []*deviceWithAutoProvision {
 	return allDevices
 }
 
+func (s *Scanner) handleExistingDev(oldBd *diskv1.BlockDevice, newBd *diskv1.BlockDevice, autoProvisioned bool) {
+	if isDevPathChanged(oldBd, newBd) {
+		logrus.Debugf("Enqueue block device %s for device path change", newBd.Name)
+		s.Blockdevices.Enqueue(s.Namespace, newBd.Name)
+	} else if isDevAlreadyProvisioned(newBd) {
+		logrus.Debugf("Skip the provisioned device: %s", newBd.Name)
+	} else if s.NeedsAutoProvision(oldBd, autoProvisioned) {
+		logrus.Debugf("Enqueue block device %s for auto-provisioning", newBd.Name)
+		s.Blockdevices.Enqueue(s.Namespace, newBd.Name)
+	} else {
+		logrus.Debugf("Skip updating device %s", newBd.Name)
+	}
+}
+
+func (s *Scanner) deactivateBlockDevices(oldBds map[string]*diskv1.BlockDevice) error {
+	for _, oldBd := range oldBds {
+		if oldBd.Status.State == diskv1.BlockDeviceInactive {
+			logrus.Debugf("The device %s is already inactive, continue.", oldBd.Name)
+			continue
+		}
+		logrus.Debugf("Change the device %s to inactive.", oldBd.Name)
+		newBd := oldBd.DeepCopy()
+		newBd.Status.State = diskv1.BlockDeviceInactive
+		if !reflect.DeepEqual(oldBd, newBd) {
+			logrus.Debugf("Update block device %s for new formatting and mount state", oldBd.Name)
+			if _, err := s.Blockdevices.Update(newBd); err != nil {
+				logrus.Errorf("Update device %s status error", oldBd.Name)
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // scanBlockDevicesOnNode scans block devices on the node, and it will either create or update them.
 func (s *Scanner) scanBlockDevicesOnNode() error {
 	logrus.Debugf("Scan block devices of node: %s", s.NodeName)
@@ -133,10 +172,13 @@ func (s *Scanner) scanBlockDevicesOnNode() error {
 	}
 
 	oldBds, existingWWNs := convertBlockDeviceListToMap(oldBdList)
+	logrus.Debugf("The current BdList: %+v", oldBds)
 	for _, device := range allDevices {
 		bd := device.bd
 		autoProvisioned := device.AutoProvisioned
+		logrus.Debugf("Processing block device %s with wwn: %s", bd.Name, bd.Status.DeviceStatus.Details.WWN)
 		if oldBd, ok := oldBds[bd.Name]; ok {
+<<<<<<< HEAD
 			if isDevPathChanged(oldBd, bd) {
 				logrus.Debugf("Enqueue block device %s for device path change", bd.Name)
 				s.Blockdevices.Enqueue(s.Namespace, bd.Name)
@@ -147,6 +189,12 @@ func (s *Scanner) scanBlockDevicesOnNode() error {
 				s.Blockdevices.Enqueue(s.Namespace, bd.Name)
 			} else {
 				logrus.Debugf("Skip updating device %s", bd.Name)
+=======
+			s.handleExistingDev(oldBd, bd, autoProvisioned)
+			// only first time to update the cache
+			if !CacheDiskTags.Initialized() && oldBd.Spec.Tags != nil && len(oldBd.Spec.Tags) > 0 {
+				CacheDiskTags.UpdateDiskTags(oldBd.Name, oldBd.Spec.Tags)
+>>>>>>> afaec3d (scanner: simplify the complex Method)
 			}
 			// remove blockdevice from old device so we can delete missing devices afterward
 			delete(oldBds, bd.Name)
@@ -170,21 +218,8 @@ func (s *Scanner) scanBlockDevicesOnNode() error {
 
 	// We do not remove the block device that maybe just temporily not available.
 	// Set it to inactive and give the chance to recover.
-	for _, oldBd := range oldBds {
-		if oldBd.Status.State == diskv1.BlockDeviceInactive {
-			logrus.Debugf("The device %s is already inactive, continue.", oldBd.Name)
-			continue
-		}
-		logrus.Debugf("Change the device %s to inactive.", oldBd.Name)
-		newBd := oldBd.DeepCopy()
-		newBd.Status.State = diskv1.BlockDeviceInactive
-		if !reflect.DeepEqual(oldBd, newBd) {
-			logrus.Debugf("Update block device %s for new formatting and mount state", oldBd.Name)
-			if _, err := s.Blockdevices.Update(newBd); err != nil {
-				logrus.Errorf("Update device %s status error", oldBd.Name)
-				return err
-			}
-		}
+	if err := s.deactivateBlockDevices(oldBds); err != nil {
+		return err
 	}
 	return nil
 }
