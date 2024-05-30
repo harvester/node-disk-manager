@@ -1,11 +1,9 @@
-
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
     {}
-  creationTimestamp: null
   name: blockdevices.harvesterhci.io
 spec:
   group: harvesterhci.io
@@ -23,7 +21,7 @@ spec:
     - jsonPath: .status.deviceStatus.details.deviceType
       name: Type
       type: string
-    - jsonPath: .spec.devPath
+    - jsonPath: .status.deviceStatus.devPath
       name: DevPath
       type: string
     - jsonPath: .status.deviceStatus.fileSystem.mountPoint
@@ -43,14 +41,19 @@ spec:
       openAPIV3Schema:
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
@@ -66,9 +69,9 @@ spec:
                       overwrite the existing one
                     type: boolean
                   mountPoint:
-                    description: 'DEPRECATED: no longer use and has no effect. a string
-                      with the partition''s mount point, or "" if no mount point was
-                      discovered'
+                    description: |-
+                      DEPRECATED: no longer use and has no effect.
+                      a string with the partition's mount point, or "" if no mount point was discovered
                     type: string
                   provisioned:
                     description: a bool indicating whether the filesystem can be provisioned
@@ -84,8 +87,39 @@ spec:
               nodeName:
                 description: name of the node to which the block device is attached
                 type: string
+              provisioner:
+                properties:
+                  longhorn:
+                    description: a provisioner for provision Longhorn volume backend
+                      disk
+                    properties:
+                      engineVersion:
+                        description: a string with the engine version for the provisioner
+                        enum:
+                        - LonghornV1
+                        - LonghornV2
+                        type: string
+                    required:
+                    - engineVersion
+                    type: object
+                  lvm:
+                    description: a provisioner for provision LVM volume backend disk
+                    properties:
+                      parameters:
+                        description: a string slice for the parameters
+                        items:
+                          type: string
+                        type: array
+                      vgName:
+                        description: a string with the volume group name for the provisioner
+                        type: string
+                    required:
+                    - vgName
+                    type: object
+                type: object
               tags:
-                description: a string with for device tag for provisioner, e.g. "default,small,ssd"
+                description: a string slice with device tag for provisioner, e.g.
+                  ["default", "small", "ssd"]
                 items:
                   type: string
                 type: array
@@ -156,10 +190,9 @@ spec:
                         - part
                         type: string
                       driveType:
-                        description: a string represents the type of drive bus, options
-                          are "HDD", "FDD", "ODD", or "SSD", which correspond to a
-                          hard disk drive (rotational), floppy drive, optical (CD/DVD)
-                          drive and solid-state drive
+                        description: |-
+                          a string represents the type of drive bus, options are "HDD", "FDD", "ODD", or "SSD",
+                          which correspond to a hard disk drive (rotational), floppy drive, optical (CD/DVD) drive and solid-state drive
                         enum:
                         - HDD
                         - FDD
@@ -207,9 +240,9 @@ spec:
                         - Unknown
                         type: string
                       uuid:
-                        description: UUID is a filesystem-level UUID, which is retrieved
-                          from the filesystem metadata inside the partition This would
-                          be volume UUID on macOS, PartUUID on linux, empty on Windows
+                        description: |-
+                          UUID is a filesystem-level UUID, which is retrieved from the filesystem metadata inside the partition
+                          This would be volume UUID on macOS, PartUUID on linux, empty on Windows
                         type: string
                       vendor:
                         description: a string with the name of the hardware vendor
@@ -253,8 +286,9 @@ spec:
                     - type
                     type: object
                   parentDevice:
-                    description: a string with the parent device path of the disk,
-                      e.g. "/dev/sda" e.g `/dev/sda` is the parent for `/dev/sda1`
+                    description: |-
+                      a string with the parent device path of the disk, e.g. "/dev/sda"
+                      e.g `/dev/sda` is the parent for `/dev/sda1`
                     type: string
                   partitioned:
                     description: a bool indicating if the disk is partitioned
@@ -299,9 +333,3 @@ spec:
     served: true
     storage: true
     subresources: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []
