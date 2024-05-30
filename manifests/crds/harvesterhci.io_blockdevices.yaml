@@ -84,6 +84,19 @@ spec:
               nodeName:
                 description: name of the node to which the block device is attached
                 type: string
+              provisioner:
+                properties:
+                  type:
+                    description: a string with the provisioner name, e.g. "Longhornv1,
+                      Longhornv2 or LVM"
+                    type: string
+                  vgName:
+                    description: vgName is the volume group name for the provisioner
+                      (only worked for LVM)
+                    type: string
+                required:
+                - type
+                type: object
               tags:
                 description: a string list with device tag for provisioner, e.g. ["default",
                   "small", "ssd"]
@@ -275,6 +288,21 @@ spec:
                 - Unprovisioned
                 - Unprovisioning
                 type: string
+              provisioner:
+                description: a string with the provisioner name, e.g. "Longhornv1,
+                  Longhornv2 or LVM"
+                properties:
+                  type:
+                    description: a string with the provisioner name, e.g. "Longhornv1,
+                      Longhornv2 or LVM"
+                    type: string
+                  vgName:
+                    description: vgName is the volume group name for the provisioner
+                      (only worked for LVM)
+                    type: string
+                required:
+                - type
+                type: object
               state:
                 description: the current state of the block device, options are "Active",
                   "Inactive", or "Unknown"
