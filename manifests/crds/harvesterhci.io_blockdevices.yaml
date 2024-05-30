@@ -87,9 +87,39 @@ spec:
               nodeName:
                 description: name of the node to which the block device is attached
                 type: string
+              provisioner:
+                properties:
+                  longhorn:
+                    description: a provisioner for provision Longhorn volume backend
+                      disk
+                    properties:
+                      engineVersion:
+                        description: a string with the engine version for the provisioner
+                        enum:
+                        - LonghornV1
+                        - LonghornV2
+                        type: string
+                    required:
+                    - engineVersion
+                    type: object
+                  lvm:
+                    description: a provisioner for provision LVM volume backend disk
+                    properties:
+                      parameters:
+                        description: a string slice for the parameters
+                        items:
+                          type: string
+                        type: array
+                      vgName:
+                        description: a string with the volume group name for the provisioner
+                        type: string
+                    required:
+                    - vgName
+                    type: object
+                type: object
               tags:
-                description: a string list with device tag for provisioner, e.g. ["default",
-                  "small", "ssd"]
+                description: a string slice with device tag for provisioner, e.g.
+                  ["default", "small", "ssd"]
                 items:
                   type: string
                 type: array
