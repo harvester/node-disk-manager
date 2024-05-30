@@ -40,8 +40,10 @@ type BlockDeviceSpec struct {
 
 	FileSystem *FilesystemInfo `json:"fileSystem"`
 
-	// a string list with device tag for provisioner, e.g. ["default", "small", "ssd"]
+	// a string slice with device tag for provisioner, e.g. ["default", "small", "ssd"]
 	Tags []string `json:"tags,omitempty"`
+
+	Provisioner *ProvisionerInfo `json:"provisioner,omitempty"`
 }
 
 type BlockDeviceStatus struct {
@@ -62,6 +64,33 @@ type BlockDeviceStatus struct {
 
 	// The current Tags of the blockdevice
 	Tags []string `json:"tags,omitempty"`
+}
+
+type ProvisionerInfo struct {
+
+	// a provisioner for provision LVM volume backend disk
+	// +optional
+	LVM *LVMProvisionerInfo `json:"lvm,omitempty"`
+
+	// a provisioner for provision Longhorn volume backend disk
+	// +optional
+	Longhorn *LonghornProvisionerInfo `json:"longhorn,omitempty"`
+}
+
+type LVMProvisionerInfo struct {
+	// a string with the volume group name for the provisioner
+	// +kubebuilder:validation:Required
+	VgName string `json:"vgName"`
+
+	// a string slice for the parameters
+	// +kubebuilder:validation:Optional
+	Parameters []string `json:"parameters,omitempty"`
+}
+
+type LonghornProvisionerInfo struct {
+	// a string with the engine version for the provisioner
+	// +kubebuilder:validation:Enum:=LonghornV1;LonghornV2
+	EngineVersion string `json:"engineVersion"`
 }
 
 type FilesystemInfo struct {
