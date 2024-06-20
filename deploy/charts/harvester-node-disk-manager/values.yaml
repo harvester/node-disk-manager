@@ -67,9 +67,6 @@ autoProvisionFilter: []
   # - /dev/sda?
   # - /dev/nvme0n1p1
 
-# Specify the interval of device rescanning of the node (in seconds)
-rescanInterval:
-
 # Sepcify how many concurrent ops we could execute at the same time
 maxConcurrentOps:
 

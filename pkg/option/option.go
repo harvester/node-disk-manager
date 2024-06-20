@@ -14,7 +14,6 @@ type Option struct {
 	PathFilter             string
 	LabelFilter            string
 	AutoProvisionFilter    string
-	RescanInterval         int64
 	MaxConcurrentOps       uint
 	InjectUdevMonitorError bool
 }
