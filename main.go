@@ -113,12 +113,6 @@ func main() {
 			Usage:       "A string of comma-separated glob patterns that you want to exclude for block device filesystem label filter",
 			Destination: &opt.LabelFilter,
 		},
-		&cli.Int64Flag{
-			Name:        "rescan-interval",
-			EnvVars:     []string{"NDM_RESCAN_INTERVAL"},
-			Usage:       "Specify the interval of device rescanning of the node (in seconds)",
-			Destination: &opt.RescanInterval,
-		},
 		&cli.StringFlag{
 			Name:        "auto-provision-filter",
 			EnvVars:     []string{"NDM_AUTO_PROVISION_FILTER"},
@@ -178,8 +172,8 @@ func initLogs(opt *option.Option) {
 	logrus.SetOutput(os.Stdout)
 	logrus.Infof("Node Disk Manager %s is starting", version.FriendlyVersion())
 	logrus.Infof("Notable parameters are following:")
-	logrus.Infof("Namespace: %s, ConcurrentOps: %d, RescanInterval: %d, InjectUdevMonitorError: %v",
-		opt.Namespace, opt.MaxConcurrentOps, opt.RescanInterval, opt.InjectUdevMonitorError)
+	logrus.Infof("Namespace: %s, ConcurrentOps: %d, InjectUdevMonitorError: %v",
+		opt.Namespace, opt.MaxConcurrentOps, opt.InjectUdevMonitorError)
 	if opt.Debug {
 		logrus.SetLevel(logrus.DebugLevel)
 		logrus.Debugf("Loglevel set to [%v]", logrus.DebugLevel)
