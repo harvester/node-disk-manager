@@ -1,15 +1,31 @@
 node-disk-manager
 ========
 
-disk manager help to manage host disks, implementing disk partition and file system formatting.
+Node Disk Manager helps to manage host disks, implementing disk partitioning and file system formatting.
 
 ## Building
 
 `make`
 
+This will build both amd64 and arm64 binaries, plus a container image
+which will be named something like `harvester/node-disk-manager:dev`.
+
+To build a container image and push it to your own repo on dockerhub, do this:
+
+```sh
+export REPO="your dockerhub username"
+make
+docker push $REPO/node-disk-manager:dev
+```
+
 ## Running
 
-`./bin/node-disk-manager`
+The binaries for each architecture can be run directly for development or testing purposes:
+
+```sh
+./bin/node-disk-manager-amd64 --node-name "$(hostname -s)"
+./bin/node-disk-manager-arm64 --node-name "$(hostname -s)"
+```
 
 ## Features
 
@@ -39,45 +55,47 @@ separately later. First, let us learn about the custom resource for NDM:
 ### `blockdevices` Custom Resource
 
 A `blockdevice` is a Kubernetes custom resource (CR) that represents a 
-block device on a node. `blockdevice` CR records several lower-level block 
-device information from the operating system, for example, file system status,
-mount point, and UUIDs. These details are all stored in `status.deviceStatus`.
+block device on a node. The `blockdevice` CR records lower-level block device
+information from the operating system, for example, file system status, mount
+point, and UUIDs. These details are all stored in `status.deviceStatus`.
 
 The name of a `blockdevice` is a global identifier across nodes within the
 whole cluster. At this moment, we recommend disk you want to provision to have
 at least WWN on it. It helps the system to globally identify the `blockdevice`
-resource and link to real block device of the operating system.
+resource and link to real block device of the operating system. For disks with
+a WWN, the global identifier is a hash of the concatenation of the node name,
+with the disk's WWN, Vendor, Model and Serial Number.
 
-Besides its `name` field, the most important fields you need to know is
-`spec.fileSystem.provisioned` and `spec.fileSystem.forceFormatted`. The format
+Besides its `name` field, the most important fields you need to know are
+`spec.fileSystem.provisioned` and `spec.fileSystem.forceFormatted`. The former
 implies that a user expects the block device to be provisioned as Longhorn disk
 for further usage. And the latter just indicates that NDM would perform a disk
 formatting if not yet done before.
 
 ### Disk Discovery
 
-As a daemonset workload, each NDM instance takes charge of disk on its own node.
+As a daemonset workload, each NDM instance takes charge of disks on its own node.
 There are two components collecting the information of disks on the node, as
-well as creating, updating, or deleting corresponding blockdevice CR.
+well as creating, updating, or deleting corresponding blockdevice CRs.
 
 The first is `scanner`. It scans all supported block devices on the system and
-creates a new one if not exists, or deletes old one if is already removed from
-the system. For block devices that need to update, it simply enqueue the
-`blockdevice` CR to let blockdevice controller handle the update path to prevent
-any possible race condition. Scanner also periodically scans the system to inform
-the controller to update info if needed.
+creates a new `blockdevice` CR if one does not exist, or deletes the old CR if
+is already removed from the system. For block devices that need to be updated, it
+simply enqueues the `blockdevice` CR to let blockdevice controller handle the
+update path to prevent any possible race condition. Scanner also periodically
+scans the system to inform the controller to update info if needed.
 
 The other key component is `udev`, which utilizes Linux's dynamic device 
 management mechanism. `udev`, as a supplement of scanner, mostly behaves the same
 as scanner, but instantly for responding to hot-plugged devices.
 
 There is a module `filter`. It comprises several filter functions, which
-get their own predicates to determine which block device should be collected by
+have their own predicates to determine which block device should be collected by
 scanner and udev.
 
 ### Disk Provisioning
 
-The controller of NDM listens for changes of `blockdevice` CR and perform 
+The controller of NDM listens for changes of `blockdevice` CR and performs
 corresponding actions, namely
 
 - Format disk
@@ -85,7 +103,7 @@ corresponding actions, namely
 - Provision/Unprovision disk to/from Longhorn
 - Update device status details
 
-Which actual action to perform is determines by the combination of
+Which actual action to perform are determined by the combination of
 `spec.fileSystem`, device formatting and mounting status, and
 `status.provisionPhase`. The last one indicates whether the block device is 
 currently used by Longhorn.
@@ -113,8 +131,8 @@ Here we give the Sample XML for `libvirt` to create a SCSI device with `WWN`.
     </disk>
 ```
 
-**NOTE**: If we create w/o WWN, NDM will use filesystem UUID as a unique identifier.
-That has some limitations. For example, the UUID will be missed if the filesystem metadata is broken.
+**NOTE**: When disks don't have a WWN, NDM will use filesystem UUID as a unique identifier.
+That has some limitations. For example, the UUID will be missing if the filesystem metadata is broken.
 
 ## License
 Copyright (c) 2022 [Rancher Labs, Inc.](http://rancher.com)
