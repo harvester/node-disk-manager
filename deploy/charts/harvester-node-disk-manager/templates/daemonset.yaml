@@ -50,10 +50,6 @@ spec:
         - name: NDM_AUTO_PROVISION_FILTER
           value: {{ . | join "," | quote }}
         {{- end }}
-        {{- with .Values.rescanInterval }}
-        - name: NDM_RESCAN_INTERVAL
-          value: {{ . | quote }}
-        {{- end }}
         {{- with .Values.maxConcurrentOps }}
         - name: NDM_MAX_CONCURRENT_OPS
           value: {{ . | quote }}
