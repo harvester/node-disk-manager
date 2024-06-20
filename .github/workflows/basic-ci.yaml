@@ -24,25 +24,22 @@ jobs:
         run: |
           make validate
           make validate-ci
-  build:
+  main_jobs:
     needs: validation
     runs-on:
       - self-hosted
       - golang
     steps:
-      - name: "Local Build for next stage"
+      - name: "Clone and check"
+        uses: actions/checkout@v3
+      - name: "Build the Image for the Integration Test"
         run: |
           BUILD_FOR_CI=true make
           ./ci/scripts/patch-ttl-repo.sh
           echo "NDM override result as below:"
           cat ci/charts/ndm-override.yaml
-  main_jobs:
-    needs: build
-    runs-on:
-      - self-hosted
-      - golang
-    steps:
       - name: "Local Deployment (Harvester+Longhorn+Node-Disk-Manager) for testing"
+        id: vm_deploy
         run: |
           rm -rf ndm-vagrant-rancherd
           git clone https://github.com/harvester/vagrant-rancherd ndm-vagrant-rancherd
@@ -80,11 +77,11 @@ jobs:
           echo Running integration tests
           NDM_HOME=`pwd` go test -v ./tests/...
       - name: "Get NDM logs"
-        if: always()
+        if: steps.vm_deploy.outcome == 'success'
         run: |
           ./ci/scripts/get-debug-info.sh
       - name: "Tear Down / Cleanup"
-        if: always()
+        if: steps.vm_deploy.outcome == 'success'
         run: |
           pushd ndm-vagrant-rancherd
           vagrant destroy -f --parallel
