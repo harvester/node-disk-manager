@@ -98,7 +98,7 @@ func (s *Scanner) collectAllDevices() []*deviceWithAutoProvision {
 			logrus.Infof("Skip adding non-identifiable block device /dev/%s", disk.Name)
 			continue
 		}
-		logrus.Infof("Adding the disk with block device /dev/%s, id(Name): %s on node %s", disk.Name, bd.Name, s.NodeName)
+		logrus.Infof("Detected the disk with block device /dev/%s, id(Name): %s on node %s", disk.Name, bd.Name, s.NodeName)
 		logrus.Infof("  - wwn: %v", bd.Status.DeviceStatus.Details.WWN)
 		logrus.Infof("  - vendor: %v", bd.Status.DeviceStatus.Details.Vendor)
 		logrus.Infof("  - model: %v", bd.Status.DeviceStatus.Details.Model)
@@ -125,8 +125,18 @@ func (s *Scanner) collectAllDevices() []*deviceWithAutoProvision {
 
 func (s *Scanner) handleExistingDev(oldBd *diskv1.BlockDevice, newBd *diskv1.BlockDevice, autoProvisioned bool) {
 	if isDevPathChanged(oldBd, newBd) {
-		logrus.Debugf("Enqueue block device %s for device path change", newBd.Name)
-		s.Blockdevices.Enqueue(s.Namespace, newBd.Name)
+		// the Dev Path changed only when the device is temporarily gone and back.
+		if oldBd.Status.State != diskv1.BlockDeviceInactive {
+			logrus.Warnf("Device Path should not change with the active device %s, new device path: %s", newBd.Name, newBd.Status.DeviceStatus.DevPath)
+		} else {
+			logrus.Infof("The inactive block device %s with wwn %s is coming back", newBd.Name, newBd.Status.DeviceStatus.Details.WWN)
+			oldBd.Status.State = diskv1.BlockDeviceActive
+			oldBd.Status.DeviceStatus.DevPath = newBd.Status.DeviceStatus.DevPath
+			if _, err := s.Blockdevices.Update(oldBd); err != nil {
+				logrus.Errorf("Update device %s status error", oldBd.Name)
+				s.Blockdevices.Enqueue(s.Namespace, newBd.Name)
+			}
+		}
 	} else if isDevAlreadyProvisioned(newBd) {
 		logrus.Debugf("Skip the provisioned device: %s", newBd.Name)
 	} else if s.NeedsAutoProvision(oldBd, autoProvisioned) {
@@ -196,7 +206,6 @@ func (s *Scanner) scanBlockDevicesOnNode() error {
 				continue
 			}
 			logrus.Infof("Create new device %s with wwn: %s", bd.Name, bd.Status.DeviceStatus.Details.WWN)
-			// persist newly detected block device
 			if _, err := s.SaveBlockDevice(bd, autoProvisioned); err != nil && !errors.IsAlreadyExists(err) {
 				return err
 			}
@@ -267,7 +276,7 @@ func (s *Scanner) ApplyAutoProvisionFiltersForDisk(disk *block.Disk) bool {
 
 // SaveBlockDevice persists the blockedevice information.
 func (s *Scanner) SaveBlockDevice(bd *diskv1.BlockDevice, autoProvisioned bool) (*diskv1.BlockDevice, error) {
-	curBd, err := s.Blockdevices.Get(bd.Namespace, bd.Name, metav1.GetOptions{})
+	_, err := s.Blockdevices.Get(bd.Namespace, bd.Name, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if autoProvisioned {
@@ -279,9 +288,8 @@ func (s *Scanner) SaveBlockDevice(bd *diskv1.BlockDevice, autoProvisioned bool) 
 		}
 		return nil, err
 	}
-	logrus.Infof("The inactive block device %s with wwn %s is coming back", bd.Name, bd.Status.DeviceStatus.Details.WWN)
-	curBd.Status.State = diskv1.BlockDeviceActive
-	return s.Blockdevices.Update(curBd)
+	logrus.Warnf("Should be handled by existing device, coming bd: %v", bd)
+	return nil, nil
 }
 
 // NeedsAutoProvision returns true if the current block device needs to be auto-provisioned.
@@ -296,9 +304,9 @@ func (s *Scanner) NeedsAutoProvision(oldBd *diskv1.BlockDevice, autoProvisionPat
 
 // isDevPathChanged returns true if the device path has changed.
 //
-// When reboot, device path might change but controller cannot detect
-// it during the reconciliation. We explicitly check and update the value
-// when scanner startup.
+// The device path changed on when the device is temporarily gone and back.
+// We init the device status when the first time the device is found.
+// If the device is active, the device path should not change.
 func isDevPathChanged(oldBd *diskv1.BlockDevice, newBd *diskv1.BlockDevice) bool {
 	return oldBd.Status.DeviceStatus.DevPath != newBd.Status.DeviceStatus.DevPath
 }
