@@ -21,7 +21,8 @@ package v1beta2
 import (
 	v1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	"github.com/rancher/lasso/pkg/controller"
-	"github.com/rancher/wrangler/pkg/schemes"
+	"github.com/rancher/wrangler/v2/pkg/generic"
+	"github.com/rancher/wrangler/v2/pkg/schemes"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -43,6 +44,6 @@ type version struct {
 	controllerFactory controller.SharedControllerFactory
 }
 
-func (c *version) Node() NodeController {
-	return NewNodeController(schema.GroupVersionKind{Group: "longhorn.io", Version: "v1beta2", Kind: "Node"}, "nodes", true, c.controllerFactory)
+func (v *version) Node() NodeController {
+	return generic.NewController[*v1beta2.Node, *v1beta2.NodeList](schema.GroupVersionKind{Group: "longhorn.io", Version: "v1beta2", Kind: "Node"}, "nodes", true, v.controllerFactory)
 }
