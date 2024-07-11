@@ -77,11 +77,11 @@ jobs:
           echo Running integration tests
           NDM_HOME=`pwd` go test -v ./tests/...
       - name: "Get NDM logs"
-        if: steps.vm_deploy.outcome == 'success'
+        if: steps.vm_deploy.conclusion == 'success'
         run: |
           ./ci/scripts/get-debug-info.sh
       - name: "Tear Down / Cleanup"
-        if: steps.vm_deploy.outcome == 'success'
+        if: steps.vm_deploy.conclusion == 'success'
         run: |
           pushd ndm-vagrant-rancherd
           vagrant destroy -f --parallel
