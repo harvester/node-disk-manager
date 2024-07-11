@@ -21,7 +21,8 @@ package v1beta1
 import (
 	v1beta1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/rancher/lasso/pkg/controller"
-	"github.com/rancher/wrangler/pkg/schemes"
+	"github.com/rancher/wrangler/v2/pkg/generic"
+	"github.com/rancher/wrangler/v2/pkg/schemes"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -43,6 +44,6 @@ type version struct {
 	controllerFactory controller.SharedControllerFactory
 }
 
-func (c *version) BlockDevice() BlockDeviceController {
-	return NewBlockDeviceController(schema.GroupVersionKind{Group: "harvesterhci.io", Version: "v1beta1", Kind: "BlockDevice"}, "blockdevices", true, c.controllerFactory)
+func (v *version) BlockDevice() BlockDeviceController {
+	return generic.NewController[*v1beta1.BlockDevice, *v1beta1.BlockDeviceList](schema.GroupVersionKind{Group: "harvesterhci.io", Version: "v1beta1", Kind: "BlockDevice"}, "blockdevices", true, v.controllerFactory)
 }
