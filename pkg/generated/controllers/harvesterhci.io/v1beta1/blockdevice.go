@@ -20,262 +20,54 @@ package v1beta1
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	v1beta1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
-	"github.com/rancher/lasso/pkg/client"
-	"github.com/rancher/lasso/pkg/controller"
-	"github.com/rancher/wrangler/pkg/apply"
-	"github.com/rancher/wrangler/pkg/condition"
-	"github.com/rancher/wrangler/pkg/generic"
-	"github.com/rancher/wrangler/pkg/kv"
+	"github.com/rancher/wrangler/v2/pkg/apply"
+	"github.com/rancher/wrangler/v2/pkg/condition"
+	"github.com/rancher/wrangler/v2/pkg/generic"
+	"github.com/rancher/wrangler/v2/pkg/kv"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/watch"
-	"k8s.io/client-go/tools/cache"
 )
 
-type BlockDeviceHandler func(string, *v1beta1.BlockDevice) (*v1beta1.BlockDevice, error)
-
+// BlockDeviceController interface for managing BlockDevice resources.
 type BlockDeviceController interface {
-	generic.ControllerMeta
-	BlockDeviceClient
-
-	OnChange(ctx context.Context, name string, sync BlockDeviceHandler)
-	OnRemove(ctx context.Context, name string, sync BlockDeviceHandler)
-	Enqueue(namespace, name string)
-	EnqueueAfter(namespace, name string, duration time.Duration)
-
-	Cache() BlockDeviceCache
+	generic.ControllerInterface[*v1beta1.BlockDevice, *v1beta1.BlockDeviceList]
 }
 
+// BlockDeviceClient interface for managing BlockDevice resources in Kubernetes.
 type BlockDeviceClient interface {
-	Create(*v1beta1.BlockDevice) (*v1beta1.BlockDevice, error)
-	Update(*v1beta1.BlockDevice) (*v1beta1.BlockDevice, error)
-	UpdateStatus(*v1beta1.BlockDevice) (*v1beta1.BlockDevice, error)
-	Delete(namespace, name string, options *metav1.DeleteOptions) error
-	Get(namespace, name string, options metav1.GetOptions) (*v1beta1.BlockDevice, error)
-	List(namespace string, opts metav1.ListOptions) (*v1beta1.BlockDeviceList, error)
-	Watch(namespace string, opts metav1.ListOptions) (watch.Interface, error)
-	Patch(namespace, name string, pt types.PatchType, data []byte, subresources ...string) (result *v1beta1.BlockDevice, err error)
+	generic.ClientInterface[*v1beta1.BlockDevice, *v1beta1.BlockDeviceList]
 }
 
+// BlockDeviceCache interface for retrieving BlockDevice resources in memory.
 type BlockDeviceCache interface {
-	Get(namespace, name string) (*v1beta1.BlockDevice, error)
-	List(namespace string, selector labels.Selector) ([]*v1beta1.BlockDevice, error)
-
-	AddIndexer(indexName string, indexer BlockDeviceIndexer)
-	GetByIndex(indexName, key string) ([]*v1beta1.BlockDevice, error)
+	generic.CacheInterface[*v1beta1.BlockDevice]
 }
 
-type BlockDeviceIndexer func(obj *v1beta1.BlockDevice) ([]string, error)
-
-type blockDeviceController struct {
-	controller    controller.SharedController
-	client        *client.Client
-	gvk           schema.GroupVersionKind
-	groupResource schema.GroupResource
-}
-
-func NewBlockDeviceController(gvk schema.GroupVersionKind, resource string, namespaced bool, controller controller.SharedControllerFactory) BlockDeviceController {
-	c := controller.ForResourceKind(gvk.GroupVersion().WithResource(resource), gvk.Kind, namespaced)
-	return &blockDeviceController{
-		controller: c,
-		client:     c.Client(),
-		gvk:        gvk,
-		groupResource: schema.GroupResource{
-			Group:    gvk.Group,
-			Resource: resource,
-		},
-	}
-}
-
-func FromBlockDeviceHandlerToHandler(sync BlockDeviceHandler) generic.Handler {
-	return func(key string, obj runtime.Object) (ret runtime.Object, err error) {
-		var v *v1beta1.BlockDevice
-		if obj == nil {
-			v, err = sync(key, nil)
-		} else {
-			v, err = sync(key, obj.(*v1beta1.BlockDevice))
-		}
-		if v == nil {
-			return nil, err
-		}
-		return v, err
-	}
-}
-
-func (c *blockDeviceController) Updater() generic.Updater {
-	return func(obj runtime.Object) (runtime.Object, error) {
-		newObj, err := c.Update(obj.(*v1beta1.BlockDevice))
-		if newObj == nil {
-			return nil, err
-		}
-		return newObj, err
-	}
-}
-
-func UpdateBlockDeviceDeepCopyOnChange(client BlockDeviceClient, obj *v1beta1.BlockDevice, handler func(obj *v1beta1.BlockDevice) (*v1beta1.BlockDevice, error)) (*v1beta1.BlockDevice, error) {
-	if obj == nil {
-		return obj, nil
-	}
-
-	copyObj := obj.DeepCopy()
-	newObj, err := handler(copyObj)
-	if newObj != nil {
-		copyObj = newObj
-	}
-	if obj.ResourceVersion == copyObj.ResourceVersion && !equality.Semantic.DeepEqual(obj, copyObj) {
-		return client.Update(copyObj)
-	}
-
-	return copyObj, err
-}
-
-func (c *blockDeviceController) AddGenericHandler(ctx context.Context, name string, handler generic.Handler) {
-	c.controller.RegisterHandler(ctx, name, controller.SharedControllerHandlerFunc(handler))
-}
-
-func (c *blockDeviceController) AddGenericRemoveHandler(ctx context.Context, name string, handler generic.Handler) {
-	c.AddGenericHandler(ctx, name, generic.NewRemoveHandler(name, c.Updater(), handler))
-}
-
-func (c *blockDeviceController) OnChange(ctx context.Context, name string, sync BlockDeviceHandler) {
-	c.AddGenericHandler(ctx, name, FromBlockDeviceHandlerToHandler(sync))
-}
-
-func (c *blockDeviceController) OnRemove(ctx context.Context, name string, sync BlockDeviceHandler) {
-	c.AddGenericHandler(ctx, name, generic.NewRemoveHandler(name, c.Updater(), FromBlockDeviceHandlerToHandler(sync)))
-}
-
-func (c *blockDeviceController) Enqueue(namespace, name string) {
-	c.controller.Enqueue(namespace, name)
-}
-
-func (c *blockDeviceController) EnqueueAfter(namespace, name string, duration time.Duration) {
-	c.controller.EnqueueAfter(namespace, name, duration)
-}
-
-func (c *blockDeviceController) Informer() cache.SharedIndexInformer {
-	return c.controller.Informer()
-}
-
-func (c *blockDeviceController) GroupVersionKind() schema.GroupVersionKind {
-	return c.gvk
-}
-
-func (c *blockDeviceController) Cache() BlockDeviceCache {
-	return &blockDeviceCache{
-		indexer:  c.Informer().GetIndexer(),
-		resource: c.groupResource,
-	}
-}
-
-func (c *blockDeviceController) Create(obj *v1beta1.BlockDevice) (*v1beta1.BlockDevice, error) {
-	result := &v1beta1.BlockDevice{}
-	return result, c.client.Create(context.TODO(), obj.Namespace, obj, result, metav1.CreateOptions{})
-}
-
-func (c *blockDeviceController) Update(obj *v1beta1.BlockDevice) (*v1beta1.BlockDevice, error) {
-	result := &v1beta1.BlockDevice{}
-	return result, c.client.Update(context.TODO(), obj.Namespace, obj, result, metav1.UpdateOptions{})
-}
-
-func (c *blockDeviceController) UpdateStatus(obj *v1beta1.BlockDevice) (*v1beta1.BlockDevice, error) {
-	result := &v1beta1.BlockDevice{}
-	return result, c.client.UpdateStatus(context.TODO(), obj.Namespace, obj, result, metav1.UpdateOptions{})
-}
-
-func (c *blockDeviceController) Delete(namespace, name string, options *metav1.DeleteOptions) error {
-	if options == nil {
-		options = &metav1.DeleteOptions{}
-	}
-	return c.client.Delete(context.TODO(), namespace, name, *options)
-}
-
-func (c *blockDeviceController) Get(namespace, name string, options metav1.GetOptions) (*v1beta1.BlockDevice, error) {
-	result := &v1beta1.BlockDevice{}
-	return result, c.client.Get(context.TODO(), namespace, name, result, options)
-}
-
-func (c *blockDeviceController) List(namespace string, opts metav1.ListOptions) (*v1beta1.BlockDeviceList, error) {
-	result := &v1beta1.BlockDeviceList{}
-	return result, c.client.List(context.TODO(), namespace, result, opts)
-}
-
-func (c *blockDeviceController) Watch(namespace string, opts metav1.ListOptions) (watch.Interface, error) {
-	return c.client.Watch(context.TODO(), namespace, opts)
-}
-
-func (c *blockDeviceController) Patch(namespace, name string, pt types.PatchType, data []byte, subresources ...string) (*v1beta1.BlockDevice, error) {
-	result := &v1beta1.BlockDevice{}
-	return result, c.client.Patch(context.TODO(), namespace, name, pt, data, result, metav1.PatchOptions{}, subresources...)
-}
-
-type blockDeviceCache struct {
-	indexer  cache.Indexer
-	resource schema.GroupResource
-}
-
-func (c *blockDeviceCache) Get(namespace, name string) (*v1beta1.BlockDevice, error) {
-	obj, exists, err := c.indexer.GetByKey(namespace + "/" + name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(c.resource, name)
-	}
-	return obj.(*v1beta1.BlockDevice), nil
-}
-
-func (c *blockDeviceCache) List(namespace string, selector labels.Selector) (ret []*v1beta1.BlockDevice, err error) {
-
-	err = cache.ListAllByNamespace(c.indexer, namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1beta1.BlockDevice))
-	})
-
-	return ret, err
-}
-
-func (c *blockDeviceCache) AddIndexer(indexName string, indexer BlockDeviceIndexer) {
-	utilruntime.Must(c.indexer.AddIndexers(map[string]cache.IndexFunc{
-		indexName: func(obj interface{}) (strings []string, e error) {
-			return indexer(obj.(*v1beta1.BlockDevice))
-		},
-	}))
-}
-
-func (c *blockDeviceCache) GetByIndex(indexName, key string) (result []*v1beta1.BlockDevice, err error) {
-	objs, err := c.indexer.ByIndex(indexName, key)
-	if err != nil {
-		return nil, err
-	}
-	result = make([]*v1beta1.BlockDevice, 0, len(objs))
-	for _, obj := range objs {
-		result = append(result, obj.(*v1beta1.BlockDevice))
-	}
-	return result, nil
-}
-
+// BlockDeviceStatusHandler is executed for every added or modified BlockDevice. Should return the new status to be updated
 type BlockDeviceStatusHandler func(obj *v1beta1.BlockDevice, status v1beta1.BlockDeviceStatus) (v1beta1.BlockDeviceStatus, error)
 
+// BlockDeviceGeneratingHandler is the top-level handler that is executed for every BlockDevice event. It extends BlockDeviceStatusHandler by a returning a slice of child objects to be passed to apply.Apply
 type BlockDeviceGeneratingHandler func(obj *v1beta1.BlockDevice, status v1beta1.BlockDeviceStatus) ([]runtime.Object, v1beta1.BlockDeviceStatus, error)
 
+// RegisterBlockDeviceStatusHandler configures a BlockDeviceController to execute a BlockDeviceStatusHandler for every events observed.
+// If a non-empty condition is provided, it will be updated in the status conditions for every handler execution
 func RegisterBlockDeviceStatusHandler(ctx context.Context, controller BlockDeviceController, condition condition.Cond, name string, handler BlockDeviceStatusHandler) {
 	statusHandler := &blockDeviceStatusHandler{
 		client:    controller,
 		condition: condition,
 		handler:   handler,
 	}
-	controller.AddGenericHandler(ctx, name, FromBlockDeviceHandlerToHandler(statusHandler.sync))
+	controller.AddGenericHandler(ctx, name, generic.FromObjectHandlerToHandler(statusHandler.sync))
 }
 
+// RegisterBlockDeviceGeneratingHandler configures a BlockDeviceController to execute a BlockDeviceGeneratingHandler for every events observed, passing the returned objects to the provided apply.Apply.
+// If a non-empty condition is provided, it will be updated in the status conditions for every handler execution
 func RegisterBlockDeviceGeneratingHandler(ctx context.Context, controller BlockDeviceController, apply apply.Apply,
 	condition condition.Cond, name string, handler BlockDeviceGeneratingHandler, opts *generic.GeneratingHandlerOptions) {
 	statusHandler := &blockDeviceGeneratingHandler{
@@ -297,6 +89,7 @@ type blockDeviceStatusHandler struct {
 	handler   BlockDeviceStatusHandler
 }
 
+// sync is executed on every resource addition or modification. Executes the configured handlers and sends the updated status to the Kubernetes API
 func (a *blockDeviceStatusHandler) sync(key string, obj *v1beta1.BlockDevice) (*v1beta1.BlockDevice, error) {
 	if obj == nil {
 		return obj, nil
@@ -342,8 +135,10 @@ type blockDeviceGeneratingHandler struct {
 	opts  generic.GeneratingHandlerOptions
 	gvk   schema.GroupVersionKind
 	name  string
+	seen  sync.Map
 }
 
+// Remove handles the observed deletion of a resource, cascade deleting every associated resource previously applied
 func (a *blockDeviceGeneratingHandler) Remove(key string, obj *v1beta1.BlockDevice) (*v1beta1.BlockDevice, error) {
 	if obj != nil {
 		return obj, nil
@@ -353,12 +148,17 @@ func (a *blockDeviceGeneratingHandler) Remove(key string, obj *v1beta1.BlockDevi
 	obj.Namespace, obj.Name = kv.RSplit(key, "/")
 	obj.SetGroupVersionKind(a.gvk)
 
+	if a.opts.UniqueApplyForResourceVersion {
+		a.seen.Delete(key)
+	}
+
 	return nil, generic.ConfigureApplyForObject(a.apply, obj, &a.opts).
 		WithOwner(obj).
 		WithSetID(a.name).
 		ApplyObjects()
 }
 
+// Handle executes the configured BlockDeviceGeneratingHandler and pass the resulting objects to apply.Apply, finally returning the new status of the resource
 func (a *blockDeviceGeneratingHandler) Handle(obj *v1beta1.BlockDevice, status v1beta1.BlockDeviceStatus) (v1beta1.BlockDeviceStatus, error) {
 	if !obj.DeletionTimestamp.IsZero() {
 		return status, nil
@@ -368,9 +168,41 @@ func (a *blockDeviceGeneratingHandler) Handle(obj *v1beta1.BlockDevice, status v
 	if err != nil {
 		return newStatus, err
 	}
+	if !a.isNewResourceVersion(obj) {
+		return newStatus, nil
+	}
 
-	return newStatus, generic.ConfigureApplyForObject(a.apply, obj, &a.opts).
+	err = generic.ConfigureApplyForObject(a.apply, obj, &a.opts).
 		WithOwner(obj).
 		WithSetID(a.name).
 		ApplyObjects(objs...)
+	if err != nil {
+		return newStatus, err
+	}
+	a.storeResourceVersion(obj)
+	return newStatus, nil
+}
+
+// isNewResourceVersion detects if a specific resource version was already successfully processed.
+// Only used if UniqueApplyForResourceVersion is set in generic.GeneratingHandlerOptions
+func (a *blockDeviceGeneratingHandler) isNewResourceVersion(obj *v1beta1.BlockDevice) bool {
+	if !a.opts.UniqueApplyForResourceVersion {
+		return true
+	}
+
+	// Apply once per resource version
+	key := obj.Namespace + "/" + obj.Name
+	previous, ok := a.seen.Load(key)
+	return !ok || previous != obj.ResourceVersion
+}
+
+// storeResourceVersion keeps track of the latest resource version of an object for which Apply was executed
+// Only used if UniqueApplyForResourceVersion is set in generic.GeneratingHandlerOptions
+func (a *blockDeviceGeneratingHandler) storeResourceVersion(obj *v1beta1.BlockDevice) {
+	if !a.opts.UniqueApplyForResourceVersion {
+		return
+	}
+
+	key := obj.Namespace + "/" + obj.Name
+	a.seen.Store(key, obj.ResourceVersion)
 }
