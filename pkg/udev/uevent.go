@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/pilebones/go-udev/netlink"
@@ -103,10 +104,31 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 	}
 	logrus.Debugf("Prepare to handle event: %s, env: %+v", uevent.Action, uevent.Env)
 
-	var disk *block.Disk
-	var part *block.Partition
-	var bd *v1beta1.BlockDevice
 	devPath := udevDevice.GetDevName()
+	var disk *block.Disk
+	var bd *v1beta1.BlockDevice
+
+	if uevent.Action == netlink.REMOVE {
+		if udevDevice.IsDisk() {
+			// Note: at this point, the device is gone, so we can't use GetDiskByDevPath()
+			// to get any reliable information about the device, and we kinda want its
+			// name for logging purposes.  Happily, we _can_ fill out enough data to
+			// figure out the BD name by creating a minimal block.Disk then calling
+			// UpdateDiskFromUdev() here instead, so the logging works fine.
+			disk = &block.Disk{Name: strings.TrimPrefix(devPath, "/dev/")}
+			udevDevice.UpdateDiskFromUdev(disk)
+			bd = blockdevice.GetDiskBlockDevice(disk, u.nodeName, u.namespace)
+			// just wake up scanner to check if the disk is removed, do no-op internally
+			u.wakeUpScanner(uevent, bd)
+		}
+		return
+	}
+
+	if uevent.Action != netlink.ADD {
+		return
+	}
+
+	var part *block.Partition
 	if udevDevice.IsDisk() {
 		disk = u.scanner.BlockInfo.GetDiskByDevPath(devPath)
 		bd = blockdevice.GetDiskBlockDevice(disk, u.nodeName, u.namespace)
@@ -128,28 +150,21 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 		return
 	}
 
-	switch uevent.Action {
-	case netlink.ADD:
-		if bd.Name == "" {
-			logrus.Infof("Skip adding non-identifiable block device %s", bd.Spec.DevPath)
-			return
-		}
-		utils.CallerWithCondLock(u.scanner.Cond, func() any {
-			// just wake up scanner to check if the disk is added, do no-op internally
-			logrus.Infof("Wake up scanner with %s operation with blockdevice: %s", netlink.ADD, bd.Name)
-			u.scanner.Cond.Signal()
-			return nil
-		})
-	case netlink.REMOVE:
-		if udevDevice.IsDisk() {
-			// just wake up scanner to check if the disk is removed, do no-op internally
-			utils.CallerWithCondLock(u.scanner.Cond, func() any {
-				logrus.Infof("Wake up scanner with %s operation with blockdevice: %s", netlink.REMOVE, bd.Name)
-				u.scanner.Cond.Signal()
-				return nil
-			})
-		}
+	if bd.Name == "" {
+		logrus.Infof("Skip adding non-identifiable block device %s", bd.Spec.DevPath)
+		return
 	}
+
+	// just wake up scanner to check if the disk is added, do no-op internally
+	u.wakeUpScanner(uevent, bd)
+}
+
+func (u *Udev) wakeUpScanner(uevent netlink.UEvent, bd *v1beta1.BlockDevice) {
+	utils.CallerWithCondLock(u.scanner.Cond, func() any {
+		logrus.Infof("Wake up scanner with %s operation with blockdevice: %s, device: %s", uevent.Action, bd.Name, bd.Spec.DevPath)
+		u.scanner.Cond.Signal()
+		return nil
+	})
 }
 
 // getOptionalMatcher Parse and load config file which contains rules for matching
