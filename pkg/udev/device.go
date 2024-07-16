@@ -25,6 +25,7 @@ const (
 	UdevPartTableType = "ID_PART_TABLE_TYPE"
 	UdevPartTableUUID = "ID_PART_TABLE_UUID"
 	UdevSerialNumber  = "ID_SERIAL"
+	UdevSerialShort   = "ID_SERIAL_SHORT"
 	UdevType          = "ID_TYPE"
 	UdevVendor        = "ID_VENDOR"
 	UdevWWN           = "ID_WWN"
@@ -36,7 +37,7 @@ func InitUdevDevice(udev map[string]string) Device {
 	return udev
 }
 
-func (device Device) updateDiskFromUdev(disk *block.Disk) {
+func (device Device) UpdateDiskFromUdev(disk *block.Disk) {
 	if len(device[UdevFsUUID]) > 0 {
 		disk.UUID = device[UdevFsUUID]
 	}
@@ -49,7 +50,11 @@ func (device Device) updateDiskFromUdev(disk *block.Disk) {
 	if len(UdevVendor) > 0 {
 		disk.Vendor = device[UdevVendor]
 	}
-	if len(device[UdevSerialNumber]) > 0 {
+	// Match the logic from block.diskSerialNumber() to ensure
+	// we get the correct serial number!
+	if len(device[UdevSerialShort]) > 0 {
+		disk.SerialNumber = device[UdevSerialShort]
+	} else if len(device[UdevSerialNumber]) > 0 {
 		disk.SerialNumber = device[UdevSerialNumber]
 	}
 	if len(device[UdevWWN]) > 0 {
