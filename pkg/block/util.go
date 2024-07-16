@@ -74,7 +74,7 @@ func lsblk(devPath, output string) (string, error) {
 	}
 	out, err := exec.Command(LSBLKCMD, args[0:]...).Output() // #nosec G204
 	if err != nil {
-		return "", fmt.Errorf("failed to execute `%s`: %s", strings.Join(args, " "), err.Error())
+		return "", fmt.Errorf("failed to execute `%s %s`: %s", LSBLKCMD, strings.Join(args, " "), err.Error())
 	}
 
 	return strings.TrimSuffix(string(out), "\n"), nil
