@@ -102,7 +102,10 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 	if !udevDevice.IsDisk() && !udevDevice.IsPartition() {
 		return
 	}
-	logrus.Debugf("Prepare to handle event: %s, env: %+v", uevent.Action, uevent.Env)
+	logrus.WithFields(logrus.Fields{
+		"udevAction": uevent.Action,
+		"udevEnv":    fmt.Sprintf("%+v", uevent.Env),
+	}).Debug("Prepare to handle udev action")
 
 	devPath := udevDevice.GetDevName()
 	var disk *block.Disk
@@ -135,7 +138,10 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 	} else {
 		parentPath, err := block.GetParentDevName(devPath)
 		if err != nil {
-			logrus.Errorf("failed to get parent dev name, %s", err.Error())
+			logrus.WithFields(logrus.Fields{
+				"device": devPath,
+				"err":    err.Error(),
+			}).Error("Failed to get parent device name")
 		}
 		part = u.scanner.BlockInfo.GetPartitionByDevPath(parentPath, devPath)
 		disk = part.Disk
@@ -151,7 +157,9 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 	}
 
 	if bd.Name == "" {
-		logrus.Infof("Skip adding non-identifiable block device %s", bd.Spec.DevPath)
+		logrus.WithFields(logrus.Fields{
+			"device": bd.Spec.DevPath,
+		}).Info("Skip adding non-identifiable block device")
 		return
 	}
 
@@ -161,7 +169,13 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 
 func (u *Udev) wakeUpScanner(uevent netlink.UEvent, bd *v1beta1.BlockDevice) {
 	utils.CallerWithCondLock(u.scanner.Cond, func() any {
-		logrus.Infof("Wake up scanner with %s operation with blockdevice: %s, device: %s", uevent.Action, bd.Name, bd.Spec.DevPath)
+		logrus.WithFields(logrus.Fields{
+			"namespace":  bd.Namespace,
+			"name":       bd.Name,
+			"kind":       "BlockDevice",
+			"udevAction": uevent.Action,
+			"device":     bd.Spec.DevPath,
+		}).Info("udev action triggering scanner wake")
 		u.scanner.Cond.Signal()
 		return nil
 	})
