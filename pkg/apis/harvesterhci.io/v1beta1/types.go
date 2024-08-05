@@ -42,6 +42,8 @@ type BlockDeviceSpec struct {
 
 	// a string list with device tag for provisioner, e.g. ["default", "small", "ssd"]
 	Tags []string `json:"tags,omitempty"`
+
+	Provisioner *ProvisionerInfo `json:"provisioner,omitempty"`
 }
 
 type BlockDeviceStatus struct {
@@ -62,6 +64,25 @@ type BlockDeviceStatus struct {
 
 	// The current Tags of the blockdevice
 	Tags []string `json:"tags,omitempty"`
+
+	// a string with the provisioner name, e.g. "Longhornv1, Longhornv2 or LVM"
+	Provisioner *ProvisionerStatus `json:"provisioner,omitempty"`
+}
+
+type ProvisionerInfo struct {
+	// a string with the provisioner name, e.g. "Longhornv1, Longhornv2 or LVM"
+	Type string `json:"type"`
+
+	// vgName is the volume group name for the provisioner (only worked for LVM)
+	VgName string `json:"vgName,omitempty"`
+}
+
+type ProvisionerStatus struct {
+	// a string with the provisioner name, e.g. "Longhornv1, Longhornv2 or LVM"
+	Type string `json:"type"`
+
+	// vgName is the volume group name for the provisioner (only worked for LVM)
+	VgName string `json:"vgName,omitempty"`
 }
 
 type FilesystemInfo struct {
