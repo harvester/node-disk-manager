@@ -17,9 +17,9 @@ import (
 	"time"
 
 	"github.com/ehazlett/simplelog"
-	"github.com/rancher/wrangler/v2/pkg/kubeconfig"
-	"github.com/rancher/wrangler/v2/pkg/signals"
-	"github.com/rancher/wrangler/v2/pkg/start"
+	"github.com/rancher/wrangler/v3/pkg/kubeconfig"
+	"github.com/rancher/wrangler/v3/pkg/signals"
+	"github.com/rancher/wrangler/v3/pkg/start"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 
