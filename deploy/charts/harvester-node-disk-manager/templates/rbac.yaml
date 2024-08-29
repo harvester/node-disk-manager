@@ -12,7 +12,7 @@ metadata:
   name: {{ include "harvester-node-disk-manager.name" . }}
 rules:
   - apiGroups: [ "harvesterhci.io" ]
-    resources: [ "blockdevices" ]
+    resources: [ "blockdevices", "lvmvolumegroups", "lvmvolumegroups/status" ]
     verbs: [ "*" ]
   - apiGroups: [ "longhorn.io" ]
     resources: [ "nodes" ]

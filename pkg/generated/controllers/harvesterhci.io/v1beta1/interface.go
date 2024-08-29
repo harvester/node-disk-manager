@@ -32,6 +32,7 @@ func init() {
 
 type Interface interface {
 	BlockDevice() BlockDeviceController
+	LVMVolumeGroup() LVMVolumeGroupController
 }
 
 func New(controllerFactory controller.SharedControllerFactory) Interface {
@@ -46,4 +47,8 @@ type version struct {
 
 func (v *version) BlockDevice() BlockDeviceController {
 	return generic.NewController[*v1beta1.BlockDevice, *v1beta1.BlockDeviceList](schema.GroupVersionKind{Group: "harvesterhci.io", Version: "v1beta1", Kind: "BlockDevice"}, "blockdevices", true, v.controllerFactory)
+}
+
+func (v *version) LVMVolumeGroup() LVMVolumeGroupController {
+	return generic.NewController[*v1beta1.LVMVolumeGroup, *v1beta1.LVMVolumeGroupList](schema.GroupVersionKind{Group: "harvesterhci.io", Version: "v1beta1", Kind: "LVMVolumeGroup"}, "lvmvolumegroups", true, v.controllerFactory)
 }
