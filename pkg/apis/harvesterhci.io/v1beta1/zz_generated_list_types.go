@@ -40,3 +40,20 @@ func NewBlockDevice(namespace, name string, obj BlockDevice) *BlockDevice {
 	obj.Namespace = namespace
 	return &obj
 }
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// LVMVolumeGroupList is a list of LVMVolumeGroup resources
+type LVMVolumeGroupList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata"`
+
+	Items []LVMVolumeGroup `json:"items"`
+}
+
+func NewLVMVolumeGroup(namespace, name string, obj LVMVolumeGroup) *LVMVolumeGroup {
+	obj.APIVersion, obj.Kind = SchemeGroupVersion.WithKind("LVMVolumeGroup").ToAPIVersionAndKind()
+	obj.Name = name
+	obj.Namespace = namespace
+	return &obj
+}

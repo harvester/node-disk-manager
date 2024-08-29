@@ -19,6 +19,7 @@ func main() {
 			"harvesterhci.io": {
 				Types: []interface{}{
 					diskv1.BlockDevice{},
+					diskv1.LVMVolumeGroup{},
 				},
 				GenerateTypes:   true,
 				GenerateClients: true,

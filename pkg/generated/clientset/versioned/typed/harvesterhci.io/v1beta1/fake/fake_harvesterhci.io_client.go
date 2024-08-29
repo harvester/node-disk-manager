@@ -32,6 +32,10 @@ func (c *FakeHarvesterhciV1beta1) BlockDevices(namespace string) v1beta1.BlockDe
 	return &FakeBlockDevices{c, namespace}
 }
 
+func (c *FakeHarvesterhciV1beta1) LVMVolumeGroups(namespace string) v1beta1.LVMVolumeGroupInterface {
+	return &FakeLVMVolumeGroups{c, namespace}
+}
+
 // RESTClient returns a RESTClient that is used to communicate
 // with API server by this client implementation.
 func (c *FakeHarvesterhciV1beta1) RESTClient() rest.Interface {

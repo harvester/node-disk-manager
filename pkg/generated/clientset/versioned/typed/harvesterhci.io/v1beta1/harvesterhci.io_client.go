@@ -29,6 +29,7 @@ import (
 type HarvesterhciV1beta1Interface interface {
 	RESTClient() rest.Interface
 	BlockDevicesGetter
+	LVMVolumeGroupsGetter
 }
 
 // HarvesterhciV1beta1Client is used to interact with features provided by the harvesterhci.io group.
@@ -38,6 +39,10 @@ type HarvesterhciV1beta1Client struct {
 
 func (c *HarvesterhciV1beta1Client) BlockDevices(namespace string) BlockDeviceInterface {
 	return newBlockDevices(c, namespace)
+}
+
+func (c *HarvesterhciV1beta1Client) LVMVolumeGroups(namespace string) LVMVolumeGroupInterface {
+	return newLVMVolumeGroups(c, namespace)
 }
 
 // NewForConfig creates a new HarvesterhciV1beta1Client for the given config.
