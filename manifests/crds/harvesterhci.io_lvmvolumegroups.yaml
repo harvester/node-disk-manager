@@ -1,0 +1,138 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    {}
+  name: lvmvolumegroups.harvesterhci.io
+spec:
+  group: harvesterhci.io
+  names:
+    kind: LVMVolumeGroup
+    listKind: LVMVolumeGroupList
+    plural: lvmvolumegroups
+    shortNames:
+    - lvmvg
+    - lvmvgs
+    singular: lvmvolumegroup
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.parameters
+      name: Parameters
+      type: string
+    - jsonPath: .status.vgStatus
+      name: Status
+      type: string
+    - jsonPath: .spec.nodeName
+      name: Node
+      type: string
+    name: v1beta1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              desiredState:
+                description: |-
+                  DesiredState is the desired state of the volume group
+                  enabled means we will keep this vg active, disabled means we will keep this vg inactive
+                enum:
+                - Enabled
+                - Disabled
+                type: string
+              devices:
+                additionalProperties:
+                  type: string
+                description: |-
+                  The devices of the volume group
+                  format: map[<bd Name>]=devPath"
+                  e.g. map[087fc9702c450bfca5ba56b06ba7d7f2] = /dev/sda
+                type: object
+              nodeName:
+                description: NodeName is the name of the node where the volume group
+                  is created
+                type: string
+              parameters:
+                description: Parameters is the parameters for creating the volume
+                  group *optional*
+                type: string
+              vgName:
+                description: VGName is the name of the volume group
+                type: string
+            required:
+            - desiredState
+            - nodeName
+            - vgName
+            type: object
+          status:
+            properties:
+              conditions:
+                description: The conditions of the volume group
+                items:
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      type: string
+                    reason:
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - status
+                  - type
+                  type: object
+                type: array
+              devices:
+                additionalProperties:
+                  type: string
+                description: |-
+                  The devices of the volume group
+                  format: map[<bd Name>]=devPath"
+                type: object
+              parameters:
+                description: Parameters is the current parameters of the volume group
+                type: string
+              vgStatus:
+                default: Unknown
+                description: The status of the volume group
+                enum:
+                - Active
+                - Inactive
+                - Unknown
+                type: string
+              vgTargetType:
+                description: VGTargetType is the target type of the volume group,
+                  now only support stripe/dm-thin
+                type: string
+            type: object
+        required:
+        - metadata
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
