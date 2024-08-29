@@ -74,8 +74,9 @@ spec:
                       a string with the partition's mount point, or "" if no mount point was discovered
                     type: string
                   provisioned:
-                    description: a bool indicating whether the filesystem can be provisioned
-                      as a disk for the node to store data.
+                    description: |-
+                      a bool indicating whether the filesystem can be provisioned as a disk for the node to store data.
+                      Deprecated: Replaced by field `spec.provision`
                     type: boolean
                   repaired:
                     description: a bool indicating whether the filesystem is manually
@@ -87,6 +88,10 @@ spec:
               nodeName:
                 description: name of the node to which the block device is attached
                 type: string
+              provision:
+                default: false
+                description: a bool for the device to be provisioned
+                type: boolean
               provisioner:
                 properties:
                   longhorn:

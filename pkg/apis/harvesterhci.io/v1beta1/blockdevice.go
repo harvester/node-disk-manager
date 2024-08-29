@@ -44,6 +44,10 @@ type BlockDeviceSpec struct {
 	Tags []string `json:"tags,omitempty"`
 
 	Provisioner *ProvisionerInfo `json:"provisioner,omitempty"`
+
+	// a bool for the device to be provisioned
+	// +kubebuilder:default:=false
+	Provision bool `json:"provision,omitempty"`
 }
 
 type BlockDeviceStatus struct {
@@ -102,6 +106,8 @@ type FilesystemInfo struct {
 	ForceFormatted bool `json:"forceFormatted,omitempty"`
 
 	// a bool indicating whether the filesystem can be provisioned as a disk for the node to store data.
+	// Deprecated: Replaced by field `spec.provision`
+	// +optional
 	Provisioned bool `json:"provisioned,omitempty"`
 
 	// a bool indicating whether the filesystem is manually repaired of not
