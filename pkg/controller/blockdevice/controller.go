@@ -38,6 +38,8 @@ type Controller struct {
 	BlockdeviceCache ctldiskv1.BlockDeviceCache
 	BlockInfo        block.Info
 
+	LVMVgClient ctldiskv1.LVMVolumeGroupController
+
 	scanner   *Scanner
 	semaphore *provisioner.Semaphore
 }
@@ -61,6 +63,7 @@ func Register(
 	ctx context.Context,
 	nodes ctllonghornv1.NodeController,
 	bds ctldiskv1.BlockDeviceController,
+	lvmVGs ctldiskv1.LVMVolumeGroupController,
 	block block.Info,
 	opt *option.Option,
 	scanner *Scanner,
@@ -74,6 +77,7 @@ func Register(
 		Nodes:            nodes,
 		Blockdevices:     bds,
 		BlockdeviceCache: bds.Cache(),
+		LVMVgClient:      lvmVGs,
 		BlockInfo:        block,
 		scanner:          scanner,
 		semaphore:        semaphoreObj,
@@ -107,6 +111,10 @@ func (c *Controller) OnBlockDeviceChange(_ string, device *diskv1.BlockDevice) (
 		logrus.Warnf("Failed to generate provisioner for device %s: %v", device.Name, err)
 		return nil, err
 	}
+	if provisionerInst == nil {
+		logrus.Infof("Skip device %s as no provisioner found or not configured", device.Name)
+		return nil, nil
+	}
 
 	// handle remove device no matter inactive or corrupted, we will set `device.Spec.FileSystem.Provisioned` to false
 	if needProvisionerUnprovision(device) {
@@ -133,6 +141,7 @@ func (c *Controller) OnBlockDeviceChange(_ string, device *diskv1.BlockDevice) (
 		return nil, fmt.Errorf("failed to resolve persistent dev path for block device %s", device.Name)
 	}
 
+	logrus.Debugf("Checking to format device %s", device.Name)
 	if formatted, requeue, err := provisionerInst.Format(devPath); !formatted {
 		if requeue {
 			c.Blockdevices.EnqueueAfter(c.Namespace, device.Name, jitterEnqueueDelay())
@@ -153,6 +162,7 @@ func (c *Controller) OnBlockDeviceChange(_ string, device *diskv1.BlockDevice) (
 	 * 2. Spec.Filesystem.Provisioned = true, Status.ProvisionPhase = ProvisionPhaseUnprovisioned
 	 *   -> Provision the device
 	 */
+	logrus.Debugf("Checking to provision/update device %s", device.Name)
 	if needProvisionerUpdate(device, deviceCpy) {
 		logrus.Infof("Prepare to check the new device tags %v with device: %s", deviceCpy.Spec.Tags, device.Name)
 		requeue, err := provisionerInst.Update()
@@ -200,11 +210,25 @@ func (c *Controller) finalizeBlockDevice(oldBd, newBd *diskv1.BlockDevice, devPa
 }
 
 func (c *Controller) generateProvisioner(device *diskv1.BlockDevice) (provisioner.Provisioner, error) {
+	if device.Spec.Provisioner == nil && device.Status.ProvisionPhase != diskv1.ProvisionPhaseProvisioned {
+		return nil, nil
+	}
+	logrus.Infof("Generate provisioner from device %s, content: %v", device.Name, device.Spec.Provisioner)
 	// set default
 	provisionerType := provisioner.TypeLonghornV1
 	if device.Spec.Provisioner != nil {
+		// **TODO**: we should use webhook to validate the provisioner type (and number)
+		numProvisioner := 0
 		if device.Spec.Provisioner.Longhorn != nil {
+			numProvisioner++
 			provisionerType = device.Spec.Provisioner.Longhorn.EngineVersion
+		}
+		if device.Spec.Provisioner.LVM != nil {
+			numProvisioner++
+			provisionerType = provisioner.TypeLVM
+		}
+		if numProvisioner > 1 {
+			return nil, fmt.Errorf("multiple provisioner types found for block device %s", device.Name)
 		}
 	}
 	switch provisionerType {
@@ -220,7 +244,7 @@ func (c *Controller) generateProvisioner(device *diskv1.BlockDevice) (provisione
 	case provisioner.TypeLonghornV2:
 		return nil, fmt.Errorf("TBD type %s", provisionerType)
 	case provisioner.TypeLVM:
-		return nil, fmt.Errorf("TBD type %s", provisionerType)
+		return c.generateLVMProvisioner(device)
 	default:
 		return nil, fmt.Errorf("unsupported provisioner type %s", provisionerType)
 	}
@@ -235,6 +259,11 @@ func (c *Controller) generateLHv1Provisioner(device *diskv1.BlockDevice) (provis
 		return nil, err
 	}
 	return provisioner.NewLHV1Provisioner(device, c.BlockInfo, node, c.Nodes, c.NodeCache, CacheDiskTags, c.semaphore)
+}
+
+func (c *Controller) generateLVMProvisioner(device *diskv1.BlockDevice) (provisioner.Provisioner, error) {
+	vgName := device.Spec.Provisioner.LVM.VgName
+	return provisioner.NewLVMProvisioner(vgName, c.NodeName, c.LVMVgClient, device, c.BlockInfo)
 }
 
 func (c *Controller) updateDeviceStatus(device *diskv1.BlockDevice, devPath string) error {
@@ -365,13 +394,16 @@ func canSkipBlockDeviceChange(device *diskv1.BlockDevice, nodeName string) bool 
 }
 
 func needProvisionerUnprovision(device *diskv1.BlockDevice) bool {
-	return !device.Spec.FileSystem.Provisioned && device.Status.ProvisionPhase != diskv1.ProvisionPhaseUnprovisioned
+	return (!device.Spec.FileSystem.Provisioned && !device.Spec.Provision) &&
+		device.Status.ProvisionPhase != diskv1.ProvisionPhaseUnprovisioned
 }
 
 func needProvisionerUpdate(oldBd, newBd *diskv1.BlockDevice) bool {
-	return oldBd.Status.ProvisionPhase == diskv1.ProvisionPhaseProvisioned && newBd.Spec.FileSystem.Provisioned
+	return oldBd.Status.ProvisionPhase == diskv1.ProvisionPhaseProvisioned &&
+		(newBd.Spec.FileSystem.Provisioned || newBd.Spec.Provision)
 }
 
 func needProvisionerProvision(oldBd, newBd *diskv1.BlockDevice) bool {
-	return oldBd.Status.ProvisionPhase == diskv1.ProvisionPhaseUnprovisioned && newBd.Spec.FileSystem.Provisioned
+	return oldBd.Status.ProvisionPhase == diskv1.ProvisionPhaseUnprovisioned &&
+		(newBd.Spec.FileSystem.Provisioned || newBd.Spec.Provision)
 }
