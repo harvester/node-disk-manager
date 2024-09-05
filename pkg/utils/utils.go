@@ -19,6 +19,8 @@ const (
 	HostProcPath = "/host/proc"
 	// DiskRemoveTag indicates a Longhorn is pending to remove.
 	DiskRemoveTag = "harvester-ndm-disk-remove"
+	// Harvester Namespace
+	HarvesterNS = "harvester-system"
 )
 
 var CmdTimeoutError error
