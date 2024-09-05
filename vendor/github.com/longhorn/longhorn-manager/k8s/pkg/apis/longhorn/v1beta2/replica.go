@@ -75,6 +75,11 @@ type ReplicaSpec struct {
 	RebuildRetryCount int `json:"rebuildRetryCount"`
 	// +optional
 	EvictionRequested bool `json:"evictionRequested"`
+	// +optional
+	SnapshotMaxCount int `json:"snapshotMaxCount"`
+	// +kubebuilder:validation:Type=string
+	// +optional
+	SnapshotMaxSize int64 `json:"snapshotMaxSize,string"`
 }
 
 // ReplicaStatus defines the observed state of the Longhorn replica
@@ -90,6 +95,7 @@ type ReplicaStatus struct {
 // +kubebuilder:resource:shortName=lhr
 // +kubebuilder:subresource:status
 // +kubebuilder:storageversion
+// +kubebuilder:printcolumn:name="Data Engine",type=string,JSONPath=`.spec.dataEngine`,description="The data engine of the replica"
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.currentState`,description="The current state of the replica"
 // +kubebuilder:printcolumn:name="Node",type=string,JSONPath=`.spec.nodeID`,description="The node that the replica is on"
 // +kubebuilder:printcolumn:name="Disk",type=string,JSONPath=`.spec.diskID`,description="The disk that the replica is on"

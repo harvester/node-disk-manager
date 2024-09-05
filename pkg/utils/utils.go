@@ -8,8 +8,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"github.com/longhorn/longhorn-manager/util"
 )
 
 const (
@@ -157,7 +155,7 @@ func mountExt4(device, path string, readonly bool) error {
 
 // mountExt4OnHostNamespace provides the same functionality as mountExt4 but on host namespace.
 func mountExt4OnHostNamespace(device, path string, readonly bool) error {
-	ns := GetHostNamespacePath(util.HostProcPath)
+	ns := GetHostNamespacePath(HostProcPath)
 	executor, err := NewExecutorWithNS(ns)
 	if err != nil {
 		return err
@@ -175,7 +173,7 @@ func mountExt4OnHostNamespace(device, path string, readonly bool) error {
 // executeOnHostNamespace executes the command in the host namespace
 // return the command result and error
 func executeOnHostNamespace(cmd string, args []string) (string, error) {
-	ns := GetHostNamespacePath(util.HostProcPath)
+	ns := GetHostNamespacePath(HostProcPath)
 	executor, err := NewExecutorWithNS(ns)
 	if err != nil {
 		return "", err
@@ -186,7 +184,7 @@ func executeOnHostNamespace(cmd string, args []string) (string, error) {
 // executeOnHostNamespace executes the command with timeout value in the host namespace
 // return the command result and error
 func executeOnHostNamespaceWithTimeout(cmd string, args []string, cmdTimeout time.Duration) (string, error) {
-	ns := GetHostNamespacePath(util.HostProcPath)
+	ns := GetHostNamespacePath(HostProcPath)
 	executor, err := NewExecutorWithNS(ns)
 	executor.SetTimeout(cmdTimeout)
 	if err != nil {
