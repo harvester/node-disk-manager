@@ -26,6 +26,7 @@ import (
 	"github.com/harvester/node-disk-manager/pkg/block"
 	blockdevicev1 "github.com/harvester/node-disk-manager/pkg/controller/blockdevice"
 	nodev1 "github.com/harvester/node-disk-manager/pkg/controller/node"
+	volumegroupv1 "github.com/harvester/node-disk-manager/pkg/controller/volumegroup"
 	"github.com/harvester/node-disk-manager/pkg/filter"
 	ctldisk "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io"
 	ctllonghorn "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io"
@@ -219,6 +220,7 @@ func run(opt *option.Option) error {
 	locker := &sync.Mutex{}
 	cond := sync.NewCond(locker)
 	bds := disks.Harvesterhci().V1beta1().BlockDevice()
+	lvmVGs := disks.Harvesterhci().V1beta1().LVMVolumeGroup()
 	nodes := lhs.Longhorn().V1beta2().Node()
 	scanner := blockdevicev1.NewScanner(
 		opt.NodeName,
@@ -237,6 +239,7 @@ func run(opt *option.Option) error {
 			ctx,
 			nodes,
 			bds,
+			lvmVGs,
 			block,
 			opt,
 			scanner,
@@ -246,6 +249,10 @@ func run(opt *option.Option) error {
 
 		if err := nodev1.Register(ctx, nodes, bds, opt); err != nil {
 			logrus.Fatalf("failed to register ndm node controller, %s", err.Error())
+		}
+
+		if err := volumegroupv1.Register(ctx, lvmVGs, opt); err != nil {
+			logrus.Fatalf("failed to register ndm volume group controller, %s", err.Error())
 		}
 
 		if err := start.All(ctx, opt.Threadiness, disks, lhs); err != nil {
