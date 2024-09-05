@@ -3,9 +3,12 @@ package v1beta2
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 const (
-	NodeConditionTypeReady            = "Ready"
-	NodeConditionTypeMountPropagation = "MountPropagation"
-	NodeConditionTypeSchedulable      = "Schedulable"
+	NodeConditionTypeReady              = "Ready"
+	NodeConditionTypeMountPropagation   = "MountPropagation"
+	NodeConditionTypeMultipathd         = "Multipathd"
+	NodeConditionTypeRequiredPackages   = "RequiredPackages"
+	NodeConditionTypeNFSClientInstalled = "NFSClientInstalled"
+	NodeConditionTypeSchedulable        = "Schedulable"
 )
 
 const (
@@ -16,6 +19,12 @@ const (
 	NodeConditionReasonKubernetesNodePressure    = "KubernetesNodePressure"
 	NodeConditionReasonUnknownNodeConditionTrue  = "UnknownNodeConditionTrue"
 	NodeConditionReasonNoMountPropagationSupport = "NoMountPropagationSupport"
+	NodeConditionReasonMultipathdIsRunning       = "MultipathdIsRunning"
+	NodeConditionReasonUnknownOS                 = "UnknownOS"
+	NodeConditionReasonNamespaceExecutorErr      = "NamespaceExecutorErr"
+	NodeConditionReasonPackagesNotInstalled      = "PackagesNotInstalled"
+	NodeConditionReasonKernelConfigIsNotFound    = "KernelConfigIsNotFound"
+	NodeConditionReasonNFSClientIsNotFound       = "NFSClientIsNotFound"
 	NodeConditionReasonKubernetesNodeCordoned    = "KubernetesNodeCordoned"
 )
 
@@ -26,10 +35,11 @@ const (
 )
 
 const (
-	DiskConditionReasonDiskPressure          = "DiskPressure"
-	DiskConditionReasonDiskFilesystemChanged = "DiskFilesystemChanged"
-	DiskConditionReasonNoDiskInfo            = "NoDiskInfo"
-	DiskConditionReasonDiskNotReady          = "DiskNotReady"
+	DiskConditionReasonDiskPressure           = "DiskPressure"
+	DiskConditionReasonDiskFilesystemChanged  = "DiskFilesystemChanged"
+	DiskConditionReasonNoDiskInfo             = "NoDiskInfo"
+	DiskConditionReasonDiskNotReady           = "DiskNotReady"
+	DiskConditionReasonDiskServiceUnreachable = "DiskServiceUnreachable"
 )
 
 const (
@@ -43,13 +53,24 @@ const (
 	ErrorReplicaScheduleEngineImageNotReady              = "none of the node candidates contains a ready engine image"
 	ErrorReplicaScheduleHardNodeAffinityNotSatisfied     = "hard affinity cannot be satisfied"
 	ErrorReplicaScheduleSchedulingFailed                 = "replica scheduling failed"
+	ErrorReplicaSchedulePrecheckNewReplicaFailed         = "precheck new replica failed"
 )
 
 type DiskType string
 
 const (
+	// DiskTypeFilesystem is the disk type for storing v1 replica directories
 	DiskTypeFilesystem = DiskType("filesystem")
-	DiskTypeBlock      = DiskType("block")
+	// DiskTypeBlock is the disk type for storing v2 replica logical volumes
+	DiskTypeBlock = DiskType("block")
+)
+
+type DiskDriver string
+
+const (
+	DiskDriverNone = DiskDriver("")
+	DiskDriverAuto = DiskDriver("auto")
+	DiskDriverAio  = DiskDriver("aio")
 )
 
 type SnapshotCheckStatus struct {
@@ -63,6 +84,9 @@ type DiskSpec struct {
 	Type DiskType `json:"diskType"`
 	// +optional
 	Path string `json:"path"`
+	// +kubebuilder:validation:Enum="";auto;aio
+	// +optional
+	DiskDriver DiskDriver `json:"diskDriver"`
 	// +optional
 	AllowScheduling bool `json:"allowScheduling"`
 	// +optional
@@ -89,9 +113,17 @@ type DiskStatus struct {
 	// +optional
 	DiskUUID string `json:"diskUUID"`
 	// +optional
+	DiskName string `json:"diskName"`
+	// +optional
+	DiskPath string `json:"diskPath"`
+	// +optional
 	Type DiskType `json:"diskType"`
 	// +optional
+	DiskDriver DiskDriver `json:"diskDriver"`
+	// +optional
 	FSType string `json:"filesystemType"`
+	// +optional
+	InstanceManagerName string `json:"instanceManagerName"`
 }
 
 // NodeSpec defines the desired state of the Longhorn node
