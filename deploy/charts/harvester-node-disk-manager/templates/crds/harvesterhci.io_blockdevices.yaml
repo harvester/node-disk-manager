@@ -93,6 +93,14 @@ spec:
                     description: a provisioner for provision Longhorn volume backend
                       disk
                     properties:
+                      diskDriver:
+                        description: specifies the driver to use for V2 data engine
+                          disks
+                        enum:
+                        - ""
+                        - auto
+                        - aio
+                        type: string
                       engineVersion:
                         description: a string with the engine version for the provisioner
                         enum:

@@ -1,6 +1,7 @@
 package v1beta1
 
 import (
+	longhornv1 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	"github.com/rancher/wrangler/v3/pkg/condition"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -91,6 +92,10 @@ type LonghornProvisionerInfo struct {
 	// a string with the engine version for the provisioner
 	// +kubebuilder:validation:Enum:=LonghornV1;LonghornV2
 	EngineVersion string `json:"engineVersion"`
+	// specifies the driver to use for V2 data engine disks
+	// +kubebuilder:validation:Enum="";auto;aio
+	// +optional
+	DiskDriver longhornv1.DiskDriver `json:"diskDriver,omitempty"`
 }
 
 type FilesystemInfo struct {
