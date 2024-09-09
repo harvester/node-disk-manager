@@ -242,7 +242,7 @@ func (c *Controller) generateProvisioner(device *diskv1.BlockDevice) (provisione
 		device.Spec.Provisioner = provisioner
 		return c.generateLHv1Provisioner(device)
 	case provisioner.TypeLonghornV2:
-		return nil, fmt.Errorf("TBD type %s", provisionerType)
+		return c.generateLHv2Provisioner(device)
 	case provisioner.TypeLVM:
 		return c.generateLVMProvisioner(device)
 	default:
@@ -264,6 +264,17 @@ func (c *Controller) generateLHv1Provisioner(device *diskv1.BlockDevice) (provis
 func (c *Controller) generateLVMProvisioner(device *diskv1.BlockDevice) (provisioner.Provisioner, error) {
 	vgName := device.Spec.Provisioner.LVM.VgName
 	return provisioner.NewLVMProvisioner(vgName, c.NodeName, c.LVMVgClient, device, c.BlockInfo)
+}
+
+func (c *Controller) generateLHv2Provisioner(device *diskv1.BlockDevice) (provisioner.Provisioner, error) {
+	node, err := c.NodeCache.Get(c.Namespace, c.NodeName)
+	if apierrors.IsNotFound(err) {
+		node, err = c.Nodes.Get(c.Namespace, c.NodeName, metav1.GetOptions{})
+	}
+	if err != nil {
+		return nil, err
+	}
+	return provisioner.NewLHV2Provisioner(device, c.BlockInfo, node, c.Nodes, c.NodeCache, CacheDiskTags)
 }
 
 func (c *Controller) updateDeviceStatus(device *diskv1.BlockDevice, devPath string) error {
