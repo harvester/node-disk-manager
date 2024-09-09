@@ -22,7 +22,7 @@ RUN  go install k8s.io/code-generator/cmd/openapi-gen@v0.23.7
 
 ENV DAPPER_ENV REPO TAG DRONE_TAG CROSS BUILD_FOR_CI
 ENV DAPPER_SOURCE /go/src/github.com/harvester/node-disk-manager/
-ENV DAPPER_OUTPUT ./bin ./manifests
+ENV DAPPER_OUTPUT ./bin ./manifests ./pkg
 ENV DAPPER_DOCKER_SOCKET true
 ENV HOME ${DAPPER_SOURCE}
 WORKDIR ${DAPPER_SOURCE}
