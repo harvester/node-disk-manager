@@ -137,9 +137,6 @@ func (c *Controller) OnBlockDeviceChange(_ string, device *diskv1.BlockDevice) (
 	if err != nil {
 		return nil, err
 	}
-	if devPath == "" {
-		return nil, fmt.Errorf("failed to resolve persistent dev path for block device %s", device.Name)
-	}
 
 	logrus.Debugf("Checking to format device %s", device.Name)
 	if formatted, requeue, err := provisionerInst.Format(devPath); !formatted {
