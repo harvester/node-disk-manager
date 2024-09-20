@@ -210,7 +210,7 @@ func (c *Controller) finalizeBlockDevice(oldBd, newBd *diskv1.BlockDevice, devPa
 }
 
 func (c *Controller) generateProvisioner(device *diskv1.BlockDevice) (provisioner.Provisioner, error) {
-	if device.Spec.Provisioner == nil && device.Status.ProvisionPhase != diskv1.ProvisionPhaseProvisioned {
+	if device.Spec.Provisioner == nil && !device.Spec.FileSystem.Provisioned && device.Status.ProvisionPhase != diskv1.ProvisionPhaseProvisioned {
 		return nil, nil
 	}
 	logrus.Infof("Generate provisioner from device %s, content: %v", device.Name, device.Spec.Provisioner)
