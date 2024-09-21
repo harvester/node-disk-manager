@@ -205,6 +205,8 @@ func (s *Scanner) scanBlockDevicesOnNode() error {
 				logrus.Warnf("Skip adding duplicated WWN device %s, device path: %s", bd.Status.DeviceStatus.Details.WWN, bd.Spec.DevPath)
 				continue
 			}
+			existingWWNs = append(existingWWNs, bd.Status.DeviceStatus.Details.WWN)
+			logrus.Debugf("The current WWNs are: %v", existingWWNs)
 			logrus.Infof("Create new device %s with wwn: %s", bd.Name, bd.Status.DeviceStatus.Details.WWN)
 			if _, err := s.SaveBlockDevice(bd, autoProvisioned); err != nil && !errors.IsAlreadyExists(err) {
 				return err
