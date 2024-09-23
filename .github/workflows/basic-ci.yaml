@@ -41,18 +41,19 @@ jobs:
       - name: "Local Deployment (Harvester+Longhorn+Node-Disk-Manager) for testing"
         id: vm_deploy
         run: |
-          rm -rf ndm-vagrant-rancherd
-          git clone https://github.com/harvester/vagrant-rancherd ndm-vagrant-rancherd
-          pushd ndm-vagrant-rancherd
-          ./new_cluster.sh
-          yq e -i ".longhorn_version = \"1.5.3\"" settings.yaml
+          rm -rf ndm-vagrant-k3s
+          git clone https://github.com/bk201/vagrant-k3s ndm-vagrant-k3s
+          pushd ndm-vagrant-k3s
+          yq e -i ".cluster_size = 1" settings.yaml
+          ./new-cluster.sh
+          yq e -i ".longhorn_version = \"1.7.1\"" settings.yaml
           ./scripts/deploy_longhorn.sh
           cp ../ci/scripts/deploy_ndm.sh ./deploy_ndm.sh
           ./deploy_ndm.sh
           popd
       - name: "Add disk"
         run: |
-          pushd ndm-vagrant-rancherd
+          pushd ndm-vagrant-k3s
           ./scripts/attach-disk.sh node1
           sleep 30
           popd
@@ -63,14 +64,14 @@ jobs:
           cat ci/charts/ndm-override.yaml 
       - name: "Upgrade NDM"
         run: |
-          pushd ndm-vagrant-rancherd
+          pushd ndm-vagrant-k3s
           cp ../ci/scripts/upgrade_ndm.sh ./upgrade_ndm.sh
           ./upgrade_ndm.sh
           popd
       - name: "Run Basic Test"
         id: basic-test
         run: |
-          pushd ndm-vagrant-rancherd
+          pushd ndm-vagrant-k3s
           vagrant ssh-config node1 > ../ssh-config
           cp kubeconfig ../kubeconfig
           popd
@@ -83,6 +84,6 @@ jobs:
       - name: "Tear Down / Cleanup"
         if: steps.vm_deploy.conclusion == 'success'
         run: |
-          pushd ndm-vagrant-rancherd
+          pushd ndm-vagrant-k3s
           vagrant destroy -f --parallel
           popd
