@@ -30,11 +30,11 @@ import (
  *
  * NOTE: The default qcow2 and xml location (created by initial operation) is `/tmp/hotplug_disks/`.
  *       File names are `node1-sda.qcow2` and `node1-sda.xml`.
- *       The target node name is `ndm-vagrant-rancherd_node1`.
+ *       The target node name is `ndm-vagrant-k3s_node1`.
  */
 
 const (
-	hotplugTargetNodeName  = "ndm-vagrant-rancherd_node1"
+	hotplugTargetNodeName  = "ndm-vagrant-k3s_node1"
 	hotplugDiskXMLFileName = "/tmp/hotplug_disks/node1-sda.xml"
 	hotplugTargetDiskName  = "sda"
 )
