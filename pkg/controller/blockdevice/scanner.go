@@ -284,6 +284,7 @@ func (s *Scanner) SaveBlockDevice(bd *diskv1.BlockDevice, autoProvisioned bool) 
 			if autoProvisioned {
 				bd.Spec.FileSystem.ForceFormatted = true
 				bd.Spec.FileSystem.Provisioned = true
+				bd.Spec.Provision = true
 			}
 			logrus.Infof("Add new block device %s with device: %s", bd.Name, bd.Spec.DevPath)
 			return s.Blockdevices.Create(bd)
@@ -301,7 +302,7 @@ func (s *Scanner) SaveBlockDevice(bd *diskv1.BlockDevice, autoProvisioned bool) 
 // - disk hasn't yet been force formatted
 // - disk matches auto-provisioned patterns
 func (s *Scanner) NeedsAutoProvision(oldBd *diskv1.BlockDevice, autoProvisionPatternMatches bool) bool {
-	return !oldBd.Spec.FileSystem.Provisioned && autoProvisionPatternMatches && oldBd.Status.DeviceStatus.FileSystem.LastFormattedAt == nil
+	return !oldBd.Spec.FileSystem.Provisioned && !oldBd.Spec.Provision && autoProvisionPatternMatches && oldBd.Status.DeviceStatus.FileSystem.LastFormattedAt == nil
 }
 
 // isDevPathChanged returns true if the device path has changed.

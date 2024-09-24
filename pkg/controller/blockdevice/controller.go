@@ -319,6 +319,7 @@ func (c *Controller) updateDeviceStatus(device *diskv1.BlockDevice, devPath stri
 		logrus.Infof("Auto provisioning block device %s", device.Name)
 		device.Spec.FileSystem.ForceFormatted = true
 		device.Spec.FileSystem.Provisioned = true
+		device.Spec.Provision = true
 	}
 	return nil
 }
