@@ -439,8 +439,9 @@ func needUpdateMountPoint(bd *diskv1.BlockDevice, filesystem *block.FileSystemIn
 		return NeedMountUpdateNoOp
 	}
 
-	logrus.Debugf("Checking mount operation with FS.Provisioned %v, FS.Mountpoint %s", bd.Spec.FileSystem.Provisioned, filesystem.MountPoint)
-	if bd.Spec.FileSystem.Provisioned {
+	provisioned := bd.Spec.FileSystem.Provisioned || bd.Spec.Provision
+	logrus.Debugf("Checking mount operation with FS.Provisioned %v, FS.Mountpoint %s", provisioned, filesystem.MountPoint)
+	if provisioned {
 		if filesystem.MountPoint == "" {
 			return NeedMountUpdateMount
 		}
