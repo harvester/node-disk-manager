@@ -3,7 +3,7 @@ module github.com/harvester/node-disk-manager
 go 1.22.7
 
 replace (
-	gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.0-20220521103104-8f96da9f5d5e
+	gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api => k8s.io/api v0.30.3
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.30.3
 	k8s.io/apimachinery => k8s.io/apimachinery v0.30.3
@@ -25,7 +25,7 @@ replace (
 	k8s.io/kubectl => k8s.io/kubectl v0.30.3
 	k8s.io/kubelet => k8s.io/kubelet v0.30.3
 	k8s.io/kubernetes => k8s.io/kubernetes v1.30.3
-	k8s.io/legacy-cloud-providers => k8s.io/legacy-cloud-providers v0.30.3
+	k8s.io/legacy-cloud-providers => k8s.io/legacy-cloud-providers v0.30.5
 	k8s.io/metrics => k8s.io/metrics v0.30.3
 	k8s.io/mount-utils => k8s.io/mount-utils v0.30.3
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.30.3
@@ -33,7 +33,7 @@ replace (
 
 require (
 	github.com/ehazlett/simplelog v0.0.0-20200226020431-d374894e92a4
-	github.com/harvester/go-common v0.0.0-20231214093547-3e3f7fdd879a
+	github.com/harvester/go-common 9576346cda75
 	github.com/jaypipes/ghw v0.8.1-0.20210701154532-dd036bd38c40
 	github.com/kevinburke/ssh_config v1.2.0
 	github.com/longhorn/longhorn-manager v1.7.1
@@ -41,16 +41,16 @@ require (
 	github.com/pilebones/go-udev v0.0.0-20210126000448-a3c2a7a4afb7
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/procfs v0.15.1
-	github.com/rancher/lasso v0.0.0-20240705194423-b2a060d103c1
+	github.com/rancher/lasso 8f384efc8813
 	github.com/rancher/wrangler/v3 v3.0.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
 	github.com/urfave/cli/v2 v2.3.0
 	golang.org/x/crypto v0.26.0
-	k8s.io/api v0.31.0
-	k8s.io/apimachinery v0.31.0
-	k8s.io/client-go v0.31.0
-	k8s.io/utils v0.0.0-20240821151609-f90d01438635
+	k8s.io/api v0.31.1
+	k8s.io/apimachinery v0.31.1
+	k8s.io/client-go v0.31.1
+	k8s.io/utils 49e7df575cb6
 )
 
 require (
