@@ -3,6 +3,7 @@ package blockdevice
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 
 	"github.com/sirupsen/logrus"
@@ -242,6 +243,13 @@ func convertBlockDeviceListToMap(bdList *diskv1.BlockDeviceList) (map[string]*di
 // returns true.
 func (s *Scanner) ApplyExcludeFiltersForDisk(disk *block.Disk) bool {
 	for _, filter := range s.ExcludeFilters {
+		if strings.HasPrefix(disk.Name, "dm-") {
+			// None of the existing filters can handle this case, but
+			// we need to exclude /dev/dm-* devices because they appear
+			// when LHv2 volumes are attached to VMs.
+			logrus.Debugf("block device /dev/%s ignored because it's a dm device", disk.Name)
+			return true
+		}
 		if filter.ApplyDiskFilter(disk) {
 			logrus.Debugf("block device /dev/%s ignored by %s", disk.Name, filter.Name)
 			return true

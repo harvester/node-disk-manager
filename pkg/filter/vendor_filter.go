@@ -8,10 +8,14 @@ import (
 const (
 	vendorFilterName            = "vendor filter"
 	vendorFilterDefaultLonghorn = "longhorn"
+	// This is a hack to make sure we skip active longhorn v2 volumes,
+	// which appear as /dev/nvme* devices.  They don't have a vendor,
+	// but do specify ID_MODEL=SPDK bdev Controller...
+	modelFilterDefaultSPDK = "SPDK bdev Controller"
 )
 
 var (
-	defaultExcludedVendors = []string{vendorFilterDefaultLonghorn}
+	defaultExcludedVendors = []string{vendorFilterDefaultLonghorn, modelFilterDefaultSPDK}
 )
 
 type vendorFilter struct {
@@ -36,5 +40,11 @@ func (vf *vendorFilter) Match(blockDevice *block.Disk) bool {
 	if blockDevice.Vendor != "" && utils.MatchesIgnoredCase(vf.vendors, blockDevice.Vendor) {
 		return true
 	}
-	return blockDevice.BusPath != "" && utils.ContainsIgnoredCase(vf.vendors, blockDevice.BusPath)
+	if blockDevice.BusPath != "" && utils.ContainsIgnoredCase(vf.vendors, blockDevice.BusPath) {
+		return true
+	}
+	if blockDevice.Model != "" && utils.MatchesIgnoredCase(vf.vendors, blockDevice.Model) {
+		return true
+	}
+	return false
 }
