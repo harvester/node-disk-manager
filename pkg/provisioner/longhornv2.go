@@ -135,11 +135,13 @@ func (p *LonghornV2Provisioner) Update() (isRequeueNeeded bool, err error) {
 
 	// Sync disk driver
 	if targetDisk, found := p.nodeObj.Spec.Disks[p.device.Name]; found {
-		nodeCpy := p.nodeObj.DeepCopy()
+		nodeObjCpy := p.nodeObj.DeepCopy()
 		targetDisk.DiskDriver = p.device.Spec.Provisioner.Longhorn.DiskDriver
-		nodeCpy.Spec.Disks[p.device.Name] = targetDisk
-		if _, err = p.nodesClient.Update(nodeCpy); err != nil {
-			isRequeueNeeded = true
+		nodeObjCpy.Spec.Disks[p.device.Name] = targetDisk
+		if !reflect.DeepEqual(p.nodeObj, nodeObjCpy) {
+			if _, err = p.nodesClient.Update(nodeObjCpy); err != nil {
+				isRequeueNeeded = true
+			}
 		}
 	}
 	return
