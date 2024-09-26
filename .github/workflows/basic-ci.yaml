@@ -11,6 +11,7 @@ on:
 
 env:
   LIBVIRT_DEFAULT_URI: "qemu:///system"
+  VM_DEPLOYED: false
 
 jobs:
   validation:
@@ -46,6 +47,7 @@ jobs:
           pushd ndm-vagrant-k3s
           yq e -i ".cluster_size = 1" settings.yaml
           ./new-cluster.sh
+          echo "VM_DEPLOYED=true" >> "$GITHUB_ENV"
           yq e -i ".longhorn_version = \"1.7.1\"" settings.yaml
           ./scripts/deploy_longhorn.sh
           cp ../ci/scripts/deploy_ndm.sh ./deploy_ndm.sh
@@ -78,12 +80,20 @@ jobs:
           echo Running integration tests
           NDM_HOME=`pwd` go test -v ./tests/...
       - name: "Get NDM logs"
-        if: steps.vm_deploy.conclusion == 'success'
+        if: always()
         run: |
+          if [ ${{ env.VM_DEPLOYED }} != 'true' ]; then
+            echo "VM is not deployed, skip getting logs"
+            exit 0
+          fi
           ./ci/scripts/get-debug-info.sh
       - name: "Tear Down / Cleanup"
-        if: steps.vm_deploy.conclusion == 'success'
+        if: always()
         run: |
+          if [ ${{ env.VM_DEPLOYED }} != 'true' ]; then
+            echo "VM is not deployed, skip VM destroy"
+            exit 0
+          fi
           pushd ndm-vagrant-k3s
           vagrant destroy -f --parallel
           popd
