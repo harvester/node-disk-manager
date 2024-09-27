@@ -292,7 +292,6 @@ func (s *Scanner) SaveBlockDevice(bd *diskv1.BlockDevice, autoProvisioned bool) 
 			if autoProvisioned {
 				bd.Spec.FileSystem.ForceFormatted = true
 				bd.Spec.FileSystem.Provisioned = true
-				bd.Spec.Provision = true
 			}
 			logrus.Infof("Add new block device %s with device: %s", bd.Name, bd.Spec.DevPath)
 			return s.Blockdevices.Create(bd)
