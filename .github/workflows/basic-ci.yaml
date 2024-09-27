@@ -11,6 +11,7 @@ on:
 
 env:
   LIBVIRT_DEFAULT_URI: "qemu:///system"
+  VM_DEPLOYED: false
 
 jobs:
   validation:
@@ -44,11 +45,21 @@ jobs:
     steps:
       - name: "Local Deployment (Harvester+Longhorn+Node-Disk-Manager) for testing"
         run: |
+<<<<<<< HEAD
           rm -rf ndm-vagrant-rancherd
           git clone https://github.com/harvester/vagrant-rancherd ndm-vagrant-rancherd
           pushd ndm-vagrant-rancherd
           ./new_cluster.sh
           yq e -i ".longhorn_version = \"1.5.3\"" settings.yaml
+=======
+          rm -rf ndm-vagrant-k3s
+          git clone https://github.com/bk201/vagrant-k3s ndm-vagrant-k3s
+          pushd ndm-vagrant-k3s
+          yq e -i ".cluster_size = 1" settings.yaml
+          ./new-cluster.sh
+          echo "VM_DEPLOYED=true" >> "$GITHUB_ENV"
+          yq e -i ".longhorn_version = \"1.7.1\"" settings.yaml
+>>>>>>> 78e0d91 (ci: make sure the if-condition works)
           ./scripts/deploy_longhorn.sh
           cp ../ci/scripts/deploy_ndm.sh ./deploy_ndm.sh
           ./deploy_ndm.sh
@@ -82,10 +93,22 @@ jobs:
       - name: "Get NDM logs"
         if: always()
         run: |
+          if [ ${{ env.VM_DEPLOYED }} != 'true' ]; then
+            echo "VM is not deployed, skip getting logs"
+            exit 0
+          fi
           ./ci/scripts/get-debug-info.sh
       - name: "Tear Down / Cleanup"
         if: always()
         run: |
+<<<<<<< HEAD
           pushd ndm-vagrant-rancherd
+=======
+          if [ ${{ env.VM_DEPLOYED }} != 'true' ]; then
+            echo "VM is not deployed, skip VM destroy"
+            exit 0
+          fi
+          pushd ndm-vagrant-k3s
+>>>>>>> 78e0d91 (ci: make sure the if-condition works)
           vagrant destroy -f --parallel
           popd
