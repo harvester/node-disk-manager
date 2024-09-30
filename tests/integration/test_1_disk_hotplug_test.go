@@ -34,18 +34,18 @@ import (
  */
 
 const (
-	hotplugTargetNodeName  = "ndm-vagrant-k3s_node1"
 	hotplugDiskXMLFileName = "/tmp/hotplug_disks/node1-sda.xml"
 	hotplugTargetDiskName  = "sda"
 )
 
 type HotPlugTestSuite struct {
 	suite.Suite
-	SSHClient      *goph.Client
-	clientSet      *clientset.Clientset
-	targetNodeName string
-	targetDiskName string
-	curBusPath     string // to make sure which path we deployed
+	SSHClient             *goph.Client
+	clientSet             *clientset.Clientset
+	targetNodeName        string
+	targetDiskName        string
+	hotplugTargetNodeName string
+	hotplugTargetBaseDir  string
 }
 
 func (s *HotPlugTestSuite) SetupSuite() {
@@ -84,6 +84,14 @@ func (s *HotPlugTestSuite) SetupSuite() {
 
 	s.clientSet, err = clientset.NewForConfig(config)
 	require.Equal(s.T(), err, nil, "New clientset should not get error")
+
+	cmd := fmt.Sprintf("ls %s |grep vagrant-k3s", os.Getenv("NDM_HOME"))
+	targetDirDomain, _, err := doCommand(cmd)
+	require.Equal(s.T(), err, nil, "Running command `%s` should not get error : %v", cmd, err)
+
+	s.hotplugTargetNodeName = fmt.Sprintf("%s_node1", strings.TrimSpace(targetDirDomain))
+	s.hotplugTargetBaseDir = fmt.Sprintf("/tmp/hotplug_disks/%s", strings.TrimSpace(targetDirDomain))
+
 }
 
 func (s *HotPlugTestSuite) AfterTest(_, _ string) {
@@ -117,9 +125,9 @@ func (s *HotPlugTestSuite) Test_0_PreCheckForDiskCount() {
 
 func (s *HotPlugTestSuite) Test_1_HotPlugRemoveDisk() {
 	// remove disk dynamically
-	cmd := fmt.Sprintf("virsh detach-disk %s %s --live", hotplugTargetNodeName, hotplugTargetDiskName)
+	cmd := fmt.Sprintf("virsh detach-disk %s %s --live", s.hotplugTargetNodeName, hotplugTargetDiskName)
 	_, _, err := doCommand(cmd)
-	require.Equal(s.T(), err, nil, "Running command `virsh detach-disk` should not get error")
+	require.Equal(s.T(), err, nil, "Running command `%s` should not get error", cmd)
 
 	// wait for controller handling
 	time.Sleep(5 * time.Second)
@@ -136,9 +144,10 @@ func (s *HotPlugTestSuite) Test_1_HotPlugRemoveDisk() {
 
 func (s *HotPlugTestSuite) Test_2_HotPlugAddDisk() {
 	// remove disk dynamically
-	cmd := fmt.Sprintf("virsh attach-device --domain %s --file %s --live", hotplugTargetNodeName, hotplugDiskXMLFileName)
+	hotplugDiskXMLFileName := fmt.Sprintf("%s/node1-sda.xml", s.hotplugTargetBaseDir)
+	cmd := fmt.Sprintf("virsh attach-device --domain %s --file %s --live", s.hotplugTargetNodeName, hotplugDiskXMLFileName)
 	_, _, err := doCommand(cmd)
-	require.Equal(s.T(), err, nil, "Running command `virsh attach-device` should not get error")
+	require.Equal(s.T(), err, nil, "Running command `%s` should not get error", cmd)
 
 	// wait for controller handling, the device will be changed need more time to wait for the controller handling
 	time.Sleep(30 * time.Second)
@@ -154,15 +163,16 @@ func (s *HotPlugTestSuite) Test_2_HotPlugAddDisk() {
 
 func (s *HotPlugTestSuite) Test_3_AddDuplicatedWWNDsik() {
 	// create another another disk raw file and xml
-	const (
-		originalDeviceRaw   = "/tmp/hotplug_disks/node1-sda.qcow2"
-		duplicatedDeviceXML = "/tmp/hotplug_disks/node1-sdb.xml"
-		duplicatedDeviceRaw = "/tmp/hotplug_disks/node1-sdb.qcow2"
-	)
+
+	originalDeviceRaw := fmt.Sprintf("%s/node1-sda.qcow2", s.hotplugTargetBaseDir)
+	duplicatedDeviceXML := fmt.Sprintf("%s/node1-sdb.xml", s.hotplugTargetBaseDir)
+	duplicatedDeviceRaw := fmt.Sprintf("%s/node1-sdb.qcow2", s.hotplugTargetBaseDir)
+
 	cmdCpyRawFile := fmt.Sprintf("cp %s %s", originalDeviceRaw, duplicatedDeviceRaw)
 	_, _, err := doCommand(cmdCpyRawFile)
-	require.Equal(s.T(), err, nil, "Running command `cp the raw device file` should not get error")
+	require.Equal(s.T(), err, nil, "Running command `%s` should not get error", cmdCpyRawFile)
 
+	hotplugDiskXMLFileName := fmt.Sprintf("%s/node1-sda.xml", s.hotplugTargetBaseDir)
 	disk, err := utils.DiskXMLReader(hotplugDiskXMLFileName)
 	require.Equal(s.T(), err, nil, "Read xml file should not get error")
 	disk.Source.File = duplicatedDeviceRaw
@@ -171,9 +181,9 @@ func (s *HotPlugTestSuite) Test_3_AddDuplicatedWWNDsik() {
 	err = utils.XMLWriter(duplicatedDeviceXML, disk)
 	require.Equal(s.T(), err, nil, "Write xml file should not get error")
 
-	cmd := fmt.Sprintf("virsh attach-device --domain %s --file %s --live", hotplugTargetNodeName, duplicatedDeviceXML)
+	cmd := fmt.Sprintf("virsh attach-device --domain %s --file %s --live", s.hotplugTargetNodeName, duplicatedDeviceXML)
 	_, _, err = doCommand(cmd)
-	require.Equal(s.T(), err, nil, "Running command `virsh attach-device` should not get error")
+	require.Equal(s.T(), err, nil, "Running command `%s` should not get error", cmd)
 
 	// wait for controller handling
 	time.Sleep(5 * time.Second)
@@ -186,9 +196,9 @@ func (s *HotPlugTestSuite) Test_3_AddDuplicatedWWNDsik() {
 	require.Equal(s.T(), 1, len(blockdeviceList.Items), "We should have one disks because duplicated wwn should not added")
 
 	// cleanup this disk
-	cmd = fmt.Sprintf("virsh detach-disk %s %s --live", hotplugTargetNodeName, "sdb")
+	cmd = fmt.Sprintf("virsh detach-disk %s %s --live", s.hotplugTargetNodeName, "sdb")
 	_, _, err = doCommand(cmd)
-	require.Equal(s.T(), err, nil, "Running command `virsh detach-disk` should not get error")
+	require.Equal(s.T(), err, nil, "Running command `%s` should not get error", cmd)
 
 	// wait for controller handling
 	time.Sleep(5 * time.Second)
@@ -196,9 +206,9 @@ func (s *HotPlugTestSuite) Test_3_AddDuplicatedWWNDsik() {
 
 func (s *HotPlugTestSuite) Test_4_RemoveInactiveDisk() {
 	// remove disk dynamically
-	cmd := fmt.Sprintf("virsh detach-disk %s %s --live", hotplugTargetNodeName, hotplugTargetDiskName)
+	cmd := fmt.Sprintf("virsh detach-disk %s %s --live", s.hotplugTargetNodeName, hotplugTargetDiskName)
 	_, _, err := doCommand(cmd)
-	require.Equal(s.T(), err, nil, "Running command `virsh detach-disk` should not get error")
+	require.Equal(s.T(), err, nil, "Running command `%s` should not get error", cmd)
 
 	// wait for controller handling
 	time.Sleep(5 * time.Second)
