@@ -25,7 +25,7 @@ jobs:
         run: |
           make validate
           make validate-ci
-  main_jobs:
+  job-new-installation:
     needs: validation
     runs-on:
       - self-hosted
@@ -42,38 +42,37 @@ jobs:
       - name: "Local Deployment (Harvester+Longhorn+Node-Disk-Manager) for testing"
         id: vm_deploy
         run: |
-          rm -rf ndm-vagrant-k3s
-          git clone https://github.com/bk201/vagrant-k3s ndm-vagrant-k3s
-          pushd ndm-vagrant-k3s
+          rm -rf ndm-new-vagrant-k3s
+          git clone https://github.com/bk201/vagrant-k3s ndm-new-vagrant-k3s
+          pushd ndm-new-vagrant-k3s
           yq e -i ".cluster_size = 1" settings.yaml
           ./new-cluster.sh
           echo "VM_DEPLOYED=true" >> "$GITHUB_ENV"
           yq e -i ".longhorn_version = \"1.6.3\"" settings.yaml
           ./scripts/deploy_longhorn.sh
+          popd 
+      - name: "Patch Image target"
+        run: |
+          ./ci/scripts/patch-ttl-repo.sh
+          echo "NDM override result as below:"
+          cat ci/charts/ndm-override.yaml
+      - name: "Deploy NDM"
+        run: |
+          pushd ndm-new-vagrant-k3s
           cp ../ci/scripts/deploy_ndm.sh ./deploy_ndm.sh
+          cp ../ci/charts/ndm-override.yaml ./ndm-override.yaml
           ./deploy_ndm.sh
           popd
       - name: "Add disk"
         run: |
-          pushd ndm-vagrant-k3s
-          ./scripts/attach-disk.sh node1
+          pushd ndm-new-vagrant-k3s
+          ./scripts/attach-disk.sh node1 ndm-new-vagrant-k3s
           sleep 30
-          popd
-      - name: "Patch Image target (for upgrade)"
-        run: |
-          ./ci/scripts/patch-ttl-repo.sh
-          echo "NDM override result as below:"
-          cat ci/charts/ndm-override.yaml 
-      - name: "Upgrade NDM"
-        run: |
-          pushd ndm-vagrant-k3s
-          cp ../ci/scripts/upgrade_ndm.sh ./upgrade_ndm.sh
-          ./upgrade_ndm.sh
           popd
       - name: "Run Basic Test"
         id: basic-test
         run: |
-          pushd ndm-vagrant-k3s
+          pushd ndm-new-vagrant-k3s
           vagrant ssh-config node1 > ../ssh-config
           cp kubeconfig ../kubeconfig
           popd
@@ -94,6 +93,81 @@ jobs:
             echo "VM is not deployed, skip VM destroy"
             exit 0
           fi
-          pushd ndm-vagrant-k3s
+          rm -rf /tmp/hotplug_disks/ndm-new-vagrant-k3s
+          pushd ndm-new-vagrant-k3s
+          vagrant destroy -f --parallel
+          popd
+
+  jobs-upgrade:
+    needs: validation
+    runs-on:
+      - self-hosted
+      - golang
+    steps:
+      - name: "Clone and check"
+        uses: actions/checkout@v3
+      - name: "Build the Image for the Integration Test"
+        run: |
+          BUILD_FOR_CI=true make
+          ./ci/scripts/patch-ttl-repo.sh
+          echo "NDM override result as below:"
+          cat ci/charts/ndm-override.yaml
+      - name: "Local Deployment (Harvester+Longhorn+Node-Disk-Manager) for testing"
+        id: vm_deploy
+        run: |
+          rm -rf ndm-upgrade-vagrant-k3s
+          git clone https://github.com/bk201/vagrant-k3s ndm-upgrade-vagrant-k3s
+          pushd ndm-upgrade-vagrant-k3s
+          yq e -i ".cluster_size = 1" settings.yaml
+          ./new-cluster.sh
+          echo "VM_DEPLOYED=true" >> "$GITHUB_ENV"
+          yq e -i ".longhorn_version = \"1.6.3\"" settings.yaml
+          ./scripts/deploy_longhorn.sh
+          cp ../ci/scripts/deploy_ndm.sh ./deploy_ndm.sh
+          ./deploy_ndm.sh
+          popd
+      - name: "Add disk"
+        run: |
+          pushd ndm-upgrade-vagrant-k3s
+          ./scripts/attach-disk.sh node1 ndm-upgrade-vagrant-k3s
+          sleep 30
+          popd
+      - name: "Patch Image target (for upgrade)"
+        run: |
+          ./ci/scripts/patch-ttl-repo.sh
+          echo "NDM override result as below:"
+          cat ci/charts/ndm-override.yaml 
+      - name: "Upgrade NDM"
+        run: |
+          pushd ndm-upgrade-vagrant-k3s
+          cp ../ci/scripts/upgrade_ndm.sh ./upgrade_ndm.sh
+          ./upgrade_ndm.sh
+          popd
+      - name: "Run Basic Test"
+        id: basic-test
+        run: |
+          pushd ndm-upgrade-vagrant-k3s
+          vagrant ssh-config node1 > ../ssh-config
+          cp kubeconfig ../kubeconfig
+          popd
+          echo Running integration tests
+          NDM_HOME=`pwd` go test -v ./tests/...
+      - name: "Get NDM logs"
+        if: always()
+        run: |
+          if [ ${{ env.VM_DEPLOYED }} != 'true' ]; then
+            echo "VM is not deployed, skip getting logs"
+            exit 0
+          fi
+          ./ci/scripts/get-debug-info.sh
+      - name: "Tear Down / Cleanup"
+        if: always()
+        run: |
+          if [ ${{ env.VM_DEPLOYED }} != 'true' ]; then
+            echo "VM is not deployed, skip VM destroy"
+            exit 0
+          fi
+          rm -rf /tmp/hotplug_disks/ndm-upgrade-vagrant-k3s
+          pushd ndm-upgrade-vagrant-k3s
           vagrant destroy -f --parallel
           popd
