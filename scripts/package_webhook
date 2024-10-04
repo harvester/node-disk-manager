@@ -1,0 +1,22 @@
+#!/bin/bash
+set -e
+
+source $(dirname $0)/version
+
+cd $(dirname $0)/..
+
+IMAGE=${REPO}/node-disk-manager-webhook:${TAG}
+if [[ -n ${BUILD_FOR_CI} ]]; then
+    IMAGE=ttl.sh/node-disk-manager-webhook-${TAG}:1h
+fi
+DOCKERFILE=package/Dockerfile.webhook
+if [ -e ${DOCKERFILE}.${ARCH} ]; then
+    DOCKERFILE=${DOCKERFILE}.${ARCH}
+fi
+
+buildx build --load -f ${DOCKERFILE} -t ${IMAGE} .
+echo Built ${IMAGE}
+if [[ -n ${BUILD_FOR_CI} ]]; then
+    docker push ${IMAGE}
+    echo ${IMAGE} pushed
+fi
