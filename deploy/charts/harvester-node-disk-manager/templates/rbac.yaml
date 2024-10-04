@@ -35,3 +35,43 @@ subjects:
   - kind: ServiceAccount
     name: {{ include "harvester-node-disk-manager.name" . }}
     namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: harvester-node-disk-manager-webhook
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: harvester-node-disk-manager-webhook
+rules:
+  - apiGroups: [ "" ]
+    resources: [ "secrets", "configmaps" ]
+    verbs: [ "*" ]
+  - apiGroups: [ "harvesterhci.io" ]
+    resources: [ "blockdevices" ]
+    verbs: [ "*" ]
+  - apiGroups: [ "apiregistration.k8s.io" ]
+    resources: [ "apiservices" ]
+    verbs: [ "get", "watch", "list" ]
+  - apiGroups: [ "apiextensions.k8s.io" ]
+    resources: [ "customresourcedefinitions" ]
+    verbs: [ "get", "watch", "list" ]
+  - apiGroups: [ "admissionregistration.k8s.io" ]
+    resources: [ "validatingwebhookconfigurations", "mutatingwebhookconfigurations" ]
+    verbs: [ "*" ]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: harvester-node-disk-manager-webhook
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: harvester-node-disk-manager-webhook
+subjects:
+  - kind: ServiceAccount
+    name: harvester-node-disk-manager-webhook
+    namespace: {{ .Release.Namespace }}
