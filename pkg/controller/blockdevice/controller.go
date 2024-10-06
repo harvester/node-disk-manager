@@ -111,6 +111,10 @@ func (c *Controller) OnBlockDeviceChange(_ string, device *diskv1.BlockDevice) (
 		logrus.Warnf("Failed to generate provisioner for device %s: %v", device.Name, err)
 		return nil, err
 	}
+	if !reflect.DeepEqual(device, deviceCpy) {
+		logrus.Debugf("Update block device %s for new provisioner state", device.Name)
+		return c.Blockdevices.Update(deviceCpy)
+	}
 	if provisionerInst == nil {
 		logrus.Infof("Skip device %s as no provisioner found or not configured", device.Name)
 		return nil, nil
@@ -207,25 +211,31 @@ func (c *Controller) finalizeBlockDevice(oldBd, newBd *diskv1.BlockDevice, devPa
 }
 
 func (c *Controller) generateProvisioner(device *diskv1.BlockDevice) (provisioner.Provisioner, error) {
-	if device.Spec.Provisioner == nil && !device.Spec.FileSystem.Provisioned && device.Status.ProvisionPhase != diskv1.ProvisionPhaseProvisioned {
+	// skip the non-provisioned device
+	if device.Spec.Provisioner == nil && device.Status.ProvisionPhase != diskv1.ProvisionPhaseProvisioned {
+		return nil, nil
+	}
+	// upgrade case, we need to update some fields
+	if device.Spec.Provisioner == nil && device.Status.ProvisionPhase == diskv1.ProvisionPhaseProvisioned {
+		device.Spec.Provision = true
+		device.Spec.FileSystem.Provisioned = false
+		provisionerLHV1 := &diskv1.LonghornProvisionerInfo{
+			EngineVersion: provisioner.TypeLonghornV1,
+		}
+		device.Spec.Provisioner = &diskv1.ProvisionerInfo{
+			Longhorn: provisionerLHV1,
+		}
 		return nil, nil
 	}
 	logrus.Infof("Generate provisioner from device %s, content: %v", device.Name, device.Spec.Provisioner)
 	// set default
 	provisionerType := provisioner.TypeLonghornV1
 	if device.Spec.Provisioner != nil {
-		// **TODO**: we should use webhook to validate the provisioner type (and number)
-		numProvisioner := 0
 		if device.Spec.Provisioner.Longhorn != nil {
-			numProvisioner++
 			provisionerType = device.Spec.Provisioner.Longhorn.EngineVersion
 		}
 		if device.Spec.Provisioner.LVM != nil {
-			numProvisioner++
 			provisionerType = provisioner.TypeLVM
-		}
-		if numProvisioner > 1 {
-			return nil, fmt.Errorf("multiple provisioner types found for block device %s", device.Name)
 		}
 	}
 	switch provisionerType {
@@ -315,7 +325,13 @@ func (c *Controller) updateDeviceStatus(device *diskv1.BlockDevice, devPath stri
 	if needAutoProvision {
 		logrus.Infof("Auto provisioning block device %s", device.Name)
 		device.Spec.FileSystem.ForceFormatted = true
-		device.Spec.FileSystem.Provisioned = true
+		device.Spec.Provision = true
+		device.Spec.Provisioner = &diskv1.ProvisionerInfo{
+			Longhorn: &diskv1.LonghornProvisionerInfo{
+				EngineVersion: provisioner.TypeLonghornV1,
+			},
+		}
+
 	}
 	return nil
 }
@@ -402,16 +418,13 @@ func canSkipBlockDeviceChange(device *diskv1.BlockDevice, nodeName string) bool 
 }
 
 func needProvisionerUnprovision(device *diskv1.BlockDevice) bool {
-	return (!device.Spec.FileSystem.Provisioned && !device.Spec.Provision) &&
-		device.Status.ProvisionPhase != diskv1.ProvisionPhaseUnprovisioned
+	return !device.Spec.Provision && device.Status.ProvisionPhase != diskv1.ProvisionPhaseUnprovisioned
 }
 
 func needProvisionerUpdate(oldBd, newBd *diskv1.BlockDevice) bool {
-	return oldBd.Status.ProvisionPhase == diskv1.ProvisionPhaseProvisioned &&
-		(newBd.Spec.FileSystem.Provisioned || newBd.Spec.Provision)
+	return oldBd.Status.ProvisionPhase == diskv1.ProvisionPhaseProvisioned && newBd.Spec.Provision
 }
 
 func needProvisionerProvision(oldBd, newBd *diskv1.BlockDevice) bool {
-	return oldBd.Status.ProvisionPhase == diskv1.ProvisionPhaseUnprovisioned &&
-		(newBd.Spec.FileSystem.Provisioned || newBd.Spec.Provision)
+	return oldBd.Status.ProvisionPhase == diskv1.ProvisionPhaseUnprovisioned && newBd.Spec.Provision
 }
