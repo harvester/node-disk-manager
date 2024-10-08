@@ -51,6 +51,27 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+Webhook labels
+*/}}
+{{- define "harvester-node-disk-manager-webhook.labels" -}}
+helm.sh/chart: {{ include "harvester-node-disk-manager.chart" . }}
+{{ include "harvester-node-disk-manager-webhook.selectorLabels" . }}
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/component: webhook
+{{- end }}
+
+{{/*
+Webhook Selector labels
+*/}}
+{{- define "harvester-node-disk-manager-webhook.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "harvester-node-disk-manager.name" . }}-webhook
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{/*
 Create the name of the service account to use
 */}}
 {{- define "harvester-node-disk-manager.serviceAccountName" -}}

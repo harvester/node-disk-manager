@@ -62,7 +62,7 @@ sleep 30 # wait 30 seconds for ndm respawn pods
 
 wait_ndm_ready
 # check image
-pod_name=$(kubectl get pods -n harvester-system |grep Running |grep ^harvester-node-disk-manager|head -n1 |awk '{print $1}')
+pod_name=$(kubectl get pods -n harvester-system |grep Running |grep -v webhook |grep ^harvester-node-disk-manager|head -n1 |awk '{print $1}')
 container_img=$(kubectl get pods ${pod_name} -n harvester-system -o yaml |yq -e .spec.containers[0].image |tr ":" \n)
 yaml_img=$(yq -e .image.repository ndm-override.yaml)
 if grep -q ${yaml_img} <<< ${container_img}; then

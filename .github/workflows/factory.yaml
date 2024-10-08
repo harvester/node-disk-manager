@@ -11,6 +11,7 @@ on:
 env:
   repo: "rancher"
   controllerImageName: "harvester-node-disk-manager"
+  webhookImageName: "harvester-node-disk-manager-webhook"
 
 jobs:
   dapper-build:
@@ -55,3 +56,13 @@ jobs:
         file: package/Dockerfile
         push: ${{ inputs.push }}
         tags: ${{ env.repo }}/${{ env.controllerImageName }}:${{ inputs.tag }}
+
+    - name: Docker Build (Webhook)
+      uses: docker/build-push-action@v5
+      with:
+        provenance: false
+        context: .
+        platforms: linux/amd64,linux/arm64
+        file: package/Dockerfile.webhook
+        push: ${{ inputs.push }}
+        tags: ${{ env.repo }}/${{ env.webhookImageName }}:${{ inputs.tag }}

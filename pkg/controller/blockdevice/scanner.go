@@ -16,6 +16,7 @@ import (
 	"github.com/harvester/node-disk-manager/pkg/block"
 	"github.com/harvester/node-disk-manager/pkg/filter"
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
+	"github.com/harvester/node-disk-manager/pkg/provisioner"
 )
 
 type Scanner struct {
@@ -291,7 +292,12 @@ func (s *Scanner) SaveBlockDevice(bd *diskv1.BlockDevice, autoProvisioned bool) 
 		if errors.IsNotFound(err) {
 			if autoProvisioned {
 				bd.Spec.FileSystem.ForceFormatted = true
-				bd.Spec.FileSystem.Provisioned = true
+				bd.Spec.Provision = true
+				bd.Spec.Provisioner = &diskv1.ProvisionerInfo{
+					Longhorn: &diskv1.LonghornProvisionerInfo{
+						EngineVersion: provisioner.TypeLonghornV1,
+					},
+				}
 			}
 			logrus.Infof("Add new block device %s with device: %s", bd.Name, bd.Spec.DevPath)
 			return s.Blockdevices.Create(bd)
@@ -309,7 +315,7 @@ func (s *Scanner) SaveBlockDevice(bd *diskv1.BlockDevice, autoProvisioned bool) 
 // - disk hasn't yet been force formatted
 // - disk matches auto-provisioned patterns
 func (s *Scanner) NeedsAutoProvision(oldBd *diskv1.BlockDevice, autoProvisionPatternMatches bool) bool {
-	return !oldBd.Spec.FileSystem.Provisioned && !oldBd.Spec.Provision && autoProvisionPatternMatches && oldBd.Status.DeviceStatus.FileSystem.LastFormattedAt == nil
+	return !oldBd.Spec.Provision && autoProvisionPatternMatches && oldBd.Status.DeviceStatus.FileSystem.LastFormattedAt == nil
 }
 
 // isDevPathChanged returns true if the device path has changed.
