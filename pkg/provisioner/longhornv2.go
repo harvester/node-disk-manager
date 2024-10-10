@@ -30,6 +30,14 @@ func NewLHV2Provisioner(
 	if !cacheDiskTags.Initialized() {
 		return nil, errors.New(ErrorCacheDiskTagsNotInitialized)
 	}
+	if device.Spec.Provisioner.Longhorn.DiskDriver == longhornv1.DiskDriverNone {
+		// We need to force DiskDriver to "auto" if it's not explicitly set,
+		// because Longhorn also does that internally.  If we don't do it
+		// here, the subsequent reflect.DeepEqual() in our Update() function
+		// will always fail because we have an empty string, but the LHN CR
+		// has it set to "auto" which results in a weird resync loop.
+		device.Spec.Provisioner.Longhorn.DiskDriver = longhornv1.DiskDriverAuto
+	}
 	baseProvisioner := &provisioner{
 		name:      TypeLonghornV2,
 		blockInfo: block,
@@ -85,9 +93,6 @@ func (p *LonghornV2Provisioner) Provision() (isRequeueNeeded bool, err error) {
 		return false, err
 	}
 
-	// If diskDriver is an empty string, longhorn will map that to "auto" internally
-	diskDriver := p.device.Spec.Provisioner.Longhorn.DiskDriver
-
 	diskSpec := longhornv1.DiskSpec{
 		Type:              longhornv1.DiskTypeBlock,
 		Path:              devPath,
@@ -95,7 +100,7 @@ func (p *LonghornV2Provisioner) Provision() (isRequeueNeeded bool, err error) {
 		EvictionRequested: false,
 		StorageReserved:   0,
 		Tags:              tags,
-		DiskDriver:        diskDriver,
+		DiskDriver:        p.device.Spec.Provisioner.Longhorn.DiskDriver,
 	}
 
 	// We're intentionally not trying to sync disk tags from longhorn if the
