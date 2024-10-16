@@ -8,6 +8,10 @@ import (
 	"github.com/harvester/webhook/pkg/config"
 	"github.com/harvester/webhook/pkg/server"
 	"github.com/harvester/webhook/pkg/server/admission"
+	"github.com/rancher/wrangler/v3/pkg/generated/controllers/core"
+	ctlcorev1 "github.com/rancher/wrangler/v3/pkg/generated/controllers/core/v1"
+	ctlstorage "github.com/rancher/wrangler/v3/pkg/generated/controllers/storage"
+	ctlstoragev1 "github.com/rancher/wrangler/v3/pkg/generated/controllers/storage/v1"
 	"github.com/rancher/wrangler/v3/pkg/kubeconfig"
 	"github.com/rancher/wrangler/v3/pkg/signals"
 	"github.com/rancher/wrangler/v3/pkg/start"
@@ -23,7 +27,9 @@ import (
 const webhookName = "harvester-node-disk-manager-webhook"
 
 type resourceCaches struct {
-	bdCache ctldiskv1.BlockDeviceCache
+	bdCache           ctldiskv1.BlockDeviceCache
+	storageClassCache ctlstoragev1.StorageClassCache
+	pvCache           ctlcorev1.PersistentVolumeCache
 }
 
 func main() {
@@ -109,7 +115,7 @@ func runWebhookServer(ctx context.Context, cfg *rest.Config, options *config.Opt
 		bdMutator,
 	}
 
-	bdValidator := blockdevice.NewBlockdeviceValidator(resourceCaches.bdCache)
+	bdValidator := blockdevice.NewBlockdeviceValidator(resourceCaches.bdCache, resourceCaches.storageClassCache, resourceCaches.pvCache)
 	var validators = []admission.Validator{
 		bdValidator,
 	}
@@ -138,9 +144,19 @@ func newCaches(ctx context.Context, cfg *rest.Config, threadiness int) (*resourc
 	if err != nil {
 		return nil, err
 	}
-	starters = append(starters, disks)
+	storageFactory, err := ctlstorage.NewFactoryFromConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	coreFactory, err := core.NewFactoryFromConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	starters = append(starters, disks, storageFactory, coreFactory)
 	resourceCaches := &resourceCaches{
-		bdCache: disks.Harvesterhci().V1beta1().BlockDevice().Cache(),
+		bdCache:           disks.Harvesterhci().V1beta1().BlockDevice().Cache(),
+		storageClassCache: storageFactory.Storage().V1().StorageClass().Cache(),
+		pvCache:           coreFactory.Core().V1().PersistentVolume().Cache(),
 	}
 
 	if err := start.All(ctx, threadiness, starters...); err != nil {
