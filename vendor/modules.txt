@@ -215,6 +215,8 @@ github.com/rancher/wrangler/v3/pkg/generated/controllers/core
 github.com/rancher/wrangler/v3/pkg/generated/controllers/core/v1
 github.com/rancher/wrangler/v3/pkg/generated/controllers/rbac
 github.com/rancher/wrangler/v3/pkg/generated/controllers/rbac/v1
+github.com/rancher/wrangler/v3/pkg/generated/controllers/storage
+github.com/rancher/wrangler/v3/pkg/generated/controllers/storage/v1
 github.com/rancher/wrangler/v3/pkg/generic
 github.com/rancher/wrangler/v3/pkg/gvk
 github.com/rancher/wrangler/v3/pkg/kubeconfig
