@@ -97,6 +97,8 @@ func (p *LonghornV1Provisioner) Provision() (bool, error) {
 	}
 
 	if (synced && !diskv1.DiskAddedToNode.IsTrue(p.device)) || provisioned {
+		// mark `filesystem.provisioned` to true, that the mutator could work
+		p.device.Spec.FileSystem.Provisioned = true
 		logrus.Debugf("Set blockdevice CRD (%v) to provisioned", p.device)
 		msg := fmt.Sprintf("Added disk %s to longhorn node `%s` as an additional disk", p.device.Name, p.nodeObj.Name)
 		setCondDiskAddedToNodeTrue(p.device, msg, diskv1.ProvisionPhaseProvisioned)
@@ -111,6 +113,7 @@ func (p *LonghornV1Provisioner) UnProvision() (bool, error) {
 
 	// inner functions
 	updateProvisionPhaseUnprovisioned := func() {
+		p.device.Spec.FileSystem.Provisioned = false
 		msg := fmt.Sprintf("Disk not in longhorn node `%s`", p.nodeObj.Name)
 		setCondDiskAddedToNodeFalse(p.device, msg, diskv1.ProvisionPhaseUnprovisioned)
 	}
