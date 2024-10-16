@@ -218,7 +218,6 @@ func (c *Controller) generateProvisioner(device *diskv1.BlockDevice) (provisione
 	// upgrade case, we need to update some fields
 	if device.Spec.Provisioner == nil && device.Status.ProvisionPhase == diskv1.ProvisionPhaseProvisioned {
 		device.Spec.Provision = true
-		device.Spec.FileSystem.Provisioned = false
 		provisionerLHV1 := &diskv1.LonghornProvisionerInfo{
 			EngineVersion: provisioner.TypeLonghornV1,
 		}

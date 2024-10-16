@@ -62,7 +62,7 @@ func (m *Mutator) Update(req *admission.Request, oldObj, newObj runtime.Object) 
 		return patchOps, nil
 	}
 	// means we need to disable, align the .spec.filesystem.provisioned with .spec.provision -> false
-	if prevProvision && !newBd.Spec.FileSystem.Provisioned {
+	if prevProvision && !newBd.Spec.FileSystem.Provisioned && oldBd.Spec.FileSystem.Provisioned {
 		if newBd.Spec.Provision {
 			patchProvision := admission.PatchOp{
 				Op:    admission.PatchOpReplace,
