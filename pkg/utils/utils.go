@@ -19,6 +19,10 @@ const (
 	DiskRemoveTag = "harvester-ndm-disk-remove"
 	// Harvester Namespace
 	HarvesterNS = "harvester-system"
+	// LVMCSIDriver is the LVM CSI driver name
+	LVMCSIDriver = "lvm.driver.harvesterhci.io"
+	// LVMTopologyNodeKey is the key of LVM topology node
+	LVMTopologyNodeKey = "topology.lvm.csi/node"
 )
 
 var CmdTimeoutError error
