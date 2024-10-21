@@ -13,6 +13,7 @@ import (
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
 	ctllonghornv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta2"
+	"github.com/harvester/node-disk-manager/pkg/utils"
 )
 
 type LonghornV2Provisioner struct {
@@ -55,11 +56,15 @@ func NewLHV2Provisioner(
 	}, nil
 }
 
-// Format is a no-op for V2 disks, but we still need to return
-// isFormatComplete == true to indicate the disk is ready for use.
-func (p *LonghornV2Provisioner) Format(string) (isFormatComplete, isRequeueNeeded bool, err error) {
-	isFormatComplete = true
-	return
+// Format should really be a no-op for V2 disks given they just take the
+// whole device, but for NVMe devices where Longhorn decides to use the
+// nvme bdev driver, device activation will fail if there's an existing
+// filesystem on the device, so we need to make sure to wipe before use.
+func (p *LonghornV2Provisioner) Format(devPath string) (isFormatComplete, isRequeueNeeded bool, err error) {
+	if _, err = utils.NewExecutor().Execute("wipefs", []string{"-a", devPath}); err != nil {
+		return false, false, err
+	}
+	return true, false, nil
 }
 
 // UnFormat is a no-op for V2 disks
