@@ -40,8 +40,11 @@ func (l *LVMProvisioner) GetProvisionerName() string {
 	return l.name
 }
 
-func (l *LVMProvisioner) Format(string) (bool, bool, error) {
-	// LVM provisioner does not need format
+// Format operation on the LVM use to ensure the device is clean and ready to be used by LVM.
+func (l *LVMProvisioner) Format(devPath string) (isFormatComplete, isRequeueNeeded bool, err error) {
+	if _, err := utils.NewExecutor().Execute("wipefs", []string{"-a", devPath}); err != nil {
+		return false, false, err
+	}
 	return true, false, nil
 }
 
