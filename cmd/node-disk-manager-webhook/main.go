@@ -22,12 +22,14 @@ import (
 	ctldisk "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io"
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/webhook/blockdevice"
+	"github.com/harvester/node-disk-manager/pkg/webhook/storageclass"
 )
 
 const webhookName = "harvester-node-disk-manager-webhook"
 
 type resourceCaches struct {
 	bdCache           ctldiskv1.BlockDeviceCache
+	lvmVGCache        ctldiskv1.LVMVolumeGroupCache
 	storageClassCache ctlstoragev1.StorageClassCache
 	pvCache           ctlcorev1.PersistentVolumeCache
 }
@@ -116,8 +118,10 @@ func runWebhookServer(ctx context.Context, cfg *rest.Config, options *config.Opt
 	}
 
 	bdValidator := blockdevice.NewBlockdeviceValidator(resourceCaches.bdCache, resourceCaches.storageClassCache, resourceCaches.pvCache)
+	scValidator := storageclass.NewStorageClassValidator(resourceCaches.lvmVGCache)
 	var validators = []admission.Validator{
 		bdValidator,
+		scValidator,
 	}
 
 	if err := webhookServer.RegisterMutators(mutators...); err != nil {
@@ -155,6 +159,7 @@ func newCaches(ctx context.Context, cfg *rest.Config, threadiness int) (*resourc
 	starters = append(starters, disks, storageFactory, coreFactory)
 	resourceCaches := &resourceCaches{
 		bdCache:           disks.Harvesterhci().V1beta1().BlockDevice().Cache(),
+		lvmVGCache:        disks.Harvesterhci().V1beta1().LVMVolumeGroup().Cache(),
 		storageClassCache: storageFactory.Storage().V1().StorageClass().Cache(),
 		pvCache:           coreFactory.Core().V1().PersistentVolume().Cache(),
 	}
