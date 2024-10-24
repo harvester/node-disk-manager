@@ -42,8 +42,18 @@ func (l *LVMProvisioner) GetProvisionerName() string {
 
 // Format operation on the LVM use to ensure the device is clean and ready to be used by LVM.
 func (l *LVMProvisioner) Format(devPath string) (isFormatComplete, isRequeueNeeded bool, err error) {
+	// if the pv is created, skip wipefs.
+	// Because the device is already in use, wipefs will break the device.
+	pvResult, err := lvm.GetPVScanResult()
+	if err != nil {
+		return false, true, err
+	}
+	if _, found := pvResult[devPath]; found {
+		return true, false, nil
+	}
+	logrus.Infof("Wipe the device %s", devPath)
 	if _, err := utils.NewExecutor().Execute("wipefs", []string{"-a", devPath}); err != nil {
-		return false, false, err
+		return false, true, err
 	}
 	return true, false, nil
 }
