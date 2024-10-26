@@ -233,7 +233,7 @@ func (s *HotPlugTestSuite) Test_4_RemoveInactiveDisk() {
 	curBlockdevice, err = bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
 	require.Equal(s.T(), err, nil, "Get BlockdevicesList should not get error before we want to check remove")
 	require.Equal(s.T(), curBlockdevice.Status.DeviceStatus.FileSystem.MountPoint, "", "Mountpoint should be empty after we remove disk!")
-	require.Equal(s.T(), diskv1.ProvisionPhaseUnprovisioned, curBlockdevice.Status.ProvisionPhase, "Block device provisionPhase should be Provisioned")
+	require.Equal(s.T(), diskv1.ProvisionPhaseUnprovisioned, curBlockdevice.Status.ProvisionPhase, "Block device provisionPhase should be Unprovisioned")
 }
 
 func doCommand(cmdString string) (string, string, error) {
