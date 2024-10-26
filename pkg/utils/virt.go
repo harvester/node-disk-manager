@@ -1,9 +1,12 @@
 package utils
 
 import (
+	"crypto/sha512"
+	"encoding/hex"
 	"encoding/xml"
 	"fmt"
 	"os"
+	"time"
 )
 
 type Disk struct {
@@ -66,4 +69,12 @@ func XMLWriter(targetFilePath string, xmlData any) error {
 	}
 
 	return nil
+}
+
+func GenHash() string {
+	timestamp := time.Now().Unix()
+	timestampStr := fmt.Sprintf("%d", timestamp)
+	hash := sha512.Sum512([]byte(timestampStr))
+	hashStr := hex.EncodeToString(hash[:])
+	return hashStr[:6]
 }
