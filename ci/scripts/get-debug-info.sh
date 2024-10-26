@@ -12,3 +12,7 @@ kubectl logs $NDMPOD -n harvester-system |grep -v Skip
 # get blockdevices info
 echo "========== Dump blockdevices =========="
 kubectl get blockdevice -n longhorn-system -o yaml
+
+# get lvmvgs info
+echo "========== Dump LVMVolumeGroups =========="
+kubectl get lvmvg -n harvester-system -o yaml
