@@ -3,6 +3,7 @@ package provisioner
 import (
 	"fmt"
 	"reflect"
+	"sync"
 
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -20,9 +21,10 @@ type LVMProvisioner struct {
 	vgName   string
 	nodeName string
 	vgClient ctldiskv1.LVMVolumeGroupController
+	lock     *sync.Mutex
 }
 
-func NewLVMProvisioner(vgName, nodeName string, lvmVGs ctldiskv1.LVMVolumeGroupController, device *diskv1.BlockDevice, blockInfo block.Info) (Provisioner, error) {
+func NewLVMProvisioner(vgName, nodeName string, lvmVGs ctldiskv1.LVMVolumeGroupController, device *diskv1.BlockDevice, blockInfo block.Info, lock *sync.Mutex) (Provisioner, error) {
 	baseProvisioner := &provisioner{
 		name:      TypeLVM,
 		blockInfo: blockInfo,
@@ -33,6 +35,7 @@ func NewLVMProvisioner(vgName, nodeName string, lvmVGs ctldiskv1.LVMVolumeGroupC
 		vgName:      vgName,
 		vgClient:    lvmVGs,
 		nodeName:    nodeName,
+		lock:        lock,
 	}, nil
 }
 
@@ -67,6 +70,9 @@ func (l *LVMProvisioner) UnFormat() (bool, error) {
 func (l *LVMProvisioner) Provision() (bool, error) {
 	logrus.Infof("Provisioning block device %s to vg: %s", l.device.Name, l.vgName)
 	found := true
+	// because the LVMVG name is a generated name, we need to lock here to ensure we only have one LVMVG CRD for specific vgName.
+	l.lock.Lock()
+	defer l.lock.Unlock()
 	lvmvg, err := l.getTargetLVMVG()
 	if err != nil {
 		if !errors.IsNotFound(err) {
