@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 
 	gocommon "github.com/harvester/go-common"
@@ -38,7 +39,8 @@ type Controller struct {
 	BlockdeviceCache ctldiskv1.BlockDeviceCache
 	BlockInfo        block.Info
 
-	LVMVgClient ctldiskv1.LVMVolumeGroupController
+	LVMVgClient     ctldiskv1.LVMVolumeGroupController
+	provisionerLock *sync.Mutex // Lock for some specific provisioner operations, e.g. LVM
 
 	scanner   *Scanner
 	semaphore *provisioner.Semaphore
@@ -81,6 +83,7 @@ func Register(
 		BlockInfo:        block,
 		scanner:          scanner,
 		semaphore:        semaphoreObj,
+		provisionerLock:  &sync.Mutex{},
 	}
 
 	if err := scanner.Start(); err != nil {
@@ -269,7 +272,7 @@ func (c *Controller) generateLHv1Provisioner(device *diskv1.BlockDevice) (provis
 
 func (c *Controller) generateLVMProvisioner(device *diskv1.BlockDevice) (provisioner.Provisioner, error) {
 	vgName := device.Spec.Provisioner.LVM.VgName
-	return provisioner.NewLVMProvisioner(vgName, c.NodeName, c.LVMVgClient, device, c.BlockInfo)
+	return provisioner.NewLVMProvisioner(vgName, c.NodeName, c.LVMVgClient, device, c.BlockInfo, c.provisionerLock)
 }
 
 func (c *Controller) generateLHv2Provisioner(device *diskv1.BlockDevice) (provisioner.Provisioner, error) {
