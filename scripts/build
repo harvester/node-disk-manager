@@ -14,6 +14,6 @@ LINKFLAGS="-X github.com/harvester/node-disk-manager/pkg/version.Version=$VERSIO
            -X github.com/harvester/node-disk-manager/pkg/version.GitCommit=$COMMIT $LINKFLAGS"
 
 for arch in "amd64" "arm64"; do
-    GOARCH="$arch" CGO_ENABLED=0 go build -ldflags "$LINKFLAGS $OTHER_LINKFLAGS" -o bin/node-disk-manager-"$arch" cmd/node-disk-manager/main.go
-    GOARCH="$arch" CGO_ENABLED=0 go build -ldflags "$LINKFLAGS $OTHER_LINKFLAGS" -o bin/node-disk-manager-webhook-"$arch" cmd/node-disk-manager-webhook/main.go
+    GOARCH="$arch" CGO_ENABLED=0 go build -ldflags "$LINKFLAGS $OTHER_LINKFLAGS" -o bin/node-disk-manager-"$arch" ./cmd/node-disk-manager
+    GOARCH="$arch" CGO_ENABLED=0 go build -ldflags "$LINKFLAGS $OTHER_LINKFLAGS" -o bin/node-disk-manager-webhook-"$arch" ./cmd/node-disk-manager-webhook
 done
