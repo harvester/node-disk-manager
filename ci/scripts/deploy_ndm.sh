@@ -73,11 +73,15 @@ ensure_longhorn_ready
 
 pushd $TOP_DIR
 
-cat >> ndm-override.yaml << 'EOF'
+cat >> ndm-override.yaml.default << 'EOF'
 autoProvisionFilter: [/dev/sd*]
 EOF
 
-$HELM pull harvester-node-disk-manager --repo https://charts.harvesterhci.io --untar
+if [ ! -f ndm-override.yaml ]; then
+  mv ndm-override.yaml.default ndm-override.yaml
+fi
+
+$HELM pull harvester-node-disk-manager --repo https://charts.harvesterhci.io --untar --version 0.6.0
 $HELM install -f $TOP_DIR/ndm-override.yaml harvester-node-disk-manager ./harvester-node-disk-manager --create-namespace -n harvester-system
 
 wait_ndm_ready

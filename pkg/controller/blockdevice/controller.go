@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -236,9 +237,7 @@ func (c *Controller) OnBlockDeviceChange(_ string, device *diskv1.BlockDevice) (
 	if err != nil {
 		return nil, err
 	}
-	if devPath == "" {
-		return nil, fmt.Errorf("failed to resolve persistent dev path for block device %s", device.Name)
-	}
+
 	filesystem := c.BlockInfo.GetFileSystemInfoByDevPath(devPath)
 	devPathStatus := convertFSInfoToString(filesystem)
 	logrus.Debugf("Get filesystem info from device %s, %s", devPath, devPathStatus)
@@ -747,24 +746,80 @@ func (c *Controller) OnBlockDeviceDelete(_ string, device *diskv1.BlockDevice) (
 	return nil, nil
 }
 
+// ResolvePersistentDevPath tries to determine the currently active short
+// device path (e.g. "/dev/sda") for a given block device.  When the scanner
+// first finds a new block device, device.Spec.DevPath is set to the short
+// device path at that time, and device.Status.DeviceStatus.Details is filled
+// in with data that uniquely identifies the device (e.g.: WWN).  It's possible
+// that on subsequent reboots, the short path will change, for example if
+// devices are added or removed, so we have this function to try to figure
+// out the _current_ short device path based on the unique identifying
+// information in device.Status.DeviceStatus.Details.
 func resolvePersistentDevPath(device *diskv1.BlockDevice) (string, error) {
 	switch device.Status.DeviceStatus.Details.DeviceType {
 	case diskv1.DeviceTypeDisk:
-		// Disk naming priority.
-		// #1 WWN
-		// #2 filesystem UUID (UUID)
-		// #3 partition table UUID (PTUUID)
-		// #4 PtUUID as UUID to query disk info
-		//    (NDM might reuse PtUUID as UUID to format a disk)
-		if wwn := device.Status.DeviceStatus.Details.WWN; valueExists(wwn) {
-			if device.Status.DeviceStatus.Details.StorageController == string(diskv1.StorageControllerNVMe) {
-				return filepath.EvalSymlinks("/dev/disk/by-id/nvme-" + wwn)
+		// The following closure is the original implementation to resolve disk
+		// device paths, but there is a problem: it multipathd has taken over a
+		// device, the calls to filepath.EvalSymlinks() with "/dev/disk/by-id/"
+		// or "/dev/disk/by-uuid" paths will actually return a "/dev/dm-*"
+		// device, which we don't want.  We want the real underlying device
+		// (e.g. "/dev/sda").  If we take a "/dev/dm-*" path and later update
+		// the blockdevice CR with it, we lose all the interesting DeviceStatus
+		// information, like the WWN.
+		path, err := func() (string, error) {
+			// Disk naming priority.
+			// #1 WWN (REF: https://en.wikipedia.org/wiki/World_Wide_Name#Formats)
+			// #2 filesystem UUID (UUID) (REF: https://wiki.archlinux.org/title/Persistent_block_device_naming#by-uuid)
+			// #3 partition table UUID (PTUUID) (DEPRECATED)
+			// #4 PtUUID as UUID to query disk info (DEPRECATED)
+			//    (NDM might reuse PtUUID as UUID to format a disk)
+			if wwn := device.Status.DeviceStatus.Details.WWN; valueExists(wwn) {
+				if device.Status.DeviceStatus.Details.StorageController == string(diskv1.StorageControllerNVMe) {
+					return filepath.EvalSymlinks("/dev/disk/by-id/nvme-" + wwn)
+				}
+				return filepath.EvalSymlinks("/dev/disk/by-id/wwn-" + wwn)
 			}
-			return filepath.EvalSymlinks("/dev/disk/by-id/wwn-" + wwn)
+			if fsUUID := device.Status.DeviceStatus.Details.UUID; valueExists(fsUUID) {
+				path, err := filepath.EvalSymlinks("/dev/disk/by-uuid/" + fsUUID)
+				if err == nil {
+					return path, nil
+				}
+				if !errors.Is(err, os.ErrNotExist) {
+					return "", err
+				}
+			}
+			if ptUUID := device.Status.DeviceStatus.Details.PtUUID; valueExists(ptUUID) {
+				path, err := block.GetDevPathByPTUUID(ptUUID)
+				if err != nil {
+					return "", err
+				}
+				if path != "" {
+					return path, nil
+				}
+				return filepath.EvalSymlinks("/dev/disk/by-uuid/" + ptUUID)
+			}
+			// If we haven't resolved a path by now, it means the device has no WWN,
+			// no FSUUID and no PTUUID, but there is still one more thing we can try...
+			return "", nil
+		}()
+		if err != nil {
+			return "", err
 		}
-		if fsUUID := device.Status.DeviceStatus.Details.UUID; valueExists(fsUUID) {
-			path, err := filepath.EvalSymlinks("/dev/disk/by-uuid/" + fsUUID)
+
+		// ...at this point, if there's no error, we've either got the device we're
+		// interested in (e.g. "/dev/sda", "/dev/nvme0n1", etc.), _or_ we've got a
+		// "/dev/dm-*" device, _or_ we've got no path...
+		if path != "" && !strings.HasPrefix(path, "/dev/dm-") {
+			logrus.Debugf("Resolved device path %s for %s", path, device.Name)
+			return path, nil
+		}
+		// ...in the latter two cases, we can try to resolve via "/dev/disk/by-path/...",
+		// which works for devices that don't have a WWN, and also in the dm case will
+		// return the path to the underlying device that we're actually interested in.
+		if busPath := device.Status.DeviceStatus.Details.BusPath; valueExists(busPath) {
+			path, err = filepath.EvalSymlinks("/dev/disk/by-path/" + busPath)
 			if err == nil {
+				logrus.Debugf("Resolved BusPath %s to %s for %s", busPath, path, device.Name)
 				return path, nil
 			}
 			if !errors.Is(err, os.ErrNotExist) {
@@ -772,17 +827,7 @@ func resolvePersistentDevPath(device *diskv1.BlockDevice) (string, error) {
 			}
 		}
 
-		if ptUUID := device.Status.DeviceStatus.Details.PtUUID; valueExists(ptUUID) {
-			path, err := block.GetDevPathByPTUUID(ptUUID)
-			if err != nil {
-				return "", err
-			}
-			if path != "" {
-				return path, nil
-			}
-			return filepath.EvalSymlinks("/dev/disk/by-uuid/" + ptUUID)
-		}
-		return "", fmt.Errorf("WWN/UUID/PTUUID was not found on device %s", device.Name)
+		return "", fmt.Errorf("WWN/UUID/PTUUID/BusPath was not found on device %s", device.Name)
 	case diskv1.DeviceTypePart:
 		partUUID := device.Status.DeviceStatus.Details.PartUUID
 		if partUUID == "" {
@@ -790,7 +835,7 @@ func resolvePersistentDevPath(device *diskv1.BlockDevice) (string, error) {
 		}
 		return filepath.EvalSymlinks("/dev/disk/by-partuuid/" + partUUID)
 	default:
-		return "", nil
+		return "", fmt.Errorf("failed to resolve persistent dev path for block device %s", device.Name)
 	}
 }
 

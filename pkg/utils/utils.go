@@ -76,8 +76,9 @@ func MakeExt4DiskFormatting(devPath, uuid string) error {
 		args = append(args, "-U", uuid)
 	}
 	cmd := exec.Command("mkfs.ext4", args...)
-	if _, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to format %s. err: %v", devPath, err)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to format %s. %v: %s", devPath, err,
+			strings.ReplaceAll(strings.TrimSpace(string(output)), "\n", " "))
 	}
 	return nil
 }

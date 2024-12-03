@@ -35,8 +35,7 @@ type Interface interface {
 	LonghornV1beta2() longhornv1beta2.LonghornV1beta2Interface
 }
 
-// Clientset contains the clients for groups. Each group has exactly one
-// version included in a Clientset.
+// Clientset contains the clients for groups.
 type Clientset struct {
 	*discovery.DiscoveryClient
 	harvesterhciV1beta1 *harvesterhciv1beta1.HarvesterhciV1beta1Client
