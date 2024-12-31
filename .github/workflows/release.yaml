@@ -12,3 +12,11 @@ jobs:
       tag: ${{ github.ref_name }}
       push: true
     secrets: inherit
+  create-harvester-pr:
+    needs: build-for-release
+    uses: ./.github/workflows/create-image-bump-pr.yaml
+    with:
+      component: harvester-node-disk-manager
+      version: ${{ github.ref_name }}
+      harvester_repo: harvester/harvester
+    secrets: inherit

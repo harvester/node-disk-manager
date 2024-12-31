@@ -1,0 +1,6 @@
+# branch mapping from this repo to harvester
+mappings:
+  v0.5.x: v1.2
+  v0.6.x: v1.3
+  v0.7.x: v1.4
+  v0.8.x: v1.5

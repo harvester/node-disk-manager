@@ -1,0 +1,87 @@
+name: Create PR to bump image tags in the Harvester repo
+
+on:
+  workflow_call:
+    inputs:
+      component:
+        description: 'The component to bump images'
+        required: true
+        type: string
+      version:
+        description: 'The version of the image to bump'
+        required: true
+        type: string
+      harvester_repo:
+        description: 'The repository to bump the image in'
+        default: 'harvester/harvester'
+        required: false
+        type: string
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump GitHub context
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+        run: echo "$GITHUB_CONTEXT"
+      - uses: actions/checkout@v4
+        with:
+          path: ${{ github.event.repository.name }}
+          # checkout the default branch to get the branch mappings, so we don't need to update
+          # every supported branch.
+          ref: ${{ github.event.repository.default_branch }}
+      - name: Get corresponding harvester branch
+        id: detect
+        run: |
+          version="${{ inputs.version }}"
+          echo "version: $version"
+
+          cd ${{ github.event.repository.name }}
+          
+          # Find the branch name from a tag name in the current repo: v7.7.7 -> v7.7.x
+          # And find the corresponding branch name in the harvester repo: v7.7.x -> v1.4
+          repo_branch="$(echo "$version" | sed  -E 's/(v[0-9]+\.[0-9]+)\.[0-9]+/\1.x/g')"
+          echo "repo_branch: $repo_branch"
+          harvester_branch="$(branch="$repo_branch" yq ".mappings.[env(branch)] // \"\"" .github/branch-mappings.yaml)"
+          if [ -z "$harvester_branch" ]; then
+            echo "[ERROR] No corresponding Harvester branch found for version $version, branch $repo_branch"
+            echo "[ERROR] Check the branch mappings in .github/branch-mappings.yaml"
+            exit 1
+          fi
+
+          echo "::notice title=Branch Mapping::repo_branch: $repo_branch, harvester_branch=$harvester_branch"
+          echo "harvester_branch=$harvester_branch" >> "$GITHUB_OUTPUT"
+
+      - name: Clone harvester/harvester repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.harvester_repo }}
+          ref: ${{ steps.detect.outputs.harvester_branch }}
+          path: harvester
+      - name: Update image tags in the values file
+        run: |
+          set -x
+
+          cd harvester
+          # Search for a component and replace all the "tag: xxx" occurrences in the section
+          # We first search the component name as the start line
+          # And find the next component name as the end line
+          sed -i '/${{ inputs.component }}:/,/^[^ #].*:$/s/tag:\s.*/tag: ${{ inputs.version }}/' deploy/charts/harvester/values.yaml
+          git --no-pager diff --no-color
+      - name: Create harvester PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          path: harvester
+          token: ${{ secrets.HARVESTER_BOT_TOKEN }}
+          commit-message: Bump ${{ inputs.component }} to ${{ inputs.version }}
+          committer: GitHub <noreply@github.com>
+          author: Harvester Bot <94133267+harvesterhci-io-github-bot@users.noreply.github.com>
+          signoff: false
+          branch: bump-${{ inputs.component }}-${{ inputs.version }}
+          delete-branch: false
+          title: Bump ${{ inputs.component }} to ${{ inputs.version }}
+          draft: false
+          body: |
+            Bump ${{ inputs.component }} to ${{ inputs.version }}.
+
