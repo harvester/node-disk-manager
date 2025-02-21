@@ -51,11 +51,11 @@ type HotPlugTestSuite struct {
 func (s *HotPlugTestSuite) SetupSuite() {
 	nodeName := ""
 	f, err := os.Open(filepath.Join(os.Getenv("NDM_HOME"), "ssh-config"))
-	require.Equal(s.T(), err, nil, "Open ssh-config should not get error")
+	require.Equal(s.T(), nil, err, "Open ssh-config should not get error")
 	cfg, err := ssh_config.Decode(f)
-	require.Equal(s.T(), err, nil, "Decode ssh-config should not get error")
+	require.Equal(s.T(), nil, err, "Decode ssh-config should not get error")
 	// consider wildcard, so length shoule be 2
-	require.Equal(s.T(), len(cfg.Hosts), 2, "number of Hosts on SSH-config should be 1")
+	require.Equal(s.T(), 2, len(cfg.Hosts), "number of Hosts on SSH-config should be 1")
 	for _, host := range cfg.Hosts {
 		if host.String() == "" {
 			// wildcard, continue
@@ -64,7 +64,7 @@ func (s *HotPlugTestSuite) SetupSuite() {
 		nodeName = host.Patterns[0].String()
 		break
 	}
-	require.NotEqual(s.T(), nodeName, "", "nodeName should not be empty.")
+	require.NotEqual(s.T(), "", nodeName, "nodeName should not be empty.")
 	s.targetNodeName = nodeName
 	targetHost, _ := cfg.Get(nodeName, "HostName")
 	targetUser, _ := cfg.Get(nodeName, "User")
@@ -73,21 +73,21 @@ func (s *HotPlugTestSuite) SetupSuite() {
 	privateKey := filepath.Join(os.Getenv("NDM_HOME"), splitedResult[len(splitedResult)-1])
 	// Start new ssh connection with private key.
 	auth, err := goph.Key(privateKey, "")
-	require.Equal(s.T(), err, nil, "generate ssh auth key should not get error")
+	require.Equal(s.T(), nil, err, "generate ssh auth key should not get error")
 
 	s.SSHClient, err = goph.NewUnknown(targetUser, targetHost, auth)
-	require.Equal(s.T(), err, nil, "New ssh connection should not get error")
+	require.Equal(s.T(), nil, err, "New ssh connection should not get error")
 
 	kubeconfig := filepath.Join(os.Getenv("NDM_HOME"), "kubeconfig")
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	require.Equal(s.T(), err, nil, "Generate kubeconfig should not get error")
+	require.Equal(s.T(), nil, err, "Generate kubeconfig should not get error")
 
 	s.clientSet, err = clientset.NewForConfig(config)
-	require.Equal(s.T(), err, nil, "New clientset should not get error")
+	require.Equal(s.T(), nil, err, "New clientset should not get error")
 
 	cmd := fmt.Sprintf("ls %s |grep vagrant-k3s", os.Getenv("NDM_HOME"))
 	targetDirDomain, _, err := doCommand(cmd)
-	require.Equal(s.T(), err, nil, "Running command `%s` should not get error : %v", cmd, err)
+	require.Equal(s.T(), nil, err, "Running command `%s` should not get error : %v", cmd, err)
 
 	s.hotplugTargetNodeName = fmt.Sprintf("%s_node1", strings.TrimSpace(targetDirDomain))
 	s.hotplugTargetBaseDir = fmt.Sprintf("/tmp/hotplug_disks/%s", strings.TrimSpace(targetDirDomain))
@@ -100,6 +100,18 @@ func (s *HotPlugTestSuite) AfterTest(_, _ string) {
 	}
 }
 
+func (s *HotPlugTestSuite) SetupTest() {
+	if skipNext {
+		s.T().Skip("Skipping test because a previous test failed")
+	}
+}
+
+func (s *HotPlugTestSuite) TearDownTest() {
+	if s.T().Failed() {
+		skipNext = true
+	}
+}
+
 func TestHotPlugDisk(t *testing.T) {
 	suite.Run(t, new(HotPlugTestSuite))
 }
@@ -107,7 +119,7 @@ func TestHotPlugDisk(t *testing.T) {
 func (s *HotPlugTestSuite) Test_0_PreCheckForDiskCount() {
 	bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
 	bdList, err := bdi.List(context.TODO(), v1.ListOptions{})
-	require.Equal(s.T(), err, nil, "Get BlockdevicesList should not get error")
+	require.Equal(s.T(), nil, err, "Get BlockdevicesList should not get error")
 	diskCount := 0
 	for _, blockdevice := range bdList.Items {
 		if blockdevice.Spec.NodeName != s.targetNodeName {
@@ -133,7 +145,7 @@ func (s *HotPlugTestSuite) Test_1_HotPlugRemoveDisk() {
 	time.Sleep(5 * time.Second)
 
 	// check disk status
-	require.NotEqual(s.T(), s.targetDiskName, "", "target disk name should not be empty before we start hotplug (remove) test")
+	require.NotEqual(s.T(), "", s.targetDiskName, "target disk name should not be empty before we start hotplug (remove) test")
 	bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
 	curBlockdevice, err := bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
 	require.Equal(s.T(), nil, err, "Get Blockdevices should not get error")
@@ -147,7 +159,7 @@ func (s *HotPlugTestSuite) Test_2_HotPlugAddDisk() {
 	hotplugDiskXMLFileName := fmt.Sprintf("%s/node1-sda.xml", s.hotplugTargetBaseDir)
 	cmd := fmt.Sprintf("virsh attach-device --domain %s --file %s --live", s.hotplugTargetNodeName, hotplugDiskXMLFileName)
 	_, _, err := doCommand(cmd)
-	require.Equal(s.T(), err, nil, "Running command `%s` should not get error", cmd)
+	require.Equal(s.T(), nil, err, "Running command `%s` should not get error", cmd)
 
 	// wait for controller handling, the device will be changed need more time to wait for the controller handling
 	time.Sleep(30 * time.Second)
@@ -156,9 +168,9 @@ func (s *HotPlugTestSuite) Test_2_HotPlugAddDisk() {
 	require.NotEqual(s.T(), s.targetDiskName, "", "target disk name should not be empty before we start hotplug (add) test")
 	bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
 	curBlockdevice, err := bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
-	require.Equal(s.T(), err, nil, "Get Blockdevices should not get error")
+	require.Equal(s.T(), nil, err, "Get Blockdevices should not get error")
 
-	require.Equal(s.T(), curBlockdevice.Status.State, diskv1.BlockDeviceActive, "Disk status should be inactive after we add disk")
+	require.Equal(s.T(), diskv1.BlockDeviceActive, curBlockdevice.Status.State, "Disk status should be inactive after we add disk")
 }
 
 func (s *HotPlugTestSuite) Test_3_AddDuplicatedWWNDsik() {
@@ -170,35 +182,35 @@ func (s *HotPlugTestSuite) Test_3_AddDuplicatedWWNDsik() {
 
 	cmdCpyRawFile := fmt.Sprintf("cp %s %s", originalDeviceRaw, duplicatedDeviceRaw)
 	_, _, err := doCommand(cmdCpyRawFile)
-	require.Equal(s.T(), err, nil, "Running command `%s` should not get error", cmdCpyRawFile)
+	require.Equal(s.T(), nil, err, "Running command `%s` should not get error", cmdCpyRawFile)
 
 	hotplugDiskXMLFileName := fmt.Sprintf("%s/node1-sda.xml", s.hotplugTargetBaseDir)
 	disk, err := utils.DiskXMLReader(hotplugDiskXMLFileName)
-	require.Equal(s.T(), err, nil, "Read xml file should not get error")
+	require.Equal(s.T(), nil, err, "Read xml file should not get error")
 	disk.Source.File = duplicatedDeviceRaw
 	disk.Target.Dev = "sdb"
 	disk.VENDOR = "HARV"
 	err = utils.XMLWriter(duplicatedDeviceXML, disk)
-	require.Equal(s.T(), err, nil, "Write xml file should not get error")
+	require.Equal(s.T(), nil, err, "Write xml file should not get error")
 
 	cmd := fmt.Sprintf("virsh attach-device --domain %s --file %s --live", s.hotplugTargetNodeName, duplicatedDeviceXML)
 	_, _, err = doCommand(cmd)
-	require.Equal(s.T(), err, nil, "Running command `%s` should not get error", cmd)
+	require.Equal(s.T(), nil, err, "Running command `%s` should not get error", cmd)
 
 	// wait for controller handling
 	time.Sleep(5 * time.Second)
 
 	// check disk status
-	require.NotEqual(s.T(), s.targetDiskName, "", "target disk name should not be empty before we start hotplug (add) test")
+	require.NotEqual(s.T(), "", s.targetDiskName, "target disk name should not be empty before we start hotplug (add) test")
 	bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
 	blockdeviceList, err := bdi.List(context.TODO(), v1.ListOptions{})
-	require.Equal(s.T(), err, nil, "Get BlockdevicesList should not get error")
+	require.Equal(s.T(), nil, err, "Get BlockdevicesList should not get error")
 	require.Equal(s.T(), 1, len(blockdeviceList.Items), "We should have one disks because duplicated wwn should not added")
 
 	// cleanup this disk
 	cmd = fmt.Sprintf("virsh detach-disk %s %s --live", s.hotplugTargetNodeName, "sdb")
 	_, _, err = doCommand(cmd)
-	require.Equal(s.T(), err, nil, "Running command `%s` should not get error", cmd)
+	require.Equal(s.T(), nil, err, "Running command `%s` should not get error", cmd)
 
 	// wait for controller handling
 	time.Sleep(5 * time.Second)
@@ -208,7 +220,7 @@ func (s *HotPlugTestSuite) Test_4_RemoveInactiveDisk() {
 	// remove disk dynamically
 	cmd := fmt.Sprintf("virsh detach-disk %s %s --live", s.hotplugTargetNodeName, hotplugTargetDiskName)
 	_, _, err := doCommand(cmd)
-	require.Equal(s.T(), err, nil, "Running command `%s` should not get error", cmd)
+	require.Equal(s.T(), nil, err, "Running command `%s` should not get error", cmd)
 
 	// wait for controller handling
 	time.Sleep(5 * time.Second)
@@ -231,8 +243,8 @@ func (s *HotPlugTestSuite) Test_4_RemoveInactiveDisk() {
 
 	// check for the removed status
 	curBlockdevice, err = bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
-	require.Equal(s.T(), err, nil, "Get BlockdevicesList should not get error before we want to check remove")
-	require.Equal(s.T(), curBlockdevice.Status.DeviceStatus.FileSystem.MountPoint, "", "Mountpoint should be empty after we remove disk!")
+	require.Equal(s.T(), nil, err, "Get BlockdevicesList should not get error before we want to check remove")
+	require.Equal(s.T(), "", curBlockdevice.Status.DeviceStatus.FileSystem.MountPoint, "Mountpoint should be empty after we remove disk!")
 	require.Equal(s.T(), diskv1.ProvisionPhaseUnprovisioned, curBlockdevice.Status.ProvisionPhase, "Block device provisionPhase should be Unprovisioned")
 }
 

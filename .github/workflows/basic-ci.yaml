@@ -65,6 +65,7 @@ jobs:
       - name: "Deploy NDM"
         run: |
           pushd ndm-new-vagrant-k3s
+          cp ../ci/scripts/helpers.sh ./helpers.sh
           cp ../ci/scripts/deploy_ndm_current.sh ./deploy_ndm_current.sh
           cp ../ci/charts/ndm-override.yaml ./ndm-override.yaml
           ./deploy_ndm_current.sh
@@ -72,6 +73,7 @@ jobs:
       - name: "Patch NDM autoProvision"
         run: |
           pushd ndm-new-vagrant-k3s
+          cp ../ci/scripts/helpers.sh ./helpers.sh
           cp ../ci/scripts/patch_ndm.sh ./patch_ndm.sh
           ./patch_ndm.sh
           popd
@@ -129,6 +131,7 @@ jobs:
           echo "VM_DEPLOYED=true" >> "$GITHUB_ENV"
           yq e -i ".longhorn_version = \"1.7.1\"" settings.yaml
           ./scripts/deploy_longhorn.sh
+          cp ../ci/scripts/helpers.sh ./helpers.sh
           cp ../ci/scripts/deploy_ndm_chart.sh ./deploy_ndm_chart.sh
           ./deploy_ndm_chart.sh
           popd
@@ -146,12 +149,14 @@ jobs:
       - name: "Upgrade NDM"
         run: |
           pushd ndm-upgrade-vagrant-k3s
+          cp ../ci/scripts/helpers.sh ./helpers.sh
           cp ../ci/scripts/upgrade_ndm.sh ./upgrade_ndm.sh
           ./upgrade_ndm.sh
           popd
       - name: "Patch NDM autoProvision"
         run: |
           pushd ndm-upgrade-vagrant-k3s
+          cp ../ci/scripts/helpers.sh ./helpers.sh
           cp ../ci/scripts/patch_ndm.sh ./patch_ndm.sh
           ./patch_ndm.sh
           popd
