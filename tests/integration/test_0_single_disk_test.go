@@ -20,6 +20,8 @@ import (
 	clientset "github.com/harvester/node-disk-manager/pkg/generated/clientset/versioned"
 )
 
+var skipNext bool
+
 type SingleDiskSuite struct {
 	suite.Suite
 	SSHClient      *goph.Client
@@ -36,11 +38,11 @@ type ProvisionedDisk struct {
 func (s *SingleDiskSuite) SetupSuite() {
 	nodeName := ""
 	f, err := os.Open(filepath.Join(os.Getenv("NDM_HOME"), "ssh-config"))
-	require.Equal(s.T(), err, nil, "Open ssh-config should not get error")
+	require.Equal(s.T(), nil, err, "Open ssh-config should not get error")
 	cfg, err := ssh_config.Decode(f)
-	require.Equal(s.T(), err, nil, "Decode ssh-config should not get error")
+	require.Equal(s.T(), nil, err, "Decode ssh-config should not get error")
 	// consider wildcard, so length shoule be 2
-	require.Equal(s.T(), len(cfg.Hosts), 2, "number of Hosts on SSH-config should be 1")
+	require.Equal(s.T(), 2, len(cfg.Hosts), "number of Hosts on SSH-config should be 1")
 	for _, host := range cfg.Hosts {
 		if host.String() == "" {
 			// wildcard, continue
@@ -49,7 +51,7 @@ func (s *SingleDiskSuite) SetupSuite() {
 		nodeName = host.Patterns[0].String()
 		break
 	}
-	require.NotEqual(s.T(), nodeName, "", "nodeName should not be empty.")
+	require.NotEqual(s.T(), "", nodeName, "nodeName should not be empty.")
 	s.targetNodeName = nodeName
 	targetHost, _ := cfg.Get(nodeName, "HostName")
 	targetUser, _ := cfg.Get(nodeName, "User")
@@ -58,17 +60,17 @@ func (s *SingleDiskSuite) SetupSuite() {
 	privateKey := filepath.Join(os.Getenv("NDM_HOME"), splitedResult[len(splitedResult)-1])
 	// Start new ssh connection with private key.
 	auth, err := goph.Key(privateKey, "")
-	require.Equal(s.T(), err, nil, "generate ssh auth key should not get error")
+	require.Equal(s.T(), nil, err, "generate ssh auth key should not get error")
 
 	s.SSHClient, err = goph.NewUnknown(targetUser, targetHost, auth)
-	require.Equal(s.T(), err, nil, "New ssh connection should not get error")
+	require.Equal(s.T(), nil, err, "New ssh connection should not get error")
 
 	kubeconfig := filepath.Join(os.Getenv("NDM_HOME"), "kubeconfig")
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	require.Equal(s.T(), err, nil, "Generate kubeconfig should not get error")
+	require.Equal(s.T(), nil, err, "Generate kubeconfig should not get error")
 
 	s.clientSet, err = clientset.NewForConfig(config)
-	require.Equal(s.T(), err, nil, "New clientset should not get error")
+	require.Equal(s.T(), nil, err, "New clientset should not get error")
 }
 
 func (s *SingleDiskSuite) AfterTest(_, _ string) {
@@ -76,6 +78,18 @@ func (s *SingleDiskSuite) AfterTest(_, _ string) {
 		s.SSHClient.Close()
 	}
 	time.Sleep(5 * time.Second)
+}
+
+func (s *SingleDiskSuite) SetupTest() {
+	if skipNext {
+		s.T().Skip("Skipping test because a previous test failed")
+	}
+}
+
+func (s *SingleDiskSuite) TearDownTest() {
+	if s.T().Failed() {
+		skipNext = true
+	}
 }
 
 func TestSingleDiskOperation(t *testing.T) {
@@ -87,8 +101,8 @@ func (s *SingleDiskSuite) Test_0_AutoProvisionSingleDisk() {
 	var provisionedDisk ProvisionedDisk
 	bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
 	bdList, err := bdi.List(context.TODO(), v1.ListOptions{})
-	require.Equal(s.T(), err, nil, "Get BlockdevicesList should not get error")
-	require.NotEqual(s.T(), len(bdList.Items), 0, "BlockdevicesList should not be empty")
+	require.Equal(s.T(), nil, err, "Get BlockdevicesList should not get error")
+	require.NotEqual(s.T(), 0, len(bdList.Items), "BlockdevicesList should not be empty")
 	for _, blockdevice := range bdList.Items {
 		if blockdevice.Spec.NodeName != s.targetNodeName {
 			// focus the target node
@@ -100,9 +114,9 @@ func (s *SingleDiskSuite) Test_0_AutoProvisionSingleDisk() {
 				// wait for provisioned, 1 minute should be enough
 				time.Sleep(60 * time.Second)
 				bdNew, err := bdi.Get(context.TODO(), blockdevice.Name, v1.GetOptions{})
-				require.Equal(s.T(), err, nil, "Get Blockdevices should not get error")
+				require.Equal(s.T(), nil, err, "Get Blockdevices should not get error")
 				bdStatus = bdNew.Status
-				require.Equal(s.T(), bdStatus.ProvisionPhase, "Provisioned", "Blockdevice provision phase should be Provisioned after enough time (1 minute)")
+				require.Equal(s.T(), diskv1.ProvisionPhaseProvisioned, bdStatus.ProvisionPhase, "Blockdevice provision phase should be Provisioned after enough time (1 minute)")
 			}
 			s.targetDiskName = blockdevice.Name
 			// get from blockdevice resource
@@ -112,22 +126,22 @@ func (s *SingleDiskSuite) Test_0_AutoProvisionSingleDisk() {
 			// checking with the device on the host
 			cmd := "sudo blkid -s UUID name -o value " + provisionedDisk.devPath
 			out, err := s.SSHClient.Run(cmd)
-			require.Equal(s.T(), err, nil, "Running command `blkid` should not get error")
+			require.Equal(s.T(), nil, err, "Running command `blkid` should not get error")
 			require.NotEqual(s.T(), "", string(out), "blkid command should not return empty, ", provisionedDisk.devPath)
 			convertOutPut := strings.Split(string(out), "\n")[0]
 			require.Equal(s.T(), provisionedDisk.UUID, convertOutPut, "Provisioned disk UUID should be the same")
 		}
 	}
-	require.NotEqual(s.T(), s.targetDiskName, "", "target disk name should not be empty after we do the provision test")
+	require.NotEqual(s.T(), "", s.targetDiskName, "target disk name should not be empty after we do the provision test")
 }
 
 func (s *SingleDiskSuite) Test_1_UnprovisionSingleDisk() {
-	require.NotEqual(s.T(), s.targetDiskName, "", "target disk name should not be empty before we do the remove test")
+	require.NotEqual(s.T(), "", s.targetDiskName, "target disk name should not be empty before we do the remove test")
 	bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
 	curBlockdevice, err := bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
-	require.Equal(s.T(), err, nil, "Get Blockdevices should not get error")
+	require.Equal(s.T(), nil, err, "Get Blockdevices should not get error")
 
-	require.Equal(s.T(), curBlockdevice.Status.State, diskv1.BlockDeviceActive, "Block device state should be Active")
+	require.Equal(s.T(), diskv1.BlockDeviceActive, curBlockdevice.Status.State, "Block device state should be Active")
 	newBlockdevice := curBlockdevice.DeepCopy()
 	newBlockdevice.Spec.FileSystem.Provisioned = false
 	bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
@@ -137,19 +151,19 @@ func (s *SingleDiskSuite) Test_1_UnprovisionSingleDisk() {
 
 	// check for the removed status
 	curBlockdevice, err = bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
-	require.Equal(s.T(), err, nil, "Get BlockdevicesList should not get error before we want to check remove")
-	require.Equal(s.T(), curBlockdevice.Status.DeviceStatus.FileSystem.MountPoint, "", "Mountpoint should be empty after we remove disk!")
+	require.Equal(s.T(), nil, err, "Get BlockdevicesList should not get error before we want to check remove")
+	require.Equal(s.T(), "", curBlockdevice.Status.DeviceStatus.FileSystem.MountPoint, "Mountpoint should be empty after we remove disk!")
 	require.Equal(s.T(), diskv1.ProvisionPhaseUnprovisioned, curBlockdevice.Status.ProvisionPhase, "Block device provisionPhase should be Provisioned")
 
 }
 
 func (s *SingleDiskSuite) Test_2_ManuallyProvisionSingleDisk() {
-	require.NotEqual(s.T(), s.targetDiskName, "", "target disk name should not be empty before we do the remove test")
+	require.NotEqual(s.T(), "", s.targetDiskName, "target disk name should not be empty before we do the remove test")
 	bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
 	curBlockdevice, err := bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
-	require.Equal(s.T(), err, nil, "Get Blockdevices should not get error")
+	require.Equal(s.T(), nil, err, "Get Blockdevices should not get error")
 
-	require.Equal(s.T(), curBlockdevice.Status.State, diskv1.BlockDeviceActive, "Block device state should be Active")
+	require.Equal(s.T(), diskv1.BlockDeviceActive, curBlockdevice.Status.State, "Block device state should be Active")
 	newBlockdevice := curBlockdevice.DeepCopy()
 	newBlockdevice.Spec.FileSystem.Provisioned = true
 	targetTags := []string{"default", "test-disk"}
@@ -161,8 +175,8 @@ func (s *SingleDiskSuite) Test_2_ManuallyProvisionSingleDisk() {
 
 	// check for the added status
 	curBlockdevice, err = bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
-	require.Equal(s.T(), err, nil, "Get BlockdevicesList should not get error before we want to check remove")
-	require.NotEqual(s.T(), curBlockdevice.Status.DeviceStatus.FileSystem.MountPoint, "", "Mountpoint should not be empty after we provision disk!")
+	require.Equal(s.T(), nil, err, "Get BlockdevicesList should not get error before we want to check remove")
+	require.NotEqual(s.T(), "", curBlockdevice.Status.DeviceStatus.FileSystem.MountPoint, "Mountpoint should not be empty after we provision disk!")
 	require.Equal(s.T(), diskv1.ProvisionPhaseProvisioned, curBlockdevice.Status.ProvisionPhase, "Block device provisionPhase should be Provisioned")
 	require.Equal(s.T(), diskv1.BlockDeviceActive, curBlockdevice.Status.State, "Block device State should be Active")
 	require.Eventually(s.T(), func() bool {
@@ -171,12 +185,12 @@ func (s *SingleDiskSuite) Test_2_ManuallyProvisionSingleDisk() {
 }
 
 func (s *SingleDiskSuite) Test_3_RemoveTags() {
-	require.NotEqual(s.T(), s.targetDiskName, "", "target disk name should not be empty before we do the remove test")
+	require.NotEqual(s.T(), "", s.targetDiskName, "target disk name should not be empty before we do the remove test")
 	bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
 	curBlockdevice, err := bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
-	require.Equal(s.T(), err, nil, "Get Blockdevices should not get error")
+	require.Equal(s.T(), nil, err, "Get Blockdevices should not get error")
 
-	require.Equal(s.T(), curBlockdevice.Status.State, diskv1.BlockDeviceActive, "Block device state should be Active")
+	require.Equal(s.T(), diskv1.BlockDeviceActive, curBlockdevice.Status.State, "Block device state should be Active")
 	newBlockdevice := curBlockdevice.DeepCopy()
 	targetTags := []string{"default"}
 	newBlockdevice.Spec.Tags = targetTags
@@ -187,8 +201,8 @@ func (s *SingleDiskSuite) Test_3_RemoveTags() {
 
 	// check for the added status
 	curBlockdevice, err = bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
-	require.Equal(s.T(), err, nil, "Get BlockdevicesList should not get error before we want to check remove")
-	require.NotEqual(s.T(), curBlockdevice.Status.DeviceStatus.FileSystem.MountPoint, "", "Mountpoint should not be empty after we provision disk!")
+	require.Equal(s.T(), nil, err, "Get BlockdevicesList should not get error before we want to check remove")
+	require.NotEqual(s.T(), "", curBlockdevice.Status.DeviceStatus.FileSystem.MountPoint, "Mountpoint should not be empty after we provision disk!")
 	require.Equal(s.T(), diskv1.ProvisionPhaseProvisioned, curBlockdevice.Status.ProvisionPhase, "Block device provisionPhase should be Provisioned")
 	require.Equal(s.T(), diskv1.BlockDeviceActive, curBlockdevice.Status.State, "Block device State should be Active")
 	require.Eventually(s.T(), func() bool {
@@ -197,12 +211,12 @@ func (s *SingleDiskSuite) Test_3_RemoveTags() {
 }
 
 func (s *SingleDiskSuite) Test_4_AddTags() {
-	require.NotEqual(s.T(), s.targetDiskName, "", "target disk name should not be empty before we do the remove test")
+	require.NotEqual(s.T(), "", s.targetDiskName, "target disk name should not be empty before we do the remove test")
 	bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
 	curBlockdevice, err := bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
-	require.Equal(s.T(), err, nil, "Get Blockdevices should not get error")
+	require.Equal(s.T(), nil, err, "Get Blockdevices should not get error")
 
-	require.Equal(s.T(), curBlockdevice.Status.State, diskv1.BlockDeviceActive, "Block device state should be Active")
+	require.Equal(s.T(), diskv1.BlockDeviceActive, curBlockdevice.Status.State, "Block device state should be Active")
 	newBlockdevice := curBlockdevice.DeepCopy()
 	targetTags := []string{"default", "test-disk-2"}
 	newBlockdevice.Spec.Tags = targetTags
@@ -213,8 +227,8 @@ func (s *SingleDiskSuite) Test_4_AddTags() {
 
 	// check for the added status
 	curBlockdevice, err = bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
-	require.Equal(s.T(), err, nil, "Get BlockdevicesList should not get error before we want to check remove")
-	require.NotEqual(s.T(), curBlockdevice.Status.DeviceStatus.FileSystem.MountPoint, "", "Mountpoint should not be empty after we provision disk!")
+	require.Equal(s.T(), nil, err, "Get BlockdevicesList should not get error before we want to check remove")
+	require.NotEqual(s.T(), "", curBlockdevice.Status.DeviceStatus.FileSystem.MountPoint, "Mountpoint should not be empty after we provision disk!")
 	require.Equal(s.T(), diskv1.ProvisionPhaseProvisioned, curBlockdevice.Status.ProvisionPhase, "Block device provisionPhase should be Provisioned")
 	require.Equal(s.T(), diskv1.BlockDeviceActive, curBlockdevice.Status.State, "Block device State should be Active")
 	require.Eventually(s.T(), func() bool {
