@@ -99,6 +99,18 @@ func (s *LVMSuite) AfterTest(_, _ string) {
 	time.Sleep(5 * time.Second)
 }
 
+func (s *LVMSuite) SetupTest() {
+	if skipNext {
+		s.T().Skip("Skipping test because a previous test failed")
+	}
+}
+
+func (s *LVMSuite) TearDownTest() {
+	if s.T().Failed() {
+		skipNext = true
+	}
+}
+
 func TestLVMOperation(t *testing.T) {
 	suite.Run(t, new(LVMSuite))
 }
@@ -106,17 +118,17 @@ func TestLVMOperation(t *testing.T) {
 func (s *LVMSuite) cleanupBlockDevices() {
 	bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
 	bdList, err := bdi.List(context.TODO(), v1.ListOptions{})
-	require.Equal(s.T(), err, nil, "List BlockDevices should not get error")
+	require.Equal(s.T(), nil, err, "List BlockDevices should not get error")
 
 	for _, blockdevice := range bdList.Items {
 		err := bdi.Delete(context.TODO(), blockdevice.Name, v1.DeleteOptions{})
-		require.Equal(s.T(), err, nil, "Delete BlockDevices should not get error")
+		require.Equal(s.T(), nil, err, "Delete BlockDevices should not get error")
 	}
 }
 
 func (s *LVMSuite) patchDaemonSet() {
 	currentDS, err := s.coreClientSet.AppsV1().DaemonSets("harvester-system").Get(context.TODO(), "harvester-node-disk-manager", v1.GetOptions{})
-	require.Equal(s.T(), err, nil, "Get DaemonSet should not get error")
+	require.Equal(s.T(), nil, err, "Get DaemonSet should not get error")
 
 	newDS := currentDS.DeepCopy()
 	envs := newDS.Spec.Template.Spec.Containers[0].Env
@@ -129,7 +141,7 @@ func (s *LVMSuite) patchDaemonSet() {
 	}
 	newDS.Spec.Template.Spec.Containers[0].Env = newEnvs
 	_, err = s.coreClientSet.AppsV1().DaemonSets("harvester-system").Update(context.TODO(), newDS, v1.UpdateOptions{})
-	require.Equal(s.T(), err, nil, "Update DaemonSet should not get error")
+	require.Equal(s.T(), nil, err, "Update DaemonSet should not get error")
 
 	// wait for pod respawn
 	time.Sleep(10 * time.Second)
@@ -144,24 +156,24 @@ func (s *LVMSuite) attachTwoDisks() {
 	secondDeviceXMLFile := fmt.Sprintf("%s/node1-sdb.xml", s.hotplugTargetBaseDir)
 
 	disk, err := utils.DiskXMLReader(firstDeviceXMLFile)
-	require.Equal(s.T(), err, nil, "Read xml file should not get error")
+	require.Equal(s.T(), nil, err, "Read xml file should not get error")
 	disk.Source.File = firstDeviceRaw
 	disk.Target.Dev = "sda"
 	disk.VENDOR = "HAR_DEV1"
 	err = utils.XMLWriter(firstDeviceXMLFile, disk)
-	require.Equal(s.T(), err, nil, "Write xml file should not get error")
+	require.Equal(s.T(), nil, err, "Write xml file should not get error")
 
 	s.doAttachDisk(s.hotplugTargetNodeName, firstDeviceXMLFile)
 
 	disk, err = utils.DiskXMLReader(secondDeviceXMLFile)
-	require.Equal(s.T(), err, nil, "Read xml file should not get error")
+	require.Equal(s.T(), nil, err, "Read xml file should not get error")
 	newWWN := fmt.Sprintf("0x5000c50015%s", utils.GenHash())
 	disk.Source.File = secondDeviceRaw
 	disk.Target.Dev = "sdb"
 	disk.VENDOR = "HAR_DEV2"
 	disk.WWN = newWWN
 	err = utils.XMLWriter(secondDeviceXMLFile, disk)
-	require.Equal(s.T(), err, nil, "Write xml file should not get error")
+	require.Equal(s.T(), nil, err, "Write xml file should not get error")
 
 	s.doAttachDisk(s.hotplugTargetNodeName, secondDeviceXMLFile)
 
