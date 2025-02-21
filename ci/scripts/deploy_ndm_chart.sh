@@ -74,7 +74,7 @@ ensure_longhorn_ready
 pushd $TOP_DIR
 
 cat >> ndm-override.yaml.default << 'EOF'
-autoProvisionFilter: [/dev/sd*]
+debug: true
 EOF
 
 if [ ! -f ndm-override.yaml ]; then
