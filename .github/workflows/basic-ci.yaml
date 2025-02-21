@@ -56,6 +56,12 @@ jobs:
           ./ci/scripts/patch-ttl-repo.sh
           echo "NDM override result as below:"
           cat ci/charts/ndm-override.yaml
+      - name: "Add disk"
+        run: |
+          pushd ndm-new-vagrant-k3s
+          ./scripts/attach-disk.sh node1 ndm-new-vagrant-k3s
+          sleep 30
+          popd
       - name: "Deploy NDM"
         run: |
           pushd ndm-new-vagrant-k3s
@@ -63,11 +69,11 @@ jobs:
           cp ../ci/charts/ndm-override.yaml ./ndm-override.yaml
           ./deploy_ndm_current.sh
           popd
-      - name: "Add disk"
+      - name: "Patch NDM autoProvision"
         run: |
           pushd ndm-new-vagrant-k3s
-          ./scripts/attach-disk.sh node1 ndm-new-vagrant-k3s
-          sleep 30
+          cp ../ci/scripts/patch_ndm.sh ./patch_ndm.sh
+          ./patch_ndm.sh
           popd
       - name: "Run Basic Test"
         id: basic-test
@@ -142,6 +148,12 @@ jobs:
           pushd ndm-upgrade-vagrant-k3s
           cp ../ci/scripts/upgrade_ndm.sh ./upgrade_ndm.sh
           ./upgrade_ndm.sh
+          popd
+      - name: "Patch NDM autoProvision"
+        run: |
+          pushd ndm-upgrade-vagrant-k3s
+          cp ../ci/scripts/patch_ndm.sh ./patch_ndm.sh
+          ./patch_ndm.sh
           popd
       - name: "Run Basic Test"
         id: basic-test
