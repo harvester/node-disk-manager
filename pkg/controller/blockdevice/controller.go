@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -106,6 +107,13 @@ func Register(
 func (c *Controller) OnBlockDeviceChange(_ string, device *diskv1.BlockDevice) (*diskv1.BlockDevice, error) {
 	if canSkipBlockDeviceChange(device, c.NodeName) {
 		return nil, nil
+	}
+
+	// give another chance to update provision for auto provision device
+	if len(c.scanner.AutoProvisionFilters) > 0 && !device.Spec.Provision && device.Status.DeviceStatus.FileSystem.LastFormattedAt == nil {
+		if devNew, needUpdated := c.updateAutoProvisionDevice(device); needUpdated {
+			return c.Blockdevices.Update(devNew)
+		}
 	}
 
 	deviceCpy := device.DeepCopy()
@@ -398,6 +406,26 @@ func (c *Controller) OnBlockDeviceDelete(_ string, device *diskv1.BlockDevice) (
 	CacheDiskTags.DeleteDiskTags(device.Name)
 
 	return nil, nil
+}
+
+func (c *Controller) updateAutoProvisionDevice(device *diskv1.BlockDevice) (*diskv1.BlockDevice, bool) {
+	tmpDisk := &block.Disk{
+		// we only need the dev path for checking auto provision
+		Name: strings.TrimPrefix(device.Status.DeviceStatus.DevPath, "/dev/"),
+	}
+	if c.scanner.ApplyAutoProvisionFiltersForDisk(tmpDisk) {
+		logrus.Debugf("Update auto provision device %s", device.Name)
+		deviceCpy := device.DeepCopy()
+		deviceCpy.Spec.FileSystem.ForceFormatted = true
+		deviceCpy.Spec.Provision = true
+		deviceCpy.Spec.Provisioner = &diskv1.ProvisionerInfo{
+			Longhorn: &diskv1.LonghornProvisionerInfo{
+				EngineVersion: provisioner.TypeLonghornV1,
+			},
+		}
+		return deviceCpy, true
+	}
+	return nil, false
 }
 
 // jitterEnqueueDelay returns a random duration between 3 to 7.
