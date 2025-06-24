@@ -5,14 +5,19 @@ on:
   schedule:
     # run at 03:30 UTC every night
     - cron:  '30 3 * * *'
-  branches:
-    - master
-    - v1.6
 
 jobs:
-  build-for-dev:
+  build-for-master:
     uses: ./.github/workflows/factory.yaml
     with:
-      tag: ${{ github.ref_name }}-head
+      tag: master-head
+      push: true
+    secrets: inherit
+  
+  build-for-v1_6:
+    uses: ./.github/workflows/factory.yaml
+    with:
+      refs: v1.6
+      tag: v1.6-head
       push: true
     secrets: inherit
