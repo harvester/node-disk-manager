@@ -182,11 +182,17 @@ func (l *LVMProvisioner) addDevOrCreateLVMVgCRD(lvmVG *diskv1.LVMVolumeGroup, fo
 		err = fmt.Errorf("failed to get LVMVolumeGroup %s, but notFound is False", l.vgName)
 		return
 	}
+	if lvmVG.Spec.Devices == nil {
+		lvmVG.Spec.Devices = make(map[string]string)
+	}
 	if _, found := lvmVG.Spec.Devices[l.device.Name]; found {
 		logrus.Infof("Skip this round because the devices are not changed")
 		return
 	}
 	lvmVGCpy := lvmVG.DeepCopy()
+	if lvmVGCpy.Spec.Devices == nil {
+		lvmVGCpy.Spec.Devices = make(map[string]string)
+	}
 	lvmVGCpy.Spec.Devices[l.device.Name] = l.device.Status.DeviceStatus.DevPath
 	if !reflect.DeepEqual(lvmVG, lvmVGCpy) {
 		if _, err = l.vgClient.Update(lvmVGCpy); err != nil {
