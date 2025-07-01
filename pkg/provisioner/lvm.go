@@ -190,9 +190,6 @@ func (l *LVMProvisioner) addDevOrCreateLVMVgCRD(lvmVG *diskv1.LVMVolumeGroup, fo
 		return
 	}
 	lvmVGCpy := lvmVG.DeepCopy()
-	if lvmVGCpy.Spec.Devices == nil {
-		lvmVGCpy.Spec.Devices = make(map[string]string)
-	}
 	lvmVGCpy.Spec.Devices[l.device.Name] = l.device.Status.DeviceStatus.DevPath
 	if !reflect.DeepEqual(lvmVG, lvmVGCpy) {
 		if _, err = l.vgClient.Update(lvmVGCpy); err != nil {
