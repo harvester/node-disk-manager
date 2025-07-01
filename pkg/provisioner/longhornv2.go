@@ -13,6 +13,7 @@ import (
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
 	ctllonghornv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta2"
+	"github.com/harvester/node-disk-manager/pkg/lvm"
 	"github.com/harvester/node-disk-manager/pkg/utils"
 )
 
@@ -61,6 +62,13 @@ func NewLHV2Provisioner(
 // nvme bdev driver, device activation will fail if there's an existing
 // filesystem on the device, so we need to make sure to wipe before use.
 func (p *LonghornV2Provisioner) Format(devPath string) (isFormatComplete, isRequeueNeeded bool, err error) {
+	err = lvm.Cleanup(devPath)
+	if err != nil {
+		return false, true, err
+	}
+	logrus.WithFields(logrus.Fields{
+		"device": devPath,
+	}).Info("Wiping the device ...")
 	if _, err = utils.NewExecutor().Execute("wipefs", []string{"-a", devPath}); err != nil {
 		return false, false, err
 	}

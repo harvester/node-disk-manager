@@ -54,7 +54,9 @@ func (l *LVMProvisioner) Format(devPath string) (isFormatComplete, isRequeueNeed
 	if _, found := pvResult[devPath]; found {
 		return true, false, nil
 	}
-	logrus.Infof("Wipe the device %s", devPath)
+	logrus.WithFields(logrus.Fields{
+		"device": devPath,
+	}).Info("Wiping the device ...")
 	if _, err := utils.NewExecutor().Execute("wipefs", []string{"-a", devPath}); err != nil {
 		return false, true, err
 	}

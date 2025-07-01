@@ -130,7 +130,7 @@ func (c *Controller) updateEnabledLVMVolumeGroup(lvmVG *diskv1.LVMVolumeGroup) (
 
 func (c *Controller) disableLVMVolumeGroup(lvmVG *diskv1.LVMVolumeGroup) (*diskv1.LVMVolumeGroup, error) {
 	logrus.Infof("Disable LVMVolumeGroup %s", lvmVG.Spec.VgName)
-	err := lvm.DoVGDeactive(lvmVG.Spec.VgName)
+	err := lvm.DoVGDeactivate(lvmVG.Spec.VgName)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			logrus.Infof("VolumeGroup %s is not found, skip", lvmVG.Spec.VgName)
@@ -143,7 +143,7 @@ func (c *Controller) disableLVMVolumeGroup(lvmVG *diskv1.LVMVolumeGroup) (*diskv
 
 func (c *Controller) removeLVMVolumeGroup(lvmVG *diskv1.LVMVolumeGroup) (*diskv1.LVMVolumeGroup, error) {
 	logrus.Infof("Remove LVMVolumeGroup %s", lvmVG.Name)
-	err := lvm.DoVGRemove(lvmVG.Spec.VgName)
+	err := lvm.DoVGRemove(lvmVG.Spec.VgName, false)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			logrus.Infof("VolumeGroup %s is not found, skip", lvmVG.Spec.VgName)
@@ -233,7 +233,7 @@ func updatePVAndVG(vgCpy *diskv1.LVMVolumeGroup, toAdd, toRemove map[string]stri
 					return err
 				}
 			} else {
-				if err := lvm.DoVGRemove(vgCpy.Spec.VgName); err != nil {
+				if err := lvm.DoVGRemove(vgCpy.Spec.VgName, false); err != nil {
 					return err
 				}
 			}
