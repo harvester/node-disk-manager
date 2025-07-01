@@ -153,7 +153,9 @@ func (c *Controller) OnBlockDeviceChange(_ string, device *diskv1.BlockDevice) (
 		return nil, err
 	}
 
-	logrus.Debugf("Checking to format device %s", device.Name)
+	logrus.WithFields(logrus.Fields{
+		"device": devPath,
+	}).Debug("Checking to format device")
 	if formatted, requeue, err := provisionerInst.Format(devPath); !formatted {
 		if requeue {
 			c.Blockdevices.EnqueueAfter(c.Namespace, device.Name, jitterEnqueueDelay())
@@ -162,7 +164,6 @@ func (c *Controller) OnBlockDeviceChange(_ string, device *diskv1.BlockDevice) (
 			logrus.Debugf("Update block device %s for new formatting state", device.Name)
 			return c.Blockdevices.Update(deviceCpy)
 		}
-
 		return device, err
 	}
 
@@ -176,13 +177,19 @@ func (c *Controller) OnBlockDeviceChange(_ string, device *diskv1.BlockDevice) (
 	 */
 	logrus.Debugf("Checking to provision/update device %s", device.Name)
 	if needProvisionerUpdate(device, deviceCpy) {
-		logrus.Infof("Prepare to check the new device tags %v with device: %s", deviceCpy.Spec.Tags, device.Name)
+		logrus.WithFields(logrus.Fields{
+			"device": deviceCpy.Name,
+			"tags":   deviceCpy.Spec.Tags,
+		}).Info("Prepare to check the new device tags")
 		requeue, err := provisionerInst.Update()
 		c.handleCondDiskAddedToNodeAndRequeue(deviceCpy, err, requeue)
 	}
 
 	if needProvisionerProvision(device, deviceCpy) {
-		logrus.Infof("Prepare to provision device %s to node %s", device.Name, c.NodeName)
+		logrus.WithFields(logrus.Fields{
+			"device": device.Name,
+			"node":   c.NodeName,
+		}).Info("Prepare to provision the device")
 		requeue, err := provisionerInst.Provision()
 		c.handleCondDiskAddedToNodeAndRequeue(deviceCpy, err, requeue)
 	}
@@ -218,7 +225,6 @@ func (c *Controller) finalizeBlockDevice(oldBd, newBd *diskv1.BlockDevice, devPa
 	}
 
 	return nil, nil
-
 }
 
 func (c *Controller) generateProvisioner(device *diskv1.BlockDevice) (provisioner.Provisioner, error) {
@@ -237,7 +243,10 @@ func (c *Controller) generateProvisioner(device *diskv1.BlockDevice) (provisione
 		}
 		return nil, nil
 	}
-	logrus.Infof("Generate provisioner from device %s, content: %v", device.Name, device.Spec.Provisioner)
+	logrus.WithFields(logrus.Fields{
+		"device":      device.Name,
+		"provisioner": device.Spec.Provisioner,
+	}).Info("Generate provisioner")
 	// set default
 	provisionerType := provisioner.TypeLonghornV1
 	if device.Spec.Provisioner != nil {
@@ -250,13 +259,13 @@ func (c *Controller) generateProvisioner(device *diskv1.BlockDevice) (provisione
 	}
 	switch provisionerType {
 	case provisioner.TypeLonghornV1:
-		provisionerInfo := &diskv1.LonghornProvisionerInfo{
+		lhPi := &diskv1.LonghornProvisionerInfo{
 			EngineVersion: provisionerType,
 		}
-		provisioner := &diskv1.ProvisionerInfo{
-			Longhorn: provisionerInfo,
+		pi := &diskv1.ProvisionerInfo{
+			Longhorn: lhPi,
 		}
-		device.Spec.Provisioner = provisioner
+		device.Spec.Provisioner = pi
 		return c.generateLHv1Provisioner(device)
 	case provisioner.TypeLonghornV2:
 		return c.generateLHv2Provisioner(device)
