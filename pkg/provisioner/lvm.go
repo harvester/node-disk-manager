@@ -182,6 +182,9 @@ func (l *LVMProvisioner) addDevOrCreateLVMVgCRD(lvmVG *diskv1.LVMVolumeGroup, fo
 		err = fmt.Errorf("failed to get LVMVolumeGroup %s, but notFound is False", l.vgName)
 		return
 	}
+	if lvmVG.Spec.Devices == nil {
+		lvmVG.Spec.Devices = make(map[string]string)
+	}
 	if _, found := lvmVG.Spec.Devices[l.device.Name]; found {
 		logrus.Infof("Skip this round because the devices are not changed")
 		return
