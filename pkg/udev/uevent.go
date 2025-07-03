@@ -198,7 +198,7 @@ func getOptionalMatcher(filePath *string) (matcher netlink.Matcher, err error) {
 
 	var rules netlink.RuleDefinitions
 	if err := json.Unmarshal(stream, &rules); err != nil {
-		return nil, fmt.Errorf("wrong rule syntax, err: %w", err)
+		return nil, fmt.Errorf("wrong rule syntax, err: %v", err)
 	}
 
 	return &rules, nil
