@@ -199,17 +199,25 @@ func (s *Scanner) scanBlockDevicesOnNode() error {
 			// remove blockdevice from old device so we can delete missing devices afterward
 			delete(oldBds, bd.Name)
 		} else {
-			/*
-			 * Prevent add duplicated wwn even if the device path is different.
-			 * That prevent the device from being formatted again.
-			 * We should use multiple device path (TBD) for the same wwn.
-			 */
-			if slices.Contains(existingWWNs, bd.Status.DeviceStatus.Details.WWN) {
-				logrus.Warnf("Skip adding duplicated WWN device %s, device path: %s", bd.Status.DeviceStatus.Details.WWN, bd.Spec.DevPath)
-				continue
+			if bd.Status.DeviceStatus.Details.WWN != "unknown" {
+				/*
+				* Prevent add duplicated wwn even if the device path is different.
+				* That prevent the device from being formatted again.
+				* We should use multiple device path (TBD) for the same wwn.
+				 */
+				if slices.Contains(existingWWNs, bd.Status.DeviceStatus.Details.WWN) {
+					logrus.Warnf("Skip adding duplicated WWN device %s, device path: %s", bd.Status.DeviceStatus.Details.WWN, bd.Spec.DevPath)
+					continue
+				}
+				existingWWNs = append(existingWWNs, bd.Status.DeviceStatus.Details.WWN)
+				logrus.Debugf("The current WWNs are: %v", existingWWNs)
+			} else {
+				// If the WWN is "unknown" it means the disk is identified by FS UUID, so skip the duplicate check
+				logrus.WithFields(logrus.Fields{
+					"name":   bd.Name,
+					"device": bd.Spec.DevPath,
+				}).Info("Skipping duplicate disk check (device has no WWN)")
 			}
-			existingWWNs = append(existingWWNs, bd.Status.DeviceStatus.Details.WWN)
-			logrus.Debugf("The current WWNs are: %v", existingWWNs)
 			logrus.Infof("Create new device %s with wwn: %s", bd.Name, bd.Status.DeviceStatus.Details.WWN)
 			if _, err := s.SaveBlockDevice(bd, autoProvisioned); err != nil && !errors.IsAlreadyExists(err) {
 				return err
