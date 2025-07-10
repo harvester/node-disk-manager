@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	gocommon "github.com/harvester/go-common"
+	gocommon "github.com/harvester/go-common/common"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -333,6 +333,7 @@ func (c *Controller) updateDeviceStatus(device *diskv1.BlockDevice, devPath stri
 	}
 	// Only disk hasn't yet been formatted can be auto-provisioned.
 	if needAutoProvision {
+		// block auto-provision if during the upgrade
 		logrus.Infof("Auto provisioning block device %s", device.Name)
 		device.Spec.FileSystem.ForceFormatted = true
 		device.Spec.Provision = true
