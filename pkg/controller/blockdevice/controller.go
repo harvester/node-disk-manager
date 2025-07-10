@@ -10,11 +10,13 @@ import (
 	"time"
 
 	gocommon "github.com/harvester/go-common/common"
+	ctlharvesterv1 "github.com/harvester/harvester/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
@@ -27,6 +29,9 @@ import (
 
 const (
 	blockDeviceHandlerName = "harvester-block-device-handler"
+	upgradeStateLabel      = "harvesterhci.io/upgradeState"
+	upgradeStateSucceeded  = "Succeeded"
+	upgradeStateFailed     = "Failed"
 )
 
 type Controller struct {
@@ -35,6 +40,8 @@ type Controller struct {
 
 	NodeCache ctllonghornv1.NodeCache
 	Nodes     ctllonghornv1.NodeClient
+
+	UpgradeCache ctlharvesterv1.UpgradeCache
 
 	Blockdevices     ctldiskv1.BlockDeviceController
 	BlockdeviceCache ctldiskv1.BlockDeviceCache
@@ -65,6 +72,7 @@ var CacheDiskTags *provisioner.DiskTags
 func Register(
 	ctx context.Context,
 	nodes ctllonghornv1.NodeController,
+	upgrades ctlharvesterv1.UpgradeController,
 	bds ctldiskv1.BlockDeviceController,
 	lvmVGs ctldiskv1.LVMVolumeGroupController,
 	block block.Info,
@@ -78,6 +86,7 @@ func Register(
 		NodeName:         opt.NodeName,
 		NodeCache:        nodes.Cache(),
 		Nodes:            nodes,
+		UpgradeCache:     upgrades.Cache(),
 		Blockdevices:     bds,
 		BlockdeviceCache: bds.Cache(),
 		LVMVgClient:      lvmVGs,
@@ -341,7 +350,7 @@ func (c *Controller) updateDeviceStatus(device *diskv1.BlockDevice, devPath stri
 		device.Status.DeviceStatus = newStatus
 	}
 	// Only disk hasn't yet been formatted can be auto-provisioned.
-	if needAutoProvision {
+	if needAutoProvision && canAutoProvision(c.UpgradeCache) {
 		// block auto-provision if during the upgrade
 		logrus.Infof("Auto provisioning block device %s", device.Name)
 		device.Spec.FileSystem.ForceFormatted = true
@@ -423,7 +432,7 @@ func (c *Controller) updateAutoProvisionDevice(device *diskv1.BlockDevice) (*dis
 		// we only need the dev path for checking auto provision
 		Name: strings.TrimPrefix(device.Status.DeviceStatus.DevPath, "/dev/"),
 	}
-	if c.scanner.ApplyAutoProvisionFiltersForDisk(tmpDisk) {
+	if c.scanner.ApplyAutoProvisionFiltersForDisk(tmpDisk) && canAutoProvision(c.UpgradeCache) {
 		logrus.Debugf("Update auto provision device %s", device.Name)
 		deviceCpy := device.DeepCopy()
 		deviceCpy.Spec.FileSystem.ForceFormatted = true
@@ -436,6 +445,33 @@ func (c *Controller) updateAutoProvisionDevice(device *diskv1.BlockDevice) (*dis
 		return deviceCpy, true
 	}
 	return nil, false
+}
+
+func canAutoProvision(upgrades ctlharvesterv1.UpgradeCache) bool {
+	if upgrades == nil {
+		return true
+	}
+
+	return !isOnUpgrade(upgrades)
+}
+
+func isOnUpgrade(upgrades ctlharvesterv1.UpgradeCache) bool {
+	req, err := labels.NewRequirement(upgradeStateLabel, selection.NotIn, []string{upgradeStateSucceeded, upgradeStateFailed})
+	if err != nil {
+		logrus.Warnf("Failed to create label requirement for %s: %v", upgradeStateLabel, err)
+		return false
+	}
+
+	upgradesItems, err := upgrades.List(utils.HarvesterNS, labels.NewSelector().Add(*req))
+	if err != nil {
+		logrus.Warnf("Failed to list upgrades with label %s: %v", upgradeStateLabel, err)
+		return false
+	}
+	if len(upgradesItems) > 0 {
+		logrus.Infof("There are ongoing upgrades: %v", upgradesItems[0].Name)
+		return true
+	}
+	return false
 }
 
 // jitterEnqueueDelay returns a random duration between 3 to 7.
