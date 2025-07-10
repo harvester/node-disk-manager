@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	ctlharvesterv1 "github.com/harvester/harvester/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -22,6 +23,7 @@ import (
 type Scanner struct {
 	NodeName             string
 	Namespace            string
+	UpgradeCache         ctlharvesterv1.UpgradeCache
 	Blockdevices         ctldiskv1.BlockDeviceController
 	BlockInfo            block.Info
 	ExcludeFilters       []*filter.Filter
@@ -38,6 +40,7 @@ type deviceWithAutoProvision struct {
 
 func NewScanner(
 	nodeName, namespace string,
+	upgrades ctlharvesterv1.UpgradeController,
 	bds ctldiskv1.BlockDeviceController,
 	block block.Info,
 	excludeFilters, autoProvisionFilters []*filter.Filter,
@@ -49,6 +52,7 @@ func NewScanner(
 		NodeName:             nodeName,
 		Namespace:            namespace,
 		Blockdevices:         bds,
+		UpgradeCache:         upgrades.Cache(),
 		BlockInfo:            block,
 		ExcludeFilters:       excludeFilters,
 		AutoProvisionFilters: autoProvisionFilters,
@@ -299,7 +303,7 @@ func (s *Scanner) SaveBlockDevice(bd *diskv1.BlockDevice, autoProvisioned bool) 
 	_, err := s.Blockdevices.Get(bd.Namespace, bd.Name, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
-			if autoProvisioned {
+			if autoProvisioned && canAutoProvision(s.UpgradeCache) {
 				bd.Spec.FileSystem.ForceFormatted = true
 				bd.Spec.Provision = true
 				bd.Spec.Provisioner = &diskv1.ProvisionerInfo{
