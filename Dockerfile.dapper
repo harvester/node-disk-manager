@@ -18,7 +18,7 @@ RUN curl -sSfL https://github.com/docker/buildx/releases/download/v0.13.1/buildx
 RUN go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.18.0
 
 # install openapi-gen
-RUN  go install k8s.io/code-generator/cmd/openapi-gen@v0.23.7
+RUN  go install k8s.io/code-generator/cmd/openapi-gen@v0.29.13
 
 ENV DAPPER_ENV REPO TAG DRONE_TAG CROSS BUILD_FOR_CI
 ENV DAPPER_SOURCE /go/src/github.com/harvester/node-disk-manager/

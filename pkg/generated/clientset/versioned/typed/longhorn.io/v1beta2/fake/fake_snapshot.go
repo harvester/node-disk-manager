@@ -19,123 +19,32 @@ limitations under the License.
 package fake
 
 import (
-	"context"
-
+	longhorniov1beta2 "github.com/harvester/node-disk-manager/pkg/generated/clientset/versioned/typed/longhorn.io/v1beta2"
 	v1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeSnapshots implements SnapshotInterface
-type FakeSnapshots struct {
+// fakeSnapshots implements SnapshotInterface
+type fakeSnapshots struct {
+	*gentype.FakeClientWithList[*v1beta2.Snapshot, *v1beta2.SnapshotList]
 	Fake *FakeLonghornV1beta2
-	ns   string
 }
 
-var snapshotsResource = v1beta2.SchemeGroupVersion.WithResource("snapshots")
-
-var snapshotsKind = v1beta2.SchemeGroupVersion.WithKind("Snapshot")
-
-// Get takes name of the snapshot, and returns the corresponding snapshot object, and an error if there is any.
-func (c *FakeSnapshots) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta2.Snapshot, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewGetAction(snapshotsResource, c.ns, name), &v1beta2.Snapshot{})
-
-	if obj == nil {
-		return nil, err
+func newFakeSnapshots(fake *FakeLonghornV1beta2, namespace string) longhorniov1beta2.SnapshotInterface {
+	return &fakeSnapshots{
+		gentype.NewFakeClientWithList[*v1beta2.Snapshot, *v1beta2.SnapshotList](
+			fake.Fake,
+			namespace,
+			v1beta2.SchemeGroupVersion.WithResource("snapshots"),
+			v1beta2.SchemeGroupVersion.WithKind("Snapshot"),
+			func() *v1beta2.Snapshot { return &v1beta2.Snapshot{} },
+			func() *v1beta2.SnapshotList { return &v1beta2.SnapshotList{} },
+			func(dst, src *v1beta2.SnapshotList) { dst.ListMeta = src.ListMeta },
+			func(list *v1beta2.SnapshotList) []*v1beta2.Snapshot { return gentype.ToPointerSlice(list.Items) },
+			func(list *v1beta2.SnapshotList, items []*v1beta2.Snapshot) {
+				list.Items = gentype.FromPointerSlice(items)
+			},
+		),
+		fake,
 	}
-	return obj.(*v1beta2.Snapshot), err
-}
-
-// List takes label and field selectors, and returns the list of Snapshots that match those selectors.
-func (c *FakeSnapshots) List(ctx context.Context, opts v1.ListOptions) (result *v1beta2.SnapshotList, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewListAction(snapshotsResource, snapshotsKind, c.ns, opts), &v1beta2.SnapshotList{})
-
-	if obj == nil {
-		return nil, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v1beta2.SnapshotList{ListMeta: obj.(*v1beta2.SnapshotList).ListMeta}
-	for _, item := range obj.(*v1beta2.SnapshotList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested snapshots.
-func (c *FakeSnapshots) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewWatchAction(snapshotsResource, c.ns, opts))
-
-}
-
-// Create takes the representation of a snapshot and creates it.  Returns the server's representation of the snapshot, and an error, if there is any.
-func (c *FakeSnapshots) Create(ctx context.Context, snapshot *v1beta2.Snapshot, opts v1.CreateOptions) (result *v1beta2.Snapshot, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewCreateAction(snapshotsResource, c.ns, snapshot), &v1beta2.Snapshot{})
-
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v1beta2.Snapshot), err
-}
-
-// Update takes the representation of a snapshot and updates it. Returns the server's representation of the snapshot, and an error, if there is any.
-func (c *FakeSnapshots) Update(ctx context.Context, snapshot *v1beta2.Snapshot, opts v1.UpdateOptions) (result *v1beta2.Snapshot, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateAction(snapshotsResource, c.ns, snapshot), &v1beta2.Snapshot{})
-
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v1beta2.Snapshot), err
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeSnapshots) UpdateStatus(ctx context.Context, snapshot *v1beta2.Snapshot, opts v1.UpdateOptions) (*v1beta2.Snapshot, error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceAction(snapshotsResource, "status", c.ns, snapshot), &v1beta2.Snapshot{})
-
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v1beta2.Snapshot), err
-}
-
-// Delete takes name of the snapshot and deletes it. Returns an error if one occurs.
-func (c *FakeSnapshots) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewDeleteActionWithOptions(snapshotsResource, c.ns, name, opts), &v1beta2.Snapshot{})
-
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeSnapshots) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewDeleteCollectionAction(snapshotsResource, c.ns, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v1beta2.SnapshotList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched snapshot.
-func (c *FakeSnapshots) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta2.Snapshot, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(snapshotsResource, c.ns, name, pt, data, subresources...), &v1beta2.Snapshot{})
-
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v1beta2.Snapshot), err
 }

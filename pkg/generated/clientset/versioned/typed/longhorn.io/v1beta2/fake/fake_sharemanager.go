@@ -19,123 +19,34 @@ limitations under the License.
 package fake
 
 import (
-	"context"
-
+	longhorniov1beta2 "github.com/harvester/node-disk-manager/pkg/generated/clientset/versioned/typed/longhorn.io/v1beta2"
 	v1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeShareManagers implements ShareManagerInterface
-type FakeShareManagers struct {
+// fakeShareManagers implements ShareManagerInterface
+type fakeShareManagers struct {
+	*gentype.FakeClientWithList[*v1beta2.ShareManager, *v1beta2.ShareManagerList]
 	Fake *FakeLonghornV1beta2
-	ns   string
 }
 
-var sharemanagersResource = v1beta2.SchemeGroupVersion.WithResource("sharemanagers")
-
-var sharemanagersKind = v1beta2.SchemeGroupVersion.WithKind("ShareManager")
-
-// Get takes name of the shareManager, and returns the corresponding shareManager object, and an error if there is any.
-func (c *FakeShareManagers) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta2.ShareManager, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewGetAction(sharemanagersResource, c.ns, name), &v1beta2.ShareManager{})
-
-	if obj == nil {
-		return nil, err
+func newFakeShareManagers(fake *FakeLonghornV1beta2, namespace string) longhorniov1beta2.ShareManagerInterface {
+	return &fakeShareManagers{
+		gentype.NewFakeClientWithList[*v1beta2.ShareManager, *v1beta2.ShareManagerList](
+			fake.Fake,
+			namespace,
+			v1beta2.SchemeGroupVersion.WithResource("sharemanagers"),
+			v1beta2.SchemeGroupVersion.WithKind("ShareManager"),
+			func() *v1beta2.ShareManager { return &v1beta2.ShareManager{} },
+			func() *v1beta2.ShareManagerList { return &v1beta2.ShareManagerList{} },
+			func(dst, src *v1beta2.ShareManagerList) { dst.ListMeta = src.ListMeta },
+			func(list *v1beta2.ShareManagerList) []*v1beta2.ShareManager {
+				return gentype.ToPointerSlice(list.Items)
+			},
+			func(list *v1beta2.ShareManagerList, items []*v1beta2.ShareManager) {
+				list.Items = gentype.FromPointerSlice(items)
+			},
+		),
+		fake,
 	}
-	return obj.(*v1beta2.ShareManager), err
-}
-
-// List takes label and field selectors, and returns the list of ShareManagers that match those selectors.
-func (c *FakeShareManagers) List(ctx context.Context, opts v1.ListOptions) (result *v1beta2.ShareManagerList, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewListAction(sharemanagersResource, sharemanagersKind, c.ns, opts), &v1beta2.ShareManagerList{})
-
-	if obj == nil {
-		return nil, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v1beta2.ShareManagerList{ListMeta: obj.(*v1beta2.ShareManagerList).ListMeta}
-	for _, item := range obj.(*v1beta2.ShareManagerList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested shareManagers.
-func (c *FakeShareManagers) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewWatchAction(sharemanagersResource, c.ns, opts))
-
-}
-
-// Create takes the representation of a shareManager and creates it.  Returns the server's representation of the shareManager, and an error, if there is any.
-func (c *FakeShareManagers) Create(ctx context.Context, shareManager *v1beta2.ShareManager, opts v1.CreateOptions) (result *v1beta2.ShareManager, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewCreateAction(sharemanagersResource, c.ns, shareManager), &v1beta2.ShareManager{})
-
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v1beta2.ShareManager), err
-}
-
-// Update takes the representation of a shareManager and updates it. Returns the server's representation of the shareManager, and an error, if there is any.
-func (c *FakeShareManagers) Update(ctx context.Context, shareManager *v1beta2.ShareManager, opts v1.UpdateOptions) (result *v1beta2.ShareManager, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateAction(sharemanagersResource, c.ns, shareManager), &v1beta2.ShareManager{})
-
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v1beta2.ShareManager), err
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeShareManagers) UpdateStatus(ctx context.Context, shareManager *v1beta2.ShareManager, opts v1.UpdateOptions) (*v1beta2.ShareManager, error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceAction(sharemanagersResource, "status", c.ns, shareManager), &v1beta2.ShareManager{})
-
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v1beta2.ShareManager), err
-}
-
-// Delete takes name of the shareManager and deletes it. Returns an error if one occurs.
-func (c *FakeShareManagers) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewDeleteActionWithOptions(sharemanagersResource, c.ns, name, opts), &v1beta2.ShareManager{})
-
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeShareManagers) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewDeleteCollectionAction(sharemanagersResource, c.ns, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v1beta2.ShareManagerList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched shareManager.
-func (c *FakeShareManagers) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta2.ShareManager, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(sharemanagersResource, c.ns, name, pt, data, subresources...), &v1beta2.ShareManager{})
-
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v1beta2.ShareManager), err
 }
