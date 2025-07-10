@@ -62,7 +62,7 @@ func (v *Validator) validateProvisioner(bd *diskv1.BlockDevice) error {
 	return nil
 }
 
-// validateLVMProvisioner will check the blockdeivce with LVM provisioner and block
+// validateLVMProvisioner will check the block device with LVM provisioner and block
 // if there is already have any pvc created with in the target volume group
 func (v *Validator) validateLVMProvisioner(oldbd, newbd *diskv1.BlockDevice) error {
 

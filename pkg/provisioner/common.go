@@ -13,6 +13,8 @@ import (
 
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
+	"github.com/harvester/node-disk-manager/pkg/lvm"
+	"github.com/harvester/node-disk-manager/pkg/utils"
 )
 
 type NeedMountUpdateOP int8
@@ -70,6 +72,26 @@ type provisioner struct {
 
 func (p *provisioner) GetProvisionerName() string {
 	return p.name
+}
+
+// wipeDevice is a helper function to clean up the device before using it.
+// E.g., existing LVM and filesystem artifacts will be removed.
+func (p *provisioner) wipeDevice(devPath string) error {
+	logrus.WithFields(logrus.Fields{
+		"provisioner": p.name,
+		"device":      devPath,
+	}).Info("Wiping the device")
+	// Cleanup LVM artifacts from the device if it was used by LVM before.
+	err := lvm.Cleanup(devPath)
+	if err != nil {
+		return err
+	}
+	// Remove any existing filesystem artifacts from the device.
+	_, err = utils.NewExecutor().Execute("wipefs", []string{"-a", devPath})
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func setCondDiskAddedToNodeFalse(device *diskv1.BlockDevice, message string, targetStatus diskv1.BlockDeviceProvisionPhase) {

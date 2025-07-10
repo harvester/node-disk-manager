@@ -13,7 +13,6 @@ import (
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
 	ctllonghornv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta2"
-	"github.com/harvester/node-disk-manager/pkg/utils"
 )
 
 type LonghornV2Provisioner struct {
@@ -61,8 +60,9 @@ func NewLHV2Provisioner(
 // nvme bdev driver, device activation will fail if there's an existing
 // filesystem on the device, so we need to make sure to wipe before use.
 func (p *LonghornV2Provisioner) Format(devPath string) (isFormatComplete, isRequeueNeeded bool, err error) {
-	if _, err = utils.NewExecutor().Execute("wipefs", []string{"-a", devPath}); err != nil {
-		return false, false, err
+	err = p.wipeDevice(devPath)
+	if err != nil {
+		return false, true, err
 	}
 	return true, false, nil
 }
@@ -81,7 +81,7 @@ func (p *LonghornV2Provisioner) Provision() (isRequeueNeeded bool, err error) {
 	logrus.WithFields(logrus.Fields{
 		"provisioner": p.name,
 		"device":      p.device.Name,
-	}).Info("Provisioning Longhorn block device")
+	}).Info("Provisioning the device")
 
 	nodeObjCpy := p.nodeObj.DeepCopy()
 	tags := []string{}
@@ -137,6 +137,11 @@ func (p *LonghornV2Provisioner) UnProvision() (isRequeueNeeded bool, err error) 
 }
 
 func (p *LonghornV2Provisioner) Update() (isRequeueNeeded bool, err error) {
+	logrus.WithFields(logrus.Fields{
+		"provisioner": p.name,
+		"device":      p.device.Name,
+	}).Info("Updating the device")
+
 	// Sync disk tags (we can just use the V1 implementation for this for now)
 	isRequeueNeeded, err = p.LonghornV1Provisioner.Update()
 	if err != nil {

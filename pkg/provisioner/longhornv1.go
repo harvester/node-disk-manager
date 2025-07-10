@@ -62,7 +62,10 @@ func (p *LonghornV1Provisioner) GetProvisionerName() string {
 }
 
 func (p *LonghornV1Provisioner) Provision() (bool, error) {
-	logrus.Infof("%s provisioning Longhorn block device %s", p.name, p.device.Name)
+	logrus.WithFields(logrus.Fields{
+		"provisioner": p.name,
+		"device":      p.device.Name,
+	}).Info("Provisioning the device")
 
 	nodeObjCpy := p.nodeObj.DeepCopy()
 	tags := []string{}
@@ -213,6 +216,10 @@ func (p *LonghornV1Provisioner) excludeTheDisk(targetDisk longhornv1.DiskSpec) e
 
 // Update is used to update the disk tags
 func (p *LonghornV1Provisioner) Update() (bool, error) {
+	logrus.WithFields(logrus.Fields{
+		"provisioner": p.name,
+		"device":      p.device.Name,
+	}).Info("Updating the device")
 
 	DiskTagsOnNodeMissed := func(targetDisk longhornv1.DiskSpec) bool {
 		for _, tag := range p.device.Spec.Tags {
@@ -251,7 +258,11 @@ func (p *LonghornV1Provisioner) Update() (bool, error) {
 }
 
 func (p *LonghornV1Provisioner) Format(devPath string) (bool, bool, error) {
-	logrus.Infof("%s formatting Longhorn block device %s", p.name, p.device.Name)
+	logrus.WithFields(logrus.Fields{
+		"provisioner": p.name,
+		"device":      devPath,
+	}).Info("Remove existing artifacts from the device ...")
+
 	var err error
 	formatted := false
 	requeue := false
@@ -303,7 +314,7 @@ func (p *LonghornV1Provisioner) updateDeviceMount(device *diskv1.BlockDevice, de
 	}
 	if needMountUpdate.Has(NeedMountUpdateMount) {
 		expectedMountPoint := extraDiskMountPoint(device)
-		logrus.Infof("Mount deivce %s to %s", device.Name, expectedMountPoint)
+		logrus.Infof("Mount device %s to %s", device.Name, expectedMountPoint)
 		if err := utils.MountDisk(devPath, expectedMountPoint); err != nil {
 			if utils.IsFSCorrupted(err) {
 				logrus.Errorf("Target device may be corrupted, update FS info.")
