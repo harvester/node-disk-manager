@@ -7,7 +7,7 @@ import (
 	"slices"
 	"time"
 
-	gocommon "github.com/harvester/go-common"
+	gocommon "github.com/harvester/go-common/ds"
 	longhornv1 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

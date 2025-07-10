@@ -29,11 +29,11 @@ type FakeHarvesterhciV1beta1 struct {
 }
 
 func (c *FakeHarvesterhciV1beta1) BlockDevices(namespace string) v1beta1.BlockDeviceInterface {
-	return &FakeBlockDevices{c, namespace}
+	return newFakeBlockDevices(c, namespace)
 }
 
 func (c *FakeHarvesterhciV1beta1) LVMVolumeGroups(namespace string) v1beta1.LVMVolumeGroupInterface {
-	return &FakeLVMVolumeGroups{c, namespace}
+	return newFakeLVMVolumeGroups(c, namespace)
 }
 
 // RESTClient returns a RESTClient that is used to communicate

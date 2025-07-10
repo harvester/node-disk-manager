@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	gocommon "github.com/harvester/go-common"
+	gocommon "github.com/harvester/go-common/ds"
 	"github.com/kevinburke/ssh_config"
 	"github.com/melbahja/goph"
 	"github.com/stretchr/testify/require"
