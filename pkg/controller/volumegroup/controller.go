@@ -130,7 +130,7 @@ func (c *Controller) updateEnabledLVMVolumeGroup(lvmVG *diskv1.LVMVolumeGroup) (
 
 func (c *Controller) disableLVMVolumeGroup(lvmVG *diskv1.LVMVolumeGroup) (*diskv1.LVMVolumeGroup, error) {
 	logrus.Infof("Disable LVMVolumeGroup %s", lvmVG.Spec.VgName)
-	err := lvm.DoVGDeactive(lvmVG.Spec.VgName)
+	err := lvm.DoVGDeactivate(lvmVG.Spec.VgName)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			logrus.Infof("VolumeGroup %s is not found, skip", lvmVG.Spec.VgName)
@@ -143,7 +143,7 @@ func (c *Controller) disableLVMVolumeGroup(lvmVG *diskv1.LVMVolumeGroup) (*diskv
 
 func (c *Controller) removeLVMVolumeGroup(lvmVG *diskv1.LVMVolumeGroup) (*diskv1.LVMVolumeGroup, error) {
 	logrus.Infof("Remove LVMVolumeGroup %s", lvmVG.Name)
-	err := lvm.DoVGRemove(lvmVG.Spec.VgName)
+	err := lvm.DoVGRemove(lvmVG.Spec.VgName, false)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			logrus.Infof("VolumeGroup %s is not found, skip", lvmVG.Spec.VgName)
@@ -199,7 +199,12 @@ func updatePVAndVG(vgCpy *diskv1.LVMVolumeGroup, toAdd, toRemove map[string]stri
 	logrus.Infof("Prepare to add devices: %v", toAdd)
 	for bdName, dev := range toAdd {
 		pvFound, vgFound, _ := checkPVAndVG(pvsResult, dev, vgCpy.Spec.VgName)
-		logrus.Infof("pvFound: %v, vgFound: %v", pvFound, vgFound)
+		logrus.WithFields(logrus.Fields{
+			"device":  dev,
+			"vgName":  vgCpy.Spec.VgName,
+			"pvFound": pvFound,
+			"vgFound": vgFound,
+		}).Infof("Checking for PV and VG")
 		if !vgFound {
 			if err := lvm.DoVGCreate(dev, vgCpy.Spec.VgName); err != nil {
 				return err
@@ -221,7 +226,13 @@ func updatePVAndVG(vgCpy *diskv1.LVMVolumeGroup, toAdd, toRemove map[string]stri
 	logrus.Infof("Prepare to remove devices: %v", toRemove)
 	for bdName, dev := range toRemove {
 		pvFound, vgFound, pvInVGCounts := checkPVAndVG(pvsResult, dev, vgCpy.Spec.VgName)
-		logrus.Infof("pvFound: %v, vgFound: %v, pvInVGCounts: %v", pvFound, vgFound, pvInVGCounts)
+		logrus.WithFields(logrus.Fields{
+			"device":       dev,
+			"vgName":       vgCpy.Spec.VgName,
+			"pvFound":      pvFound,
+			"vgFound":      vgFound,
+			"pvInVGCounts": pvInVGCounts,
+		}).Infof("Checking for PV and VG")
 		if !pvFound {
 			logrus.Infof("Block device %s is not in pvs, return directly!", bdName)
 			return nil
@@ -233,7 +244,7 @@ func updatePVAndVG(vgCpy *diskv1.LVMVolumeGroup, toAdd, toRemove map[string]stri
 					return err
 				}
 			} else {
-				if err := lvm.DoVGRemove(vgCpy.Spec.VgName); err != nil {
+				if err := lvm.DoVGRemove(vgCpy.Spec.VgName, false); err != nil {
 					return err
 				}
 			}
