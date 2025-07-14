@@ -45,17 +45,18 @@ func (l *LVMProvisioner) GetProvisionerName() string {
 
 // Format operation on the LVM use to ensure the device is clean and ready to be used by LVM.
 func (l *LVMProvisioner) Format(devPath string) (isFormatComplete, isRequeueNeeded bool, err error) {
-	// if the pv is created, skip wipefs.
-	// Because the device is already in use, wipefs will break the device.
+	// Check if the specified VG exists. The device path of the PV and the
+	// name of the VG must match, otherwise wipe the device.
 	pvResult, err := lvm.GetPVScanResult()
 	if err != nil {
 		return false, true, err
 	}
-	if _, found := pvResult[devPath]; found {
+	vg, found := pvResult[devPath]
+	if found && vg == l.vgName {
 		return true, false, nil
 	}
-	logrus.Infof("Wipe the device %s", devPath)
-	if _, err := utils.NewExecutor().Execute("wipefs", []string{"-a", devPath}); err != nil {
+	err = l.wipeDevice(devPath)
+	if err != nil {
 		return false, true, err
 	}
 	return true, false, nil
@@ -68,7 +69,12 @@ func (l *LVMProvisioner) UnFormat() (bool, error) {
 
 // Provision creates (if needed) a LVMVolumeGroup CRD and update the corresponding fields.
 func (l *LVMProvisioner) Provision() (bool, error) {
-	logrus.Infof("Provisioning block device %s to vg: %s", l.device.Name, l.vgName)
+	logrus.WithFields(logrus.Fields{
+		"provisioner": l.name,
+		"device":      l.device.Name,
+		"vgName":      l.vgName,
+	}).Info("Provisioning the device")
+
 	found := true
 	// because the LVMVG name is a generated name, we need to lock here to ensure we only have one LVMVG CRD for specific vgName.
 	l.lock.Lock()
@@ -125,8 +131,13 @@ func (l *LVMProvisioner) UnProvision() (bool, error) {
 }
 
 func (l *LVMProvisioner) Update() (requeue bool, err error) {
+	logrus.WithFields(logrus.Fields{
+		"provisioner": l.name,
+		"device":      l.device.Name,
+		"vgName":      l.vgName,
+	}).Info("Updating the device")
+
 	// Update DesiredState to Reconciling
-	logrus.Infof("Prepare to Update LVMVolumeGroup %s", l.vgName)
 	lvmvg, err := l.getTargetLVMVG()
 	if err != nil {
 		if errors.IsNotFound(err) {
