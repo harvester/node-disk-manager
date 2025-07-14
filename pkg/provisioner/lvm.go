@@ -51,9 +51,27 @@ func (l *LVMProvisioner) Format(devPath string) (isFormatComplete, isRequeueNeed
 	if err != nil {
 		return false, true, err
 	}
+	// Note, the PV and VG is created by the `LVMVolumeGroup` controller
+	// beforehand, so we need to exit here if the found VG name is matching
+	// the name we are processing.
 	vg, found := pvResult[devPath]
 	if found && vg == l.vgName {
-		return true, false, nil
+		// Check if there is a corresponding `LVMVolumeGroup` CR that matches
+		// the cluster node and the VG name.
+		_, err := l.getTargetLVMVG()
+		if err != nil {
+			// Fallthrough to wipe the device if the `LVMVolumeGroup` CR is
+			// not found; this CR is not available for devices that were part
+			// of a LVM setup in a previous installation.
+			// For other errors requeue the operation.
+			if !errors.IsNotFound(err) {
+				return false, true, err
+			}
+		} else {
+			// The VG exists, and the `LVMVolumeGroup` CR is found, so no
+			// further action is needed here.
+			return true, false, nil
+		}
 	}
 	err = l.wipeDevice(devPath)
 	if err != nil {
@@ -182,7 +200,7 @@ func (l *LVMProvisioner) addDevOrCreateLVMVgCRD(lvmVG *diskv1.LVMVolumeGroup, fo
 		if _, err = l.vgClient.Create(lvmVG); err != nil {
 			requeue = true
 			logrus.Infof("[DEBUG]: error: %v", err)
-			err = fmt.Errorf("failed to create LVMVolumeGroup %s. %v", l.vgName, err)
+			err = fmt.Errorf("failed to create LVMVolumeGroup %s: %w", l.vgName, err)
 			return
 		}
 		logrus.Infof("Created LVMVolumeGroup %s, content: %v", l.vgName, lvmVG)
@@ -205,7 +223,7 @@ func (l *LVMProvisioner) addDevOrCreateLVMVgCRD(lvmVG *diskv1.LVMVolumeGroup, fo
 	if !reflect.DeepEqual(lvmVG, lvmVGCpy) {
 		if _, err = l.vgClient.Update(lvmVGCpy); err != nil {
 			requeue = true
-			err = fmt.Errorf("failed to update LVMVolumeGroup %s. %v", l.vgName, err)
+			err = fmt.Errorf("failed to update LVMVolumeGroup %s: %w", l.vgName, err)
 			return
 		}
 		logrus.Infof("Updated LVMVolumeGroup %s, content: %v", l.vgName, lvmVGCpy)
@@ -224,7 +242,7 @@ func (l *LVMProvisioner) removeDevFromLVMVgCRD(lvmVG *diskv1.LVMVolumeGroup, tar
 	if len(lvmVGCpy.Status.Devices) == 0 {
 		if err = l.vgClient.Delete(lvmVGCpy.Namespace, lvmVGCpy.Name, &metav1.DeleteOptions{}); err != nil {
 			requeue = true
-			err = fmt.Errorf("failed to delete LVMVolumeGroup %s. %v", l.vgName, err)
+			err = fmt.Errorf("failed to delete LVMVolumeGroup %s: %w", l.vgName, err)
 			return
 		}
 		logrus.Infof("Deleted LVMVolumeGroup %s", l.vgName)
@@ -234,7 +252,7 @@ func (l *LVMProvisioner) removeDevFromLVMVgCRD(lvmVG *diskv1.LVMVolumeGroup, tar
 	if !reflect.DeepEqual(lvmVG, lvmVGCpy) {
 		if _, err = l.vgClient.Update(lvmVGCpy); err != nil {
 			requeue = true
-			err = fmt.Errorf("failed to update LVMVolumeGroup %s. %v", l.vgName, err)
+			err = fmt.Errorf("failed to update LVMVolumeGroup %s: %w", l.vgName, err)
 			return
 		}
 	}
@@ -247,12 +265,12 @@ func (l *LVMProvisioner) getTargetLVMVG() (target *diskv1.LVMVolumeGroup, err er
 	// check if the LVMVolumeGroup CRD is already provisioned
 	selector, err := lvm.GenerateSelector(l.nodeName)
 	if err != nil {
-		err = fmt.Errorf("failed to generate selector: %v", err)
+		err = fmt.Errorf("failed to generate selector: %w", err)
 		return
 	}
 	lvmvgs, err := l.vgClient.List(utils.HarvesterNS, metav1.ListOptions{LabelSelector: selector.String()})
 	if err != nil {
-		err = fmt.Errorf("failed to list LVMVolumeGroup %s. %v", l.vgName, err)
+		err = fmt.Errorf("failed to list LVMVolumeGroup %s: %w", l.vgName, err)
 		return
 	}
 	for _, lvmvg := range lvmvgs.Items {
