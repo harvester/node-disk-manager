@@ -3,6 +3,9 @@ module github.com/harvester/node-disk-manager
 go 1.24.2
 
 replace (
+	github.com/openshift/api => github.com/openshift/api v0.0.0-20191219222812-2987a591a72c
+	github.com/openshift/client-go => github.com/openshift/client-go v0.0.0-20200521150516-05eb9880269c
+	github.com/rancher/rancher/pkg/apis => github.com/rancher/rancher/pkg/apis v0.0.0-20240919204204-3da2ae0cabd1
 	gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.0-20220521103104-8f96da9f5d5e
 	k8s.io/api => k8s.io/api v0.32.6
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.32.6
