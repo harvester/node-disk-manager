@@ -23,7 +23,7 @@ import (
 type Scanner struct {
 	NodeName             string
 	Namespace            string
-	UpgradeCache         ctlharvesterv1.UpgradeCache
+	UpgradeClient        ctlharvesterv1.UpgradeClient
 	Blockdevices         ctldiskv1.BlockDeviceController
 	BlockInfo            block.Info
 	ExcludeFilters       []*filter.Filter
@@ -52,7 +52,7 @@ func NewScanner(
 		NodeName:             nodeName,
 		Namespace:            namespace,
 		Blockdevices:         bds,
-		UpgradeCache:         upgrades.Cache(),
+		UpgradeClient:        upgrades,
 		BlockInfo:            block,
 		ExcludeFilters:       excludeFilters,
 		AutoProvisionFilters: autoProvisionFilters,
@@ -303,7 +303,7 @@ func (s *Scanner) SaveBlockDevice(bd *diskv1.BlockDevice, autoProvisioned bool) 
 	_, err := s.Blockdevices.Get(bd.Namespace, bd.Name, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
-			if autoProvisioned && canAutoProvision(s.UpgradeCache) {
+			if autoProvisioned && canAutoProvision(s.UpgradeClient) {
 				bd.Spec.FileSystem.ForceFormatted = true
 				bd.Spec.Provision = true
 				bd.Spec.Provisioner = &diskv1.ProvisionerInfo{
