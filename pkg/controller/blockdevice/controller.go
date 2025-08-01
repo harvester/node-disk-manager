@@ -41,7 +41,7 @@ type Controller struct {
 	NodeCache ctllonghornv1.NodeCache
 	Nodes     ctllonghornv1.NodeClient
 
-	UpgradeCache ctlharvesterv1.UpgradeCache
+	UpgradeClient ctlharvesterv1.UpgradeClient
 
 	Blockdevices     ctldiskv1.BlockDeviceController
 	BlockdeviceCache ctldiskv1.BlockDeviceCache
@@ -86,7 +86,7 @@ func Register(
 		NodeName:         opt.NodeName,
 		NodeCache:        nodes.Cache(),
 		Nodes:            nodes,
-		UpgradeCache:     upgrades.Cache(),
+		UpgradeClient:    upgrades,
 		Blockdevices:     bds,
 		BlockdeviceCache: bds.Cache(),
 		LVMVgClient:      lvmVGs,
@@ -350,7 +350,7 @@ func (c *Controller) updateDeviceStatus(device *diskv1.BlockDevice, devPath stri
 		device.Status.DeviceStatus = newStatus
 	}
 	// Only disk hasn't yet been formatted can be auto-provisioned.
-	if needAutoProvision && canAutoProvision(c.UpgradeCache) {
+	if needAutoProvision && canAutoProvision(c.UpgradeClient) {
 		// block auto-provision if during the upgrade
 		logrus.Infof("Auto provisioning block device %s", device.Name)
 		device.Spec.FileSystem.ForceFormatted = true
@@ -432,7 +432,7 @@ func (c *Controller) updateAutoProvisionDevice(device *diskv1.BlockDevice) (*dis
 		// we only need the dev path for checking auto provision
 		Name: strings.TrimPrefix(device.Status.DeviceStatus.DevPath, "/dev/"),
 	}
-	if c.scanner.ApplyAutoProvisionFiltersForDisk(tmpDisk) && canAutoProvision(c.UpgradeCache) {
+	if c.scanner.ApplyAutoProvisionFiltersForDisk(tmpDisk) && canAutoProvision(c.UpgradeClient) {
 		logrus.Debugf("Update auto provision device %s", device.Name)
 		deviceCpy := device.DeepCopy()
 		deviceCpy.Spec.FileSystem.ForceFormatted = true
@@ -447,7 +447,7 @@ func (c *Controller) updateAutoProvisionDevice(device *diskv1.BlockDevice) (*dis
 	return nil, false
 }
 
-func canAutoProvision(upgrades ctlharvesterv1.UpgradeCache) bool {
+func canAutoProvision(upgrades ctlharvesterv1.UpgradeClient) bool {
 	if upgrades == nil {
 		return true
 	}
@@ -455,20 +455,22 @@ func canAutoProvision(upgrades ctlharvesterv1.UpgradeCache) bool {
 	return !isOnUpgrade(upgrades)
 }
 
-func isOnUpgrade(upgrades ctlharvesterv1.UpgradeCache) bool {
+func isOnUpgrade(upgrades ctlharvesterv1.UpgradeClient) bool {
 	req, err := labels.NewRequirement(upgradeStateLabel, selection.NotIn, []string{upgradeStateSucceeded, upgradeStateFailed})
 	if err != nil {
 		logrus.Warnf("Failed to create label requirement for %s: %v", upgradeStateLabel, err)
 		return false
 	}
 
-	upgradesItems, err := upgrades.List(utils.HarvesterNS, labels.NewSelector().Add(*req))
+	upgradesItems, err := upgrades.List(utils.HarvesterNS, metav1.ListOptions{
+		LabelSelector: labels.NewSelector().Add(*req).String(),
+	})
 	if err != nil {
 		logrus.Warnf("Failed to list upgrades with label %s: %v", upgradeStateLabel, err)
 		return false
 	}
-	if len(upgradesItems) > 0 {
-		logrus.Infof("There are ongoing upgrades: %v", upgradesItems[0].Name)
+	if len(upgradesItems.Items) > 0 {
+		logrus.Infof("There are ongoing upgrades: %v, skip auto-provision", upgradesItems.Items[0].Name)
 		return true
 	}
 	return false
