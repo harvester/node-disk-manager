@@ -18,6 +18,7 @@ import (
 	"github.com/harvester/node-disk-manager/pkg/filter"
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/provisioner"
+	"github.com/harvester/node-disk-manager/pkg/utils"
 )
 
 type Scanner struct {
@@ -149,6 +150,15 @@ func (s *Scanner) handleExistingDev(oldBd *diskv1.BlockDevice, newBd *diskv1.Blo
 	} else if s.NeedsAutoProvision(oldBd, autoProvisioned) {
 		logrus.Debugf("Enqueue block device %s for auto-provisioning", newBd.Name)
 		s.Blockdevices.Enqueue(s.Namespace, newBd.Name)
+	} else if isMultipathDeviceRestart(oldBd, newBd) {
+		// If system doesn't enable multipathd, the block device will become inactive after reboot.
+		// So, we need to add a checking after starting multipathd.
+		// Then the block device will become active from inactive
+		oldBd.Status.State = diskv1.BlockDeviceActive
+		if _, err := s.Blockdevices.Update(oldBd); err != nil {
+			logrus.Errorf("Update device %s status error, wake up scanner again: %v", oldBd.Name, err)
+			s.Cond.Signal()
+		}
 	} else {
 		logrus.Debugf("Skip updating device %s", newBd.Name)
 	}
@@ -252,20 +262,28 @@ func convertBlockDeviceListToMap(bdList *diskv1.BlockDeviceList) (map[string]*di
 	return bdMap, wwns
 }
 
-// ApplyExcludeFiltersForPartition check the status of disk for every
+// ApplyExcludeFiltersForDisk check the status of disk for every
 // registered exclude filters. If the disk meets one of the criteria, it
 // returns true.
 func (s *Scanner) ApplyExcludeFiltersForDisk(disk *block.Disk) bool {
 	for _, filter := range s.ExcludeFilters {
 		if strings.HasPrefix(disk.Name, "dm-") {
-			// None of the existing filters can handle this case, but
-			// we need to exclude /dev/dm-* devices because they appear
-			// when LHv2 volumes are attached to VMs.
-			logrus.Debugf("block device /dev/%s ignored because it's a dm device", disk.Name)
+			if _, err := utils.IsMultipathDevice(disk.Name); err == nil {
+				logrus.Debugf("accept block device /dev/%s because it's a multipath device", disk.Name)
+				return false
+			}
+
+			logrus.Debugf("block device /dev/%s ignored because it's a dm device (likely LHv2 volume)", disk.Name)
 			return true
 		}
+
 		if filter.ApplyDiskFilter(disk) {
 			logrus.Debugf("block device /dev/%s ignored by %s", disk.Name, filter.Name)
+			return true
+		}
+
+		if _, err := utils.IsManagedByMultipath(disk.Name); err == nil {
+			logrus.Debugf("block device /dev/%s is managed by multipath device, ignored", disk.Name)
 			return true
 		}
 	}
@@ -343,4 +361,20 @@ func isDevPathChanged(oldBd *diskv1.BlockDevice, newBd *diskv1.BlockDevice) bool
 /* isDevAlreadyProvisioned would return true if the device is provisioned */
 func isDevAlreadyProvisioned(newBd *diskv1.BlockDevice) bool {
 	return newBd.Status.ProvisionPhase == diskv1.ProvisionPhaseProvisioned
+}
+
+func isMultipathDeviceRestart(oldBd *diskv1.BlockDevice, newBd *diskv1.BlockDevice) bool {
+	_, err := utils.IsMultipathDevice(oldBd.Status.DeviceStatus.DevPath)
+	if err != nil {
+		logrus.Errorf("failed to check if old device %s is multipath device: %v", oldBd.Status.DeviceStatus.DevPath, err)
+		return false
+	}
+
+	_, err = utils.IsMultipathDevice(newBd.Status.DeviceStatus.DevPath)
+	if err != nil {
+		logrus.Errorf("failed to check if new device %s is multipath device: %v", newBd.Status.DeviceStatus.DevPath, err)
+		return false
+	}
+
+	return true
 }
