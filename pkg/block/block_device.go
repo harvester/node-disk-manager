@@ -212,6 +212,10 @@ func diskSerialNumber(paths *linuxpath.Paths, disk string) string {
 	if serial, ok := info["ID_SERIAL"]; ok {
 		return serial
 	}
+	// for multipath
+	if serial, ok := info["DM_SERIAL"]; ok {
+		return serial
+	}
 	return util.UNKNOWN
 }
 
@@ -240,6 +244,10 @@ func diskWWN(paths *linuxpath.Paths, disk string) string {
 		return wwn
 	}
 	if wwn, ok := info["ID_WWN"]; ok {
+		return wwn
+	}
+	// for multipath
+	if wwn, ok := info["DM_WWN"]; ok {
 		return wwn
 	}
 	return util.UNKNOWN
@@ -473,7 +481,16 @@ func partitionInfo(ctx *context.Context, paths *linuxpath.Paths, part string) (s
 	for scanner.Scan() {
 		line := scanner.Text()
 		entry := parseMountEntry(line)
-		if entry == nil || entry.Partition != part {
+
+		if entry == nil {
+			continue
+		}
+
+		// when checking mounts, multipath use `/dev/mapper/xxx` to mount the device instead of /dev/dm-x
+		// so, we need to find the real link of `/dev/mapper/xxx` to check whether it's a multipath device.
+		path, _ := filepath.EvalSymlinks(entry.Partition)
+
+		if entry.Partition != part && path != part {
 			continue
 		}
 		ro := true
@@ -547,7 +564,7 @@ func GeneratePartitionGUID(part *Partition, nodeName string) string {
 	if valueExists(part.UUID) {
 		return makeHashGUID(nodeName + part.UUID)
 	}
-	logrus.Debugf("failed to generate GUID for device %s", part.Name)
+	logrus.Debugf("failed to generate Partition GUID for device %s", part.Name)
 	return ""
 }
 

@@ -220,3 +220,39 @@ func CallerWithCondLock[T any](cond *sync.Cond, f func() T) T {
 	defer cond.L.Unlock()
 	return f()
 }
+
+// IsMultipathDevice checks if a dm-x device is multipath device
+func IsMultipathDevice(path string) (string, error) {
+	ns := GetHostNamespacePath(HostProcPath)
+	executor, err := NewExecutorWithNS(ns)
+	if err != nil {
+		return "", fmt.Errorf("failed to create executor with namespace: %v", err)
+	}
+
+	// Execute multipath -C dm-x command to check if device is managed by multipath
+	// multipath -C returns exit code 0 if device is multipath device, non-zero if not
+	output, err := executor.Execute("multipath", []string{"-C", path})
+	if err != nil {
+		return output, err
+	}
+
+	return output, nil
+}
+
+// IsManagedByMultipath checks if a /dev/xxx device is managed by multipath
+func IsManagedByMultipath(deviceName string) (string, error) {
+	ns := GetHostNamespacePath(HostProcPath)
+	executor, err := NewExecutorWithNS(ns)
+	if err != nil {
+		return "", fmt.Errorf("failed to create executor with namespace: %v", err)
+	}
+
+	// Execute multipath -c /dev/xxx command to check if device is managed by multipath
+	// multipath -c returns exit code 0 if device belongs to multipath, non-zero if not
+	output, err := executor.Execute("multipath", []string{"-c", fmt.Sprintf("/dev/%s", deviceName)})
+	if err != nil {
+		return output, err
+	}
+
+	return output, nil
+}
