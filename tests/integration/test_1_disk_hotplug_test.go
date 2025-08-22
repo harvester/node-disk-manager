@@ -236,7 +236,8 @@ func (s *HotPlugTestSuite) Test_4_RemoveInactiveDisk() {
 	// remove this inactive device from Harvester
 	newBlockdevice := curBlockdevice.DeepCopy()
 	newBlockdevice.Spec.FileSystem.Provisioned = false
-	bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
+	_, err = bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
+	require.Equal(s.T(), nil, err, "Update Blockdevices should not get error")
 
 	// sleep 30 seconds to wait controller handle. jitter is between 7~13 seconds so 30 seconds would be enough to run twice
 	time.Sleep(30 * time.Second)

@@ -153,7 +153,9 @@ func (p *LonghornV1Provisioner) UnProvision() (bool, error) {
 	if isUnprovisioning && isValidateToDelete(diskToRemove) &&
 		(p.device.Status.State == diskv1.BlockDeviceInactive || p.device.Status.DeviceStatus.FileSystem.Corrupted) {
 		logrus.Infof("disk (%s) is inactive or corrupted, remove it from node directly", p.device.Name)
-		p.unmountTheBrokenDisk()
+		if err := p.unmountTheBrokenDisk(); err != nil {
+			return false, err
+		}
 
 		if err := removeDiskFromNode(); err != nil {
 			return true, err
@@ -188,17 +190,20 @@ func (p *LonghornV1Provisioner) UnProvision() (bool, error) {
 
 }
 
-func (p *LonghornV1Provisioner) unmountTheBrokenDisk() {
+func (p *LonghornV1Provisioner) unmountTheBrokenDisk() error {
 	filesystem := p.blockInfo.GetFileSystemInfoByDevPath(p.device.Status.DeviceStatus.DevPath)
 	if filesystem != nil && filesystem.MountPoint != "" {
 		if err := utils.ForceUmountWithTimeout(filesystem.MountPoint, 30*time.Second); err != nil {
 			logrus.Warnf("Force umount %v error: %v", filesystem.MountPoint, err)
 		}
 		// reset related fields
-		p.updateDeviceFileSystem(p.device, p.device.Status.DeviceStatus.DevPath)
+		if err := p.updateDeviceFileSystem(p.device, p.device.Status.DeviceStatus.DevPath); err != nil {
+			return err
+		}
 		p.device.Spec.Tags = []string{}
 		p.device.Status.Tags = []string{}
 	}
+	return nil
 }
 
 func (p *LonghornV1Provisioner) excludeTheDisk(targetDisk longhornv1.DiskSpec) error {

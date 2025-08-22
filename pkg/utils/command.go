@@ -71,7 +71,7 @@ func execute(command string, args []string, timeout time.Duration) (string, erro
 		// add timer to kill the process if timeout
 		timer = time.AfterFunc(timeout, func() {
 			cmdTimeout = true
-			cmd.Process.Kill()
+			cmd.Process.Kill() //nolint:errcheck
 		})
 	}
 	defer timer.Stop()
