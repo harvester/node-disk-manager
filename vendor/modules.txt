@@ -1,6 +1,3 @@
-# github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d
-## explicit
-github.com/StackExchange/wmi
 # github.com/beorn7/perks v1.0.1
 ## explicit; go 1.11
 github.com/beorn7/perks/quantile
@@ -35,13 +32,10 @@ github.com/felixge/httpsnoop
 # github.com/fsnotify/fsnotify v1.6.0
 ## explicit; go 1.16
 github.com/fsnotify/fsnotify
-# github.com/ghodss/yaml v1.0.0
-## explicit
-github.com/ghodss/yaml
 # github.com/go-logr/logr v1.2.4
 ## explicit; go 1.16
 github.com/go-logr/logr
-# github.com/go-ole/go-ole v1.2.4
+# github.com/go-ole/go-ole v1.2.6
 ## explicit; go 1.12
 github.com/go-ole/go-ole
 github.com/go-ole/go-ole/oleutil
@@ -98,8 +92,8 @@ github.com/harvester/go-common
 # github.com/imdario/mergo v0.3.12
 ## explicit; go 1.13
 github.com/imdario/mergo
-# github.com/jaypipes/ghw v0.8.1-0.20210701154532-dd036bd38c40
-## explicit; go 1.12
+# github.com/jaypipes/ghw v0.19.1
+## explicit; go 1.21
 github.com/jaypipes/ghw/pkg/block
 github.com/jaypipes/ghw/pkg/context
 github.com/jaypipes/ghw/pkg/linuxpath
@@ -109,6 +103,11 @@ github.com/jaypipes/ghw/pkg/pci/address
 github.com/jaypipes/ghw/pkg/snapshot
 github.com/jaypipes/ghw/pkg/unitutil
 github.com/jaypipes/ghw/pkg/util
+# github.com/jaypipes/pcidb v1.1.1
+## explicit; go 1.21
+github.com/jaypipes/pcidb
+github.com/jaypipes/pcidb/internal
+github.com/jaypipes/pcidb/types
 # github.com/jinzhu/copier v0.3.5
 ## explicit; go 1.13
 github.com/jinzhu/copier
@@ -232,7 +231,7 @@ github.com/russross/blackfriday/v2
 # github.com/sirupsen/logrus v1.9.2
 ## explicit; go 1.13
 github.com/sirupsen/logrus
-# github.com/spf13/pflag v1.0.5
+# github.com/spf13/pflag v1.0.6
 ## explicit; go 1.12
 github.com/spf13/pflag
 # github.com/stretchr/testify v1.8.2
@@ -243,6 +242,9 @@ github.com/stretchr/testify/suite
 # github.com/urfave/cli/v2 v2.3.0
 ## explicit; go 1.11
 github.com/urfave/cli/v2
+# github.com/yusufpapurcu/wmi v1.2.4
+## explicit; go 1.16
+github.com/yusufpapurcu/wmi
 # golang.org/x/crypto v0.21.0
 ## explicit; go 1.18
 golang.org/x/crypto/blake2b
@@ -374,8 +376,8 @@ gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.1 => gopkg.in/yaml.v3 v3.0.0-20220521103104-8f96da9f5d5e
 ## explicit
 gopkg.in/yaml.v3
-# howett.net/plist v0.0.0-20181124034731-591f970eefbb
-## explicit
+# howett.net/plist v1.0.2-0.20250314012144-ee69052608d9
+## explicit; go 1.12
 howett.net/plist
 # k8s.io/api v0.27.1 => k8s.io/api v0.24.13
 ## explicit; go 1.19
