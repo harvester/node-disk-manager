@@ -35,7 +35,7 @@ require (
 	github.com/ehazlett/simplelog v0.0.0-20200226020431-d374894e92a4
 	github.com/harvester/go-common v0.0.0-20230718010724-11313421a8f5
 	github.com/jaypipes/ghw v0.8.1-0.20210701154532-dd036bd38c40
-	github.com/kevinburke/ssh_config v1.2.0
+	github.com/kevinburke/ssh_config v1.4.0
 	github.com/longhorn/go-iscsi-helper v0.0.0-20231113050545-9df1e6b605c7
 	github.com/longhorn/longhorn-manager v1.5.3
 	github.com/melbahja/goph v1.3.0
