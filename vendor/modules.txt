@@ -152,7 +152,7 @@ github.com/mailru/easyjson/jwriter
 # github.com/matttproud/golang_protobuf_extensions v1.0.4
 ## explicit; go 1.9
 github.com/matttproud/golang_protobuf_extensions/pbutil
-# github.com/melbahja/goph v1.3.0
+# github.com/melbahja/goph v1.4.0
 ## explicit; go 1.13
 github.com/melbahja/goph
 # github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
@@ -170,7 +170,7 @@ github.com/pilebones/go-udev/netlink
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
-# github.com/pkg/sftp v1.13.4
+# github.com/pkg/sftp v1.13.5
 ## explicit; go 1.15
 github.com/pkg/sftp
 github.com/pkg/sftp/internal/encoding/ssh/filexfer
