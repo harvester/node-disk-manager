@@ -164,8 +164,8 @@ github.com/modern-go/reflect2
 # github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
 ## explicit
 github.com/munnerz/goautoneg
-# github.com/pilebones/go-udev v0.0.0-20210126000448-a3c2a7a4afb7
-## explicit; go 1.15
+# github.com/pilebones/go-udev v0.9.1
+## explicit; go 1.24
 github.com/pilebones/go-udev/netlink
 # github.com/pkg/errors v0.9.1
 ## explicit

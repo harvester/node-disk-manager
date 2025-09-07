@@ -1,6 +1,6 @@
 module github.com/harvester/node-disk-manager
 
-go 1.21
+go 1.24
 
 replace (
 	gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.0-20220521103104-8f96da9f5d5e
@@ -39,7 +39,7 @@ require (
 	github.com/longhorn/go-iscsi-helper v0.0.0-20231113050545-9df1e6b605c7
 	github.com/longhorn/longhorn-manager v1.5.3
 	github.com/melbahja/goph v1.3.0
-	github.com/pilebones/go-udev v0.0.0-20210126000448-a3c2a7a4afb7
+	github.com/pilebones/go-udev v0.9.1
 	github.com/rancher/lasso v0.0.0-20221227210133-6ea88ca2fbcc
 	github.com/rancher/wrangler v1.1.1
 	github.com/sirupsen/logrus v1.9.2
