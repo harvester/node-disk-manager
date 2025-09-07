@@ -417,8 +417,8 @@ github.com/opentracing/opentracing-go v1.1.0/go.mod h1:UkNAQd3GIcIGf0SeVgPpRdFSt
 github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/pelletier/go-toml v1.2.0/go.mod h1:5z9KED0ma1S8pY6P1sdut58dfprrGBbd/94hg7ilaic=
 github.com/peterbourgon/diskv v2.0.1+incompatible/go.mod h1:uqqh8zWWbv1HBMNONnaR/tNboyR3/BZd58JJSHlUSCU=
-github.com/pilebones/go-udev v0.0.0-20210126000448-a3c2a7a4afb7 h1:1If5vu3Qy1ZL3NshlsrSQMsdRhujenaVFbHcFM9XQUk=
-github.com/pilebones/go-udev v0.0.0-20210126000448-a3c2a7a4afb7/go.mod h1:T2eI2tUSK0hA2WS5QLjXJUfQkluZQu+18Cqvem3CaXI=
+github.com/pilebones/go-udev v0.9.1 h1:uN72M1C1fgzhsVmBGEM8w9RD1JY4iVsPZpr+Z6rb3O8=
+github.com/pilebones/go-udev v0.9.1/go.mod h1:Bgcl07crebF3JSeS4+nuaRvhWFdCeFoBhXXeAp93XNo=
 github.com/pkg/errors v0.8.0/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
