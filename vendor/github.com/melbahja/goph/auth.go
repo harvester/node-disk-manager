@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"strings"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
@@ -23,11 +24,39 @@ func Password(pass string) Auth {
 	}
 }
 
+// KeyboardInteractive returns password keyboard interactive auth method as fallback of password auth method.
+func KeyboardInteractive(pass string) Auth {
+	return Auth{
+		ssh.Password(pass),
+		ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) (answers []string, err error) {
+			for _, q := range questions {
+				if strings.Contains(strings.ToLower(q), "password") {
+					answers = append(answers, pass)
+				} else {
+					answers = append(answers, "")
+				}
+			}
+			return answers, nil
+		}),
+	}
+}
+
 // Key returns auth method from private key with or without passphrase.
 func Key(prvFile string, passphrase string) (Auth, error) {
 
 	signer, err := GetSigner(prvFile, passphrase)
 
+	if err != nil {
+		return nil, err
+	}
+
+	return Auth{
+		ssh.PublicKeys(signer),
+	}, nil
+}
+
+func RawKey(privateKey string, passphrase string) (Auth, error) {
+	signer, err := GetSignerForRawKey([]byte(privateKey), passphrase)
 	if err != nil {
 		return nil, err
 	}
@@ -68,6 +97,26 @@ func GetSigner(prvFile string, passphrase string) (ssh.Signer, error) {
 		return nil, err
 
 	} else if passphrase != "" {
+
+		signer, err = ssh.ParsePrivateKeyWithPassphrase(privateKey, []byte(passphrase))
+
+	} else {
+
+		signer, err = ssh.ParsePrivateKey(privateKey)
+	}
+
+	return signer, err
+}
+
+// GetSignerForRawKey returns ssh signer from private key file.
+func GetSignerForRawKey(privateKey []byte, passphrase string) (ssh.Signer, error) {
+
+	var (
+		err    error
+		signer ssh.Signer
+	)
+
+	if passphrase != "" {
 
 		signer, err = ssh.ParsePrivateKeyWithPassphrase(privateKey, []byte(passphrase))
 

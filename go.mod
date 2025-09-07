@@ -38,7 +38,7 @@ require (
 	github.com/kevinburke/ssh_config v1.2.0
 	github.com/longhorn/go-iscsi-helper v0.0.0-20231113050545-9df1e6b605c7
 	github.com/longhorn/longhorn-manager v1.5.3
-	github.com/melbahja/goph v1.3.0
+	github.com/melbahja/goph v1.4.0
 	github.com/pilebones/go-udev v0.0.0-20210126000448-a3c2a7a4afb7
 	github.com/rancher/lasso v0.0.0-20221227210133-6ea88ca2fbcc
 	github.com/rancher/wrangler v1.1.1
@@ -89,7 +89,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/pkg/sftp v1.13.4 // indirect
+	github.com/pkg/sftp v1.13.5 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.15.0 // indirect
 	github.com/prometheus/client_model v0.3.0 // indirect
