@@ -3,7 +3,7 @@ module github.com/harvester/node-disk-manager
 go 1.21
 
 replace (
-	gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.0-20220521103104-8f96da9f5d5e
+	gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api => k8s.io/api v0.24.13
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.24.13
 	k8s.io/apimachinery => k8s.io/apimachinery v0.24.13
@@ -33,23 +33,23 @@ replace (
 
 require (
 	github.com/ehazlett/simplelog v0.0.0-20200226020431-d374894e92a4
-	github.com/harvester/go-common v0.0.0-20230718010724-11313421a8f5
+	github.com/harvester/go-common a03d83f41a0f
 	github.com/jaypipes/ghw v0.8.1-0.20210701154532-dd036bd38c40
 	github.com/kevinburke/ssh_config v1.2.0
-	github.com/longhorn/go-iscsi-helper v0.0.0-20231113050545-9df1e6b605c7
+	github.com/longhorn/go-iscsi-helper 5c5f9a0060b4
 	github.com/longhorn/longhorn-manager v1.5.3
 	github.com/melbahja/goph v1.3.0
 	github.com/pilebones/go-udev v0.0.0-20210126000448-a3c2a7a4afb7
 	github.com/rancher/lasso v0.0.0-20221227210133-6ea88ca2fbcc
-	github.com/rancher/wrangler v1.1.1
-	github.com/sirupsen/logrus v1.9.2
+	github.com/rancher/wrangler v1.1.2
+	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.8.2
 	github.com/urfave/cli/v2 v2.3.0
 	golang.org/x/crypto v0.21.0
 	k8s.io/api v0.27.1
 	k8s.io/apimachinery v0.27.1
 	k8s.io/client-go v0.27.1
-	k8s.io/utils v0.0.0-20230406110748-d93618cff8a2
+	k8s.io/utils 0af2bda4dd1d
 )
 
 require (
