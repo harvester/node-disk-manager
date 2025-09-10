@@ -144,7 +144,8 @@ func (s *SingleDiskSuite) Test_1_UnprovisionSingleDisk() {
 	require.Equal(s.T(), diskv1.BlockDeviceActive, curBlockdevice.Status.State, "Block device state should be Active")
 	newBlockdevice := curBlockdevice.DeepCopy()
 	newBlockdevice.Spec.FileSystem.Provisioned = false
-	bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
+	_, err = bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
+	require.Equal(s.T(), nil, err, "Update Blockdevices should not get error")
 
 	// sleep 30 seconds to wait controller handle. jitter is between 7~13 seconds so 30 seconds would be enough to run twice
 	time.Sleep(30 * time.Second)
@@ -168,7 +169,8 @@ func (s *SingleDiskSuite) Test_2_ManuallyProvisionSingleDisk() {
 	newBlockdevice.Spec.FileSystem.Provisioned = true
 	targetTags := []string{"default", "test-disk"}
 	newBlockdevice.Spec.Tags = targetTags
-	bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
+	_, err = bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
+	require.Equal(s.T(), nil, err, "Update Blockdevices should not get error")
 
 	// sleep 30 seconds to wait controller handle
 	time.Sleep(30 * time.Second)
@@ -194,7 +196,8 @@ func (s *SingleDiskSuite) Test_3_RemoveTags() {
 	newBlockdevice := curBlockdevice.DeepCopy()
 	targetTags := []string{"default"}
 	newBlockdevice.Spec.Tags = targetTags
-	bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
+	_, err = bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
+	require.Equal(s.T(), nil, err, "Update Blockdevices should not get error")
 
 	// sleep 30 seconds to wait controller handle
 	time.Sleep(30 * time.Second)
@@ -220,7 +223,8 @@ func (s *SingleDiskSuite) Test_4_AddTags() {
 	newBlockdevice := curBlockdevice.DeepCopy()
 	targetTags := []string{"default", "test-disk-2"}
 	newBlockdevice.Spec.Tags = targetTags
-	bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
+	_, err = bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
+	require.Equal(s.T(), nil, err, "Update Blockdevices should not get error")
 
 	// sleep 30 seconds to wait controller handle
 	time.Sleep(30 * time.Second)

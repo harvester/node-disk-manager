@@ -249,7 +249,9 @@ func updatePVAndVG(vgCpy *diskv1.LVMVolumeGroup, toAdd, toRemove map[string]stri
 				}
 			}
 		}
-		lvm.DoPVRemove(dev)
+		if err := lvm.DoPVRemove(dev); err != nil {
+			return err
+		}
 		delete(vgCpy.Status.Devices, bdName)
 	}
 	return nil
