@@ -7,7 +7,6 @@
 package snapshot
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 )
@@ -43,7 +42,11 @@ func ExpectedCloneStaticContent() []string {
 		"/sys/devices/system/node/online",
 		"/sys/devices/system/node/possible",
 		"/sys/devices/system/node/node*/cpu*",
+		"/sys/devices/system/node/node*/cpu*/online",
 		"/sys/devices/system/node/node*/distance",
+		"/sys/devices/system/node/node*/meminfo",
+		"/sys/devices/system/node/node*/memory*",
+		"/sys/devices/system/node/node*/hugepages/hugepages-*/*",
 	}
 }
 
@@ -55,7 +58,7 @@ type filterFunc func(string) bool
 // symbolic link. We can filter out entries depending on the link target.
 // Each filter is a simple function which takes the entry name or the link
 // target and must return true if the entry should be collected, false
-// otherwise. Last, explicitely collect a list of attributes for each entry,
+// otherwise. Last, explicitly collect a list of attributes for each entry,
 // given as list of glob patterns as `subEntries`.
 // Return the final list of glob patterns to be collected.
 func cloneContentByClass(devClass string, subEntries []string, filterName filterFunc, filterLink filterFunc) []string {
@@ -64,7 +67,7 @@ func cloneContentByClass(devClass string, subEntries []string, filterName filter
 	// warning: don't use the context package here, this means not even the linuxpath package.
 	// TODO(fromani) remove the path duplication
 	sysClass := filepath.Join("sys", "class", devClass)
-	entries, err := ioutil.ReadDir(sysClass)
+	entries, err := os.ReadDir(sysClass)
 	if err != nil {
 		// we should not import context, hence we can't Warn()
 		return fileSpecs
