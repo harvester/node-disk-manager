@@ -3,10 +3,10 @@ module github.com/harvester/node-disk-manager
 go 1.24.2
 
 replace (
-	github.com/openshift/api => github.com/openshift/api v0.0.0-20191219222812-2987a591a72c
-	github.com/openshift/client-go => github.com/openshift/client-go v0.0.0-20200521150516-05eb9880269c
-	github.com/rancher/rancher/pkg/apis => github.com/rancher/rancher/pkg/apis v0.0.0-20240919204204-3da2ae0cabd1
-	gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.0-20220521103104-8f96da9f5d5e
+	github.com/openshift/api => github.com/openshift/api e515d9c65abd
+	github.com/openshift/client-go => github.com/openshift/client-go 6193816ae379
+	github.com/rancher/rancher/pkg/apis => github.com/rancher/rancher/pkg/apis 58abf492671b
+	gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api => k8s.io/api v0.32.6
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.32.6
 	k8s.io/apimachinery => k8s.io/apimachinery v0.32.6
@@ -23,7 +23,7 @@ replace (
 	k8s.io/csi-translation-lib => k8s.io/csi-translation-lib v0.32.6
 	k8s.io/kube-aggregator => k8s.io/kube-aggregator v0.32.6
 	k8s.io/kube-controller-manager => k8s.io/kube-controller-manager v0.32.6
-	k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20250701173324-9bd5c66d9911
+	k8s.io/kube-openapi => k8s.io/kube-openapi 589584f1c912
 	k8s.io/kube-proxy => k8s.io/kube-proxy v0.32.6
 	k8s.io/kube-scheduler => k8s.io/kube-scheduler v0.32.6
 	k8s.io/kubectl => k8s.io/kubectl v0.32.6
@@ -37,7 +37,7 @@ replace (
 
 require (
 	github.com/ehazlett/simplelog v0.0.0-20200226020431-d374894e92a4
-	github.com/harvester/go-common v0.0.0-20250109132713-e748ce72a7ba
+	github.com/harvester/go-common a03d83f41a0f
 	github.com/harvester/harvester v1.5.1
 	github.com/harvester/webhook v0.1.5
 	github.com/jaypipes/ghw v0.8.1-0.20210701154532-dd036bd38c40
@@ -47,8 +47,8 @@ require (
 	github.com/pilebones/go-udev v0.0.0-20210126000448-a3c2a7a4afb7
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/procfs v0.15.1
-	github.com/rancher/lasso v0.2.3
-	github.com/rancher/wrangler/v3 v3.2.2
+	github.com/rancher/lasso v0.2.4
+	github.com/rancher/wrangler/v3 v3.2.4
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.10.0
 	github.com/urfave/cli/v2 v2.3.0
@@ -56,7 +56,7 @@ require (
 	k8s.io/api v0.33.1
 	k8s.io/apimachinery v0.33.1
 	k8s.io/client-go v12.0.0+incompatible
-	k8s.io/utils v0.0.0-20241210054802-24370beab758
+	k8s.io/utils 0af2bda4dd1d
 )
 
 require (
