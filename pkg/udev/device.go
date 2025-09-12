@@ -15,20 +15,22 @@ const (
 	// LinkNameIndex is used to get link index from dev link
 	LinkNameIndex = 2
 
-	UdevDevname       = "DEVNAME"
-	UdevDevtype       = "DEVTYPE"
-	UdevFsUUID        = "ID_FS_UUID"
-	UdevIDPath        = "ID_PATH"
-	UdevModel         = "ID_MODEL"
-	UdevPartEntryType = "ID_PART_ENTRY_TYPE"
-	UdevPartEntryUUID = "ID_PART_ENTRY_UUID"
-	UdevPartTableType = "ID_PART_TABLE_TYPE"
-	UdevPartTableUUID = "ID_PART_TABLE_UUID"
-	UdevSerialNumber  = "ID_SERIAL"
-	UdevSerialShort   = "ID_SERIAL_SHORT"
-	UdevType          = "ID_TYPE"
-	UdevVendor        = "ID_VENDOR"
-	UdevWWN           = "ID_WWN"
+	UdevDevname        = "DEVNAME"
+	UdevDevtype        = "DEVTYPE"
+	UdevFsUUID         = "ID_FS_UUID"
+	UdevIDPath         = "ID_PATH"
+	UdevModel          = "ID_MODEL"
+	UdevPartEntryType  = "ID_PART_ENTRY_TYPE"
+	UdevPartEntryUUID  = "ID_PART_ENTRY_UUID"
+	UdevPartTableType  = "ID_PART_TABLE_TYPE"
+	UdevPartTableUUID  = "ID_PART_TABLE_UUID"
+	UdevSerialNumber   = "ID_SERIAL"
+	UdevDMSerialNumber = "DM_SERIAL" // multipath device
+	UdevSerialShort    = "ID_SERIAL_SHORT"
+	UdevType           = "ID_TYPE"
+	UdevVendor         = "ID_VENDOR"
+	UdevWWN            = "ID_WWN"
+	UdevDMWWN          = "DM_WWN" // multipath device
 )
 
 type Device map[string]string
@@ -56,9 +58,14 @@ func (device Device) UpdateDiskFromUdev(disk *block.Disk) {
 		disk.SerialNumber = device[UdevSerialShort]
 	} else if len(device[UdevSerialNumber]) > 0 {
 		disk.SerialNumber = device[UdevSerialNumber]
+	} else if len(device[UdevDMSerialNumber]) > 0 {
+		disk.SerialNumber = device[UdevDMSerialNumber]
 	}
+
 	if len(device[UdevWWN]) > 0 {
 		disk.WWN = device[UdevWWN]
+	} else if len(device[UdevDMWWN]) > 0 {
+		disk.WWN = device[UdevDMWWN]
 	}
 }
 

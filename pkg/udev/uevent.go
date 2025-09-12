@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pilebones/go-udev/netlink"
 	"github.com/sirupsen/logrus"
@@ -110,6 +111,11 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 	devPath := udevDevice.GetDevName()
 	var disk *block.Disk
 	var bd *v1beta1.BlockDevice
+
+	if strings.Contains(devPath, "dm-") {
+		// wait for rebuilding the multipath device
+		time.Sleep(1 * time.Second)
+	}
 
 	if uevent.Action == netlink.REMOVE {
 		if udevDevice.IsDisk() {

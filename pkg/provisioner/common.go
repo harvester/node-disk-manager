@@ -289,9 +289,18 @@ func ResolvePersistentDevPath(device *diskv1.BlockDevice) (string, error) {
 		// ...at this point, if there's no error, we've either got the device we're
 		// interested in (e.g. "/dev/sda", "/dev/nvme0n1", etc.), _or_ we've got a
 		// "/dev/dm-*" device, _or_ we've got no path...
-		if path != "" && !strings.HasPrefix(path, "/dev/dm-") {
-			logrus.Debugf("Resolved device path %s for %s", path, device.Name)
-			return path, nil
+		// if it's a multipath device, we should also return the path directly.
+		if path != "" {
+			if !strings.HasPrefix(path, "/dev/dm-") {
+				// Not a multipath device or longhorn v2 device, we can use the path directly
+				logrus.Debugf("Resolved device path %s for %s", path, device.Name)
+				return path, nil
+			}
+
+			if _, err := utils.IsMultipathDevice(path); err == nil {
+				logrus.Debugf("Resolved device path %s for %s", path, device.Name)
+				return path, nil
+			}
 		}
 		// ...in the latter two cases, we can try to resolve via "/dev/disk/by-path/...",
 		// which works for devices that don't have a WWN, and also in the dm case will
