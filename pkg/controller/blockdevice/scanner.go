@@ -150,11 +150,17 @@ func (s *Scanner) handleExistingDev(oldBd *diskv1.BlockDevice, newBd *diskv1.Blo
 	} else if s.NeedsAutoProvision(oldBd, autoProvisioned) {
 		logrus.Debugf("Enqueue block device %s for auto-provisioning", newBd.Name)
 		s.Blockdevices.Enqueue(s.Namespace, newBd.Name)
-	} else if isMultipathDeviceRestart(oldBd, newBd) {
+	} else if isDMDevice(oldBd.Status.DeviceStatus.DevPath) {
+		// Other dm devices should be filtered our at the beginning.
+		// So, we focus multipath device checking here.
 		// If system doesn't enable multipathd, the block device will become inactive after reboot.
 		// So, we need to add a checking after starting multipathd.
-		// Then the block device will become active from inactive
-		oldBd.Status.State = diskv1.BlockDeviceActive
+		// Then the block device will become active from inactive.
+		if _, err := utils.IsMultipathDevice(oldBd.Status.DeviceStatus.DevPath); err == nil {
+			logrus.Infof("The multipath device %s is available, change it to active.", oldBd.Name)
+			oldBd.Status.State = diskv1.BlockDeviceActive
+		}
+
 		if _, err := s.Blockdevices.Update(oldBd); err != nil {
 			logrus.Errorf("Update device %s status error, wake up scanner again: %v", oldBd.Name, err)
 			s.Cond.Signal()
@@ -287,6 +293,7 @@ func (s *Scanner) ApplyExcludeFiltersForDisk(disk *block.Disk) bool {
 		logrus.Debugf("block device /dev/%s is managed by multipath device, ignored", disk.Name)
 		return true
 	}
+
 	return false
 }
 
@@ -363,18 +370,6 @@ func isDevAlreadyProvisioned(newBd *diskv1.BlockDevice) bool {
 	return newBd.Status.ProvisionPhase == diskv1.ProvisionPhaseProvisioned
 }
 
-func isMultipathDeviceRestart(oldBd *diskv1.BlockDevice, newBd *diskv1.BlockDevice) bool {
-	_, err := utils.IsMultipathDevice(oldBd.Status.DeviceStatus.DevPath)
-	if err != nil {
-		logrus.Errorf("failed to check if old device %s is multipath device: %v", oldBd.Status.DeviceStatus.DevPath, err)
-		return false
-	}
-
-	_, err = utils.IsMultipathDevice(newBd.Status.DeviceStatus.DevPath)
-	if err != nil {
-		logrus.Errorf("failed to check if new device %s is multipath device: %v", newBd.Status.DeviceStatus.DevPath, err)
-		return false
-	}
-
-	return true
+func isDMDevice(name string) bool {
+	return strings.Contains(name, "dm-")
 }
