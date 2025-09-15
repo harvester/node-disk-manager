@@ -266,26 +266,26 @@ func convertBlockDeviceListToMap(bdList *diskv1.BlockDeviceList) (map[string]*di
 // registered exclude filters. If the disk meets one of the criteria, it
 // returns true.
 func (s *Scanner) ApplyExcludeFiltersForDisk(disk *block.Disk) bool {
-	for _, filter := range s.ExcludeFilters {
-		if strings.HasPrefix(disk.Name, "dm-") {
-			if _, err := utils.IsMultipathDevice(disk.Name); err == nil {
-				logrus.Debugf("accept block device /dev/%s because it's a multipath device", disk.Name)
-				return false
-			}
-
-			logrus.Debugf("block device /dev/%s ignored because it's a dm device (likely LHv2 volume)", disk.Name)
-			return true
+	if strings.HasPrefix(disk.Name, "dm-") {
+		if _, err := utils.IsMultipathDevice(disk.Name); err == nil {
+			logrus.Debugf("accept block device /dev/%s because it's a multipath device", disk.Name)
+			return false
 		}
 
+		logrus.Debugf("block device /dev/%s ignored because it's a dm device (likely LHv2 volume)", disk.Name)
+		return true
+	}
+
+	for _, filter := range s.ExcludeFilters {
 		if filter.ApplyDiskFilter(disk) {
 			logrus.Debugf("block device /dev/%s ignored by %s", disk.Name, filter.Name)
 			return true
 		}
+	}
 
-		if _, err := utils.IsManagedByMultipath(disk.Name); err == nil {
-			logrus.Debugf("block device /dev/%s is managed by multipath device, ignored", disk.Name)
-			return true
-		}
+	if _, err := utils.IsManagedByMultipath(disk.Name); err == nil {
+		logrus.Debugf("block device /dev/%s is managed by multipath device, ignored", disk.Name)
+		return true
 	}
 	return false
 }
