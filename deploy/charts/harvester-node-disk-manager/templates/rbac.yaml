@@ -68,6 +68,9 @@ rules:
   - apiGroups: [ "admissionregistration.k8s.io" ]
     resources: [ "validatingwebhookconfigurations", "mutatingwebhookconfigurations" ]
     verbs: [ "*" ]
+  - apiGroups: [ "" ]
+    resources: [ "nodes" ]
+    verbs: [ "get", "watch", "list" ]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
