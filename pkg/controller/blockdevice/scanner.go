@@ -156,13 +156,20 @@ func (s *Scanner) handleExistingDev(oldBd *diskv1.BlockDevice, newBd *diskv1.Blo
 		// If system doesn't enable multipathd, the block device will become inactive after reboot.
 		// So, we need to add a checking after starting multipathd.
 		// Then the block device will become active from inactive.
+		oldBdCp := oldBd.DeepCopy()
+
 		if _, err := utils.IsMultipathDevice(oldBd.Status.DeviceStatus.DevPath); err == nil {
 			logrus.Infof("The multipath device %s is available, change it to active.", oldBd.Name)
-			oldBd.Status.State = diskv1.BlockDeviceActive
+			oldBdCp.Status.State = diskv1.BlockDeviceActive
 		}
 
-		if _, err := s.Blockdevices.Update(oldBd); err != nil {
-			logrus.Errorf("Update device %s status error, wake up scanner again: %v", oldBd.Name, err)
+		if reflect.DeepEqual(oldBd, oldBdCp) {
+			logrus.Debugf("Skip updating multipath device %s", oldBd.Name)
+			return
+		}
+
+		if _, err := s.Blockdevices.Update(oldBdCp); err != nil {
+			logrus.Errorf("Update device %s status error, wake up scanner again: %v", oldBdCp.Name, err)
 			s.Cond.Signal()
 		}
 	} else {
