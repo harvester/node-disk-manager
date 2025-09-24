@@ -179,16 +179,16 @@ func (v *Validator) validateDegradedVolumes(old *diskv1.BlockDevice) error {
 	if len(degradedVolumes) == 0 {
 		return nil
 	}
-	pvList, err := v.pvCache.List(labels.Everything())
-	if err != nil {
-		return err
-	}
 	selectorDegradedVol := make(map[string]string)
-	for _, pv := range pvList {
-		if degradedVolumes[pv.Name] {
+	for name, degraded := range degradedVolumes {
+		if degraded {
+			pv, err := v.pvCache.Get(name)
+			if err != nil {
+				return err
+			}
 			diskSelector := pv.Spec.CSI.VolumeAttributes[DiskSelectorKey]
 			if len(diskSelector) != 0 {
-				selectorDegradedVol[pv.Spec.CSI.VolumeAttributes[DiskSelectorKey]] = pv.Name
+				selectorDegradedVol[diskSelector] = pv.Name
 			}
 		}
 	}
