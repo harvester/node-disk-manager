@@ -86,7 +86,7 @@ func (v *Validator) validateLHDisk(oldBd, newBd *diskv1.BlockDevice) error {
 		if err != nil {
 			return err
 		}
-		if len(nodeList) == 1 {
+		if len(nodeList) == 1 && len(oldBd.Spec.Tags) > 0 {
 			err := v.validateDegradedVolumes(oldBd)
 			if err != nil {
 				return err
