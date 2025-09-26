@@ -81,7 +81,9 @@ func (v *Validator) validateProvisioner(bd *diskv1.BlockDevice) error {
 }
 
 func (v *Validator) validateLHDisk(oldBd, newBd *diskv1.BlockDevice) error {
-	if oldBd.Spec.Provisioner.Longhorn != nil && newBd.Spec.Provisioner.Longhorn != nil && oldBd.Spec.Provision && !newBd.Spec.Provision {
+	if oldBd.Spec.Provisioner != nil && newBd.Spec.Provisioner != nil &&
+		oldBd.Spec.Provisioner.Longhorn != nil && newBd.Spec.Provisioner.Longhorn != nil &&
+		oldBd.Spec.Provision && !newBd.Spec.Provision {
 		nodeList, err := v.nodeCache.List(labels.Everything())
 		if err != nil {
 			return err
