@@ -180,7 +180,7 @@ func (v *Validator) validateDegradedVolumes(old *diskv1.BlockDevice) error {
 	if len(degradedVolumes) == 0 {
 		return nil
 	}
-	selectorDegradedVol := make(map[string]string)
+	selectorDegradedVol := make(map[string][]string)
 	for name := range degradedVolumes {
 		pv, err := v.pvCache.Get(name)
 		if err != nil {
@@ -191,17 +191,17 @@ func (v *Validator) validateDegradedVolumes(old *diskv1.BlockDevice) error {
 			diskSelector = pv.Spec.CSI.VolumeAttributes[utils.DiskSelectorKey]
 		}
 		if len(diskSelector) != 0 {
-			selectorDegradedVol[diskSelector] = pv.Name
+			selectorDegradedVol[diskSelector] = append(selectorDegradedVol[diskSelector], pv.Name)
 		}
 	}
 	degradedVolString := ""
 	for _, diskTag := range old.Spec.Tags {
 		if val, ok := selectorDegradedVol[diskTag]; ok {
-			degradedVolString = fmt.Sprintf("%s, %s", degradedVolString, val)
+			degradedVolString += fmt.Sprintf(" %s: %v", diskTag, val)
 		}
 	}
 	if len(degradedVolString) > 0 {
-		return fmt.Errorf("the following volumes: %s attached to disk: %s are in degraded state; evict disk before proceeding",
+		return fmt.Errorf("the following tags with volumes:%s attached to disk: %s are in degraded state; evict disk before proceeding",
 			degradedVolString, old.Spec.DevPath)
 	}
 	return nil
@@ -215,21 +215,24 @@ func (v *Validator) validateFailedVMImages(old *diskv1.BlockDevice) error {
 	if len(vmImageList) == 0 {
 		return nil
 	}
-	selectorFailedVMIMage := make(map[string]string)
+	selectorFailedVMIMage := make(map[string][]string)
 	for _, vmImage := range vmImageList {
+		if vmImage.Status.Failed == 0 {
+			continue
+		}
 		diskSelectorValue := vmImage.Spec.StorageClassParameters[utils.DiskSelectorKey]
 		if vmImage.Status.Failed != 0 && len(diskSelectorValue) > 0 {
-			selectorFailedVMIMage[diskSelectorValue] = vmImage.Spec.DisplayName
+			selectorFailedVMIMage[diskSelectorValue] = append(selectorFailedVMIMage[diskSelectorValue], vmImage.Spec.DisplayName)
 		}
 	}
 	failedVMImages := ""
 	for _, diskTag := range old.Spec.Tags {
 		if val, ok := selectorFailedVMIMage[diskTag]; ok {
-			failedVMImages = fmt.Sprintf("%s, %s", failedVMImages, val)
+			failedVMImages += fmt.Sprintf(" %s: %v", diskTag, val)
 		}
 	}
 	if len(failedVMImages) > 0 {
-		return fmt.Errorf("the following virtualmachineimages: %s attached to disk: %s are in failed state; evict disk before proceeding",
+		return fmt.Errorf("the following tags referenced by virtualmachineimages: %s attached to disk: %s are in failed state; evict disk before proceeding",
 			failedVMImages, old.Spec.DevPath)
 	}
 	return nil
