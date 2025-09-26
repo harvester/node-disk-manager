@@ -21,10 +21,6 @@ import (
 	"github.com/harvester/node-disk-manager/pkg/utils"
 )
 
-const (
-	DiskSelectorKey = "diskSelector"
-)
-
 type Validator struct {
 	admission.DefaultValidator
 
@@ -168,30 +164,34 @@ func (v *Validator) validateVGIsAlreadyUsed(bd *diskv1.BlockDevice) error {
 }
 
 func (v *Validator) validateDegradedVolumes(old *diskv1.BlockDevice) error {
-	volumeList, err := v.volumeCache.List("longhorn-system", labels.Everything())
+	volumeList, err := v.volumeCache.List(utils.LonghornSystemNamespaceName, labels.Everything())
 	if err != nil {
 		return err
 	}
-	degradedVolumes := make(map[string]bool)
+	if len(volumeList) == 0 {
+		return nil
+	}
+	degradedVolumes := make(map[string]struct{})
 	for _, vol := range volumeList {
 		if vol.Status.Robustness == lhv1.VolumeRobustnessDegraded {
-			degradedVolumes[vol.Name] = true
+			degradedVolumes[vol.Name] = struct{}{}
 		}
 	}
 	if len(degradedVolumes) == 0 {
 		return nil
 	}
 	selectorDegradedVol := make(map[string]string)
-	for name, degraded := range degradedVolumes {
-		if degraded {
-			pv, err := v.pvCache.Get(name)
-			if err != nil {
-				return err
-			}
-			diskSelector := pv.Spec.CSI.VolumeAttributes[DiskSelectorKey]
-			if len(diskSelector) != 0 {
-				selectorDegradedVol[diskSelector] = pv.Name
-			}
+	for name := range degradedVolumes {
+		pv, err := v.pvCache.Get(name)
+		if err != nil {
+			return err
+		}
+		diskSelector := ""
+		if pv.Spec.CSI != nil {
+			diskSelector = pv.Spec.CSI.VolumeAttributes[utils.DiskSelectorKey]
+		}
+		if len(diskSelector) != 0 {
+			selectorDegradedVol[diskSelector] = pv.Name
 		}
 	}
 	degradedVolString := ""
@@ -212,10 +212,14 @@ func (v *Validator) validateFailedVMImages(old *diskv1.BlockDevice) error {
 	if err != nil {
 		return err
 	}
+	if len(vmImageList) == 0 {
+		return nil
+	}
 	selectorFailedVMIMage := make(map[string]string)
 	for _, vmImage := range vmImageList {
-		if vmImage.Status.Failed != 0 && len(vmImage.Spec.StorageClassParameters[DiskSelectorKey]) > 0 {
-			selectorFailedVMIMage[vmImage.Spec.StorageClassParameters[DiskSelectorKey]] = vmImage.Spec.DisplayName
+		diskSelectorValue := vmImage.Spec.StorageClassParameters[utils.DiskSelectorKey]
+		if vmImage.Status.Failed != 0 && len(diskSelectorValue) > 0 {
+			selectorFailedVMIMage[diskSelectorValue] = vmImage.Spec.DisplayName
 		}
 	}
 	failedVMImages := ""
