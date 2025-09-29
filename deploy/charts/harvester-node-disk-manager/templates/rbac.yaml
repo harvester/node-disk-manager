@@ -57,7 +57,7 @@ rules:
     resources: [ "storageclasses" ]
     verbs: [ "*" ]
   - apiGroups: [ "harvesterhci.io" ]
-    resources: [ "blockdevices", "lvmvolumegroups", "lvmvolumegroups/status" ]
+    resources: [ "blockdevices", "lvmvolumegroups", "lvmvolumegroups/status", "virtualmachineimages" ]
     verbs: [ "*" ]
   - apiGroups: [ "apiregistration.k8s.io" ]
     resources: [ "apiservices" ]
@@ -70,6 +70,9 @@ rules:
     verbs: [ "*" ]
   - apiGroups: [ "" ]
     resources: [ "nodes" ]
+    verbs: [ "get", "watch", "list" ]
+  - apiGroups: ["longhorn.io"]
+    resources: ["volumes"] 
     verbs: [ "get", "watch", "list" ]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

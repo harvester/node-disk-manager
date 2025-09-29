@@ -171,17 +171,17 @@ func (v *Validator) validateDegradedVolumes(old *diskv1.BlockDevice) error {
 	if len(volumeList) == 0 {
 		return nil
 	}
-	degradedVolumes := make(map[string]struct{})
+	degradedVolumes := make([]string, 40)
 	for _, vol := range volumeList {
 		if vol.Status.Robustness == lhv1.VolumeRobustnessDegraded {
-			degradedVolumes[vol.Name] = struct{}{}
+			degradedVolumes = append(degradedVolumes, vol.Name)
 		}
 	}
 	if len(degradedVolumes) == 0 {
 		return nil
 	}
 	selectorDegradedVol := make(map[string][]string)
-	for name := range degradedVolumes {
+	for _, name := range degradedVolumes {
 		pv, err := v.pvCache.Get(name)
 		if err != nil {
 			return err
