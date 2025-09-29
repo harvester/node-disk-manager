@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	ctlharvv1beta1 "github.com/harvester/harvester/pkg/generated/controllers/harvesterhci.io/v1beta1"
+	"github.com/harvester/harvester/pkg/util"
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/utils"
@@ -164,7 +165,7 @@ func (v *Validator) validateVGIsAlreadyUsed(bd *diskv1.BlockDevice) error {
 }
 
 func (v *Validator) validateDegradedVolumes(old *diskv1.BlockDevice) error {
-	volumeList, err := v.volumeCache.List(utils.LonghornSystemNamespaceName, labels.Everything())
+	volumeList, err := v.volumeCache.List(util.LonghornSystemNamespaceName, labels.Everything())
 	if err != nil {
 		return err
 	}
