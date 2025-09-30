@@ -171,7 +171,7 @@ func (v *Validator) validateDegradedVolumes(old *diskv1.BlockDevice) error {
 	if len(volumeList) == 0 {
 		return nil
 	}
-	degradedVolumes := make([]string, 40)
+	degradedVolumes := []string{}
 	for _, vol := range volumeList {
 		if vol.Status.Robustness == lhv1.VolumeRobustnessDegraded {
 			degradedVolumes = append(degradedVolumes, vol.Name)

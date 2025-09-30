@@ -8,6 +8,7 @@ import (
 	lhv1beta2 "github.com/harvester/harvester/pkg/generated/controllers/longhorn.io/v1beta2"
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
+	"github.com/harvester/node-disk-manager/pkg/utils"
 	"github.com/harvester/node-disk-manager/pkg/utils/fake"
 	lhv1 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	ctlcorev1 "github.com/rancher/wrangler/v3/pkg/generated/controllers/core/v1"
@@ -22,17 +23,56 @@ func TestUpdate(t *testing.T) {
 	tests := []struct {
 		name               string
 		blockDeviceToCache []*diskv1.BlockDevice
-		scToCache          []*storagev1.StorageClass
-		pvToCache          []*v1.PersistentVolume
-		volToCache         []*lhv1.Volume
-		nodeToCache        []*v1.Node
-		vmImageToCache     []*harvv1beta1.VirtualMachineImage
+		scsToCache         []*storagev1.StorageClass
+		pvsToCache         []*v1.PersistentVolume
+		volsToCache        []*lhv1.Volume
+		nodesToCache       []*v1.Node
+		vmImagesToCache    []*harvv1beta1.VirtualMachineImage
 		oldBlockDevice     *diskv1.BlockDevice
 		newBlockDeice      *diskv1.BlockDevice
 		expectedErr        bool
 	}{
 		{
-			name: "validation passes with lvm provisioner; no changes",
+			name: "disk removal passes with empty volumes on single with successful vm images",
+			nodesToCache: []*v1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "harvester",
+					},
+				},
+			},
+			volsToCache: []*lhv1.Volume{},
+			pvsToCache: []*v1.PersistentVolume{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "vol-1",
+					},
+					Spec: v1.PersistentVolumeSpec{
+						PersistentVolumeSource: v1.PersistentVolumeSource{
+							CSI: &v1.CSIPersistentVolumeSource{
+								VolumeAttributes: map[string]string{
+									utils.DiskSelectorKey: "disk1",
+								},
+							},
+						},
+					},
+				},
+			},
+			vmImagesToCache: []*harvv1beta1.VirtualMachineImage{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "ubuntu",
+					},
+					Spec: harvv1beta1.VirtualMachineImageSpec{
+						StorageClassParameters: map[string]string{
+							utils.DiskSelectorKey: "disk1",
+						},
+					},
+					Status: harvv1beta1.VirtualMachineImageStatus{
+						Failed: 0,
+					},
+				},
+			},
 			oldBlockDevice: &diskv1.BlockDevice{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: "default",
@@ -40,7 +80,393 @@ func TestUpdate(t *testing.T) {
 				},
 				Spec: diskv1.BlockDeviceSpec{
 					Provisioner: &diskv1.ProvisionerInfo{
-						LVM: &diskv1.LVMProvisionerInfo{},
+						Longhorn: &diskv1.LonghornProvisionerInfo{},
+					},
+					Provision: true,
+					Tags:      []string{"disk1"},
+				},
+			},
+			newBlockDeice: &diskv1.BlockDevice{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "default",
+					Name:      "testbd",
+				},
+				Spec: diskv1.BlockDeviceSpec{
+					Provisioner: &diskv1.ProvisionerInfo{
+						Longhorn: &diskv1.LonghornProvisionerInfo{},
+					},
+					Provision: false,
+					Tags:      []string{"disk1"},
+				},
+			},
+			expectedErr: false,
+		},
+		{
+			name: "disk removal passes with healthy volumes on single node no vm images",
+			nodesToCache: []*v1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "harvester",
+					},
+				},
+			},
+			volsToCache: []*lhv1.Volume{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "vol-1",
+						Namespace: utils.LonghornSystemNamespaceName,
+					},
+					Status: lhv1.VolumeStatus{
+						Robustness: lhv1.VolumeRobustnessHealthy,
+					},
+				},
+			},
+			pvsToCache: []*v1.PersistentVolume{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "vol-1",
+					},
+					Spec: v1.PersistentVolumeSpec{
+						PersistentVolumeSource: v1.PersistentVolumeSource{
+							CSI: &v1.CSIPersistentVolumeSource{
+								VolumeAttributes: map[string]string{
+									utils.DiskSelectorKey: "disk1",
+								},
+							},
+						},
+					},
+				},
+			},
+			vmImagesToCache: []*harvv1beta1.VirtualMachineImage{},
+			oldBlockDevice: &diskv1.BlockDevice{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "default",
+					Name:      "testbd",
+				},
+				Spec: diskv1.BlockDeviceSpec{
+					Provisioner: &diskv1.ProvisionerInfo{
+						Longhorn: &diskv1.LonghornProvisionerInfo{},
+					},
+					Provision: true,
+					Tags:      []string{"disk1"},
+				},
+			},
+			newBlockDeice: &diskv1.BlockDevice{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "default",
+					Name:      "testbd",
+				},
+				Spec: diskv1.BlockDeviceSpec{
+					Provisioner: &diskv1.ProvisionerInfo{
+						Longhorn: &diskv1.LonghornProvisionerInfo{},
+					},
+					Provision: false,
+					Tags:      []string{"disk1"},
+				},
+			},
+			expectedErr: false,
+		},
+		{
+			name: "disk removal rejected with degraded volume on single node with successful vm image",
+			nodesToCache: []*v1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "harvester",
+					},
+				},
+			},
+			volsToCache: []*lhv1.Volume{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "vol-1",
+						Namespace: utils.LonghornSystemNamespaceName,
+					},
+					Status: lhv1.VolumeStatus{
+						Robustness: lhv1.VolumeRobustnessDegraded,
+					},
+				},
+			},
+			pvsToCache: []*v1.PersistentVolume{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "vol-1",
+					},
+					Spec: v1.PersistentVolumeSpec{
+						PersistentVolumeSource: v1.PersistentVolumeSource{
+							CSI: &v1.CSIPersistentVolumeSource{
+								VolumeAttributes: map[string]string{
+									utils.DiskSelectorKey: "disk1",
+								},
+							},
+						},
+					},
+				},
+			},
+			vmImagesToCache: []*harvv1beta1.VirtualMachineImage{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "ubuntu",
+					},
+					Spec: harvv1beta1.VirtualMachineImageSpec{
+						StorageClassParameters: map[string]string{
+							utils.DiskSelectorKey: "disk1",
+						},
+					},
+					Status: harvv1beta1.VirtualMachineImageStatus{
+						Failed: 0,
+					},
+				},
+			},
+			oldBlockDevice: &diskv1.BlockDevice{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "default",
+					Name:      "testbd",
+				},
+				Spec: diskv1.BlockDeviceSpec{
+					Provisioner: &diskv1.ProvisionerInfo{
+						Longhorn: &diskv1.LonghornProvisionerInfo{},
+					},
+					Provision: true,
+					Tags:      []string{"disk1"},
+				},
+			},
+			newBlockDeice: &diskv1.BlockDevice{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "default",
+					Name:      "testbd",
+				},
+				Spec: diskv1.BlockDeviceSpec{
+					Provisioner: &diskv1.ProvisionerInfo{
+						Longhorn: &diskv1.LonghornProvisionerInfo{},
+					},
+					Provision: false,
+					Tags:      []string{"disk1"},
+				},
+			},
+			expectedErr: true,
+		},
+		{
+			name: "disk removal rejected with healthy volume on single node but with failed vm image",
+			nodesToCache: []*v1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "harvester",
+					},
+				},
+			},
+			volsToCache: []*lhv1.Volume{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "vol-1",
+						Namespace: utils.LonghornSystemNamespaceName,
+					},
+					Status: lhv1.VolumeStatus{
+						Robustness: lhv1.VolumeRobustnessHealthy,
+					},
+				},
+			},
+			pvsToCache: []*v1.PersistentVolume{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "vol-1",
+					},
+					Spec: v1.PersistentVolumeSpec{
+						PersistentVolumeSource: v1.PersistentVolumeSource{
+							CSI: &v1.CSIPersistentVolumeSource{
+								VolumeAttributes: map[string]string{
+									utils.DiskSelectorKey: "disk1",
+								},
+							},
+						},
+					},
+				},
+			},
+			vmImagesToCache: []*harvv1beta1.VirtualMachineImage{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "ubuntu",
+					},
+					Spec: harvv1beta1.VirtualMachineImageSpec{
+						StorageClassParameters: map[string]string{
+							utils.DiskSelectorKey: "disk1",
+						},
+					},
+					Status: harvv1beta1.VirtualMachineImageStatus{
+						Failed: 1,
+					},
+				},
+			},
+			oldBlockDevice: &diskv1.BlockDevice{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "default",
+					Name:      "testbd",
+				},
+				Spec: diskv1.BlockDeviceSpec{
+					Provisioner: &diskv1.ProvisionerInfo{
+						Longhorn: &diskv1.LonghornProvisionerInfo{},
+					},
+					Provision: true,
+					Tags:      []string{"disk1"},
+				},
+			},
+			newBlockDeice: &diskv1.BlockDevice{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "default",
+					Name:      "testbd",
+				},
+				Spec: diskv1.BlockDeviceSpec{
+					Provisioner: &diskv1.ProvisionerInfo{
+						Longhorn: &diskv1.LonghornProvisionerInfo{},
+					},
+					Provision: false,
+					Tags:      []string{"disk1"},
+				},
+			},
+			expectedErr: true,
+		},
+		{
+			name: "disk removal passes on multi node with healthy volume but with failed vm image",
+			nodesToCache: []*v1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "harvester",
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "harvester",
+					},
+				},
+			},
+			volsToCache: []*lhv1.Volume{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "vol-1",
+						Namespace: utils.LonghornSystemNamespaceName,
+					},
+					Status: lhv1.VolumeStatus{
+						Robustness: lhv1.VolumeRobustnessHealthy,
+					},
+				},
+			},
+			pvsToCache: []*v1.PersistentVolume{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "vol-1",
+					},
+					Spec: v1.PersistentVolumeSpec{
+						PersistentVolumeSource: v1.PersistentVolumeSource{
+							CSI: &v1.CSIPersistentVolumeSource{
+								VolumeAttributes: map[string]string{
+									utils.DiskSelectorKey: "disk1",
+								},
+							},
+						},
+					},
+				},
+			},
+			vmImagesToCache: []*harvv1beta1.VirtualMachineImage{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "ubuntu",
+					},
+					Spec: harvv1beta1.VirtualMachineImageSpec{
+						StorageClassParameters: map[string]string{
+							utils.DiskSelectorKey: "disk1",
+						},
+					},
+					Status: harvv1beta1.VirtualMachineImageStatus{
+						Failed: 1,
+					},
+				},
+			},
+			oldBlockDevice: &diskv1.BlockDevice{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "default",
+					Name:      "testbd",
+				},
+				Spec: diskv1.BlockDeviceSpec{
+					Provisioner: &diskv1.ProvisionerInfo{
+						Longhorn: &diskv1.LonghornProvisionerInfo{},
+					},
+					Provision: true,
+					Tags:      []string{"disk1"},
+				},
+			},
+			newBlockDeice: &diskv1.BlockDevice{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "default",
+					Name:      "testbd",
+				},
+				Spec: diskv1.BlockDeviceSpec{
+					Provisioner: &diskv1.ProvisionerInfo{
+						Longhorn: &diskv1.LonghornProvisionerInfo{},
+					},
+					Provision: false,
+					Tags:      []string{"disk1"},
+				},
+			},
+			expectedErr: false,
+		},
+		{
+			name: "disk removal passes on default disk with no tags",
+			nodesToCache: []*v1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "harvester",
+					},
+				},
+			},
+			volsToCache: []*lhv1.Volume{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "vol-1",
+						Namespace: utils.LonghornSystemNamespaceName,
+					},
+					Status: lhv1.VolumeStatus{
+						Robustness: lhv1.VolumeRobustnessHealthy,
+					},
+				},
+			},
+			pvsToCache: []*v1.PersistentVolume{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "vol-1",
+					},
+					Spec: v1.PersistentVolumeSpec{
+						PersistentVolumeSource: v1.PersistentVolumeSource{
+							CSI: &v1.CSIPersistentVolumeSource{
+								VolumeAttributes: map[string]string{
+									utils.DiskSelectorKey: "disk1",
+								},
+							},
+						},
+					},
+				},
+			},
+			vmImagesToCache: []*harvv1beta1.VirtualMachineImage{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "ubuntu",
+					},
+					Spec: harvv1beta1.VirtualMachineImageSpec{
+						StorageClassParameters: map[string]string{
+							utils.DiskSelectorKey: "disk1",
+						},
+					},
+					Status: harvv1beta1.VirtualMachineImageStatus{
+						Failed: 1,
+					},
+				},
+			},
+			oldBlockDevice: &diskv1.BlockDevice{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "default",
+					Name:      "testbd",
+				},
+				Spec: diskv1.BlockDeviceSpec{
+					Provisioner: &diskv1.ProvisionerInfo{
+						Longhorn: &diskv1.LonghornProvisionerInfo{},
 					},
 					Provision: true,
 				},
@@ -52,11 +478,12 @@ func TestUpdate(t *testing.T) {
 				},
 				Spec: diskv1.BlockDeviceSpec{
 					Provisioner: &diskv1.ProvisionerInfo{
-						LVM: &diskv1.LVMProvisionerInfo{},
+						Longhorn: &diskv1.LonghornProvisionerInfo{},
 					},
-					Provision: true,
+					Provision: false,
 				},
 			},
+			expectedErr: false,
 		},
 	}
 
@@ -68,26 +495,26 @@ func TestUpdate(t *testing.T) {
 			var volCache lhv1beta2.VolumeCache
 			var nodeCache ctlcorev1.NodeCache
 			var vmImageCache ctlharvv1beta1.VirtualMachineImageCache
-			if len(test.blockDeviceToCache) > 0 {
+			if test.blockDeviceToCache != nil {
 				bdCache = fake.NewBlockDeviceCache(test.blockDeviceToCache)
 			}
-			if len(test.scToCache) > 0 {
-				scCache = fake.NewStorageClassCache(test.scToCache)
+			if test.scsToCache != nil {
+				scCache = fake.NewStorageClassCache(test.scsToCache)
 			}
-			if len(test.pvToCache) > 0 {
-				pvCache = fake.NewPersistentVolumeCache(test.pvToCache)
+			if test.pvsToCache != nil {
+				pvCache = fake.NewPersistentVolumeCache(test.pvsToCache)
 			}
-			if len(test.volToCache) > 0 {
-				volCache = fake.NewVolumeCache(test.volToCache)
+			if test.volsToCache != nil {
+				volCache = fake.NewVolumeCache(test.volsToCache)
 			}
-			if len(test.nodeToCache) > 0 {
-				nodeCache = fake.NewNodeCache(test.nodeToCache)
+			if test.nodesToCache != nil {
+				nodeCache = fake.NewNodeCache(test.nodesToCache)
 			}
-			if len(test.vmImageToCache) > 0 {
-				vmImageCache = fake.NewVMImageCache(test.vmImageToCache)
+			if test.vmImagesToCache != nil {
+				vmImageCache = fake.NewVMImageCache(test.vmImagesToCache)
 			}
 			validator := NewBlockdeviceValidator(bdCache, scCache, pvCache, volCache, nodeCache, vmImageCache)
-			err := validator.Update(nil, test.newBlockDeice, test.oldBlockDevice)
+			err := validator.Update(nil, test.oldBlockDevice, test.newBlockDeice)
 			if test.expectedErr {
 				assert.Error(t, err)
 			} else {
