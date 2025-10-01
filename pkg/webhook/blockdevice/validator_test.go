@@ -3,8 +3,6 @@ package blockdevice
 import (
 	"testing"
 
-	harvv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
-	ctlharvv1beta1 "github.com/harvester/harvester/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	lhv1beta2 "github.com/harvester/harvester/pkg/generated/controllers/longhorn.io/v1beta2"
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
@@ -27,13 +25,14 @@ func TestUpdate(t *testing.T) {
 		pvsToCache         []*v1.PersistentVolume
 		volsToCache        []*lhv1.Volume
 		nodesToCache       []*v1.Node
-		vmImagesToCache    []*harvv1beta1.VirtualMachineImage
+		biToCache          []*lhv1.BackingImage
+		lhNodesToCache     []*lhv1.Node
 		oldBlockDevice     *diskv1.BlockDevice
 		newBlockDeice      *diskv1.BlockDevice
 		expectedErr        bool
 	}{
 		{
-			name: "disk removal passes with empty volumes on single with successful vm images",
+			name: "disk removal passes with empty volumes on single node with successful backing images",
 			nodesToCache: []*v1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -58,18 +57,23 @@ func TestUpdate(t *testing.T) {
 					},
 				},
 			},
-			vmImagesToCache: []*harvv1beta1.VirtualMachineImage{
+			biToCache: []*lhv1.BackingImage{
 				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "ubuntu",
-					},
-					Spec: harvv1beta1.VirtualMachineImageSpec{
-						StorageClassParameters: map[string]string{
-							utils.DiskSelectorKey: "disk1",
+					ObjectMeta: metav1.ObjectMeta{Name: "ready-image"},
+					Status: lhv1.BackingImageStatus{
+						DiskFileStatusMap: map[string]*lhv1.BackingImageDiskFileStatus{
+							"1234": {State: lhv1.BackingImageStateReady},
 						},
 					},
-					Status: harvv1beta1.VirtualMachineImageStatus{
-						Failed: 0,
+				},
+			},
+			lhNodesToCache: []*lhv1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "harvester"},
+					Status: lhv1.NodeStatus{
+						DiskStatus: map[string]*lhv1.DiskStatus{
+							"testbd": {DiskUUID: "1234"},
+						},
 					},
 				},
 			},
@@ -83,7 +87,9 @@ func TestUpdate(t *testing.T) {
 						Longhorn: &diskv1.LonghornProvisionerInfo{},
 					},
 					Provision: true,
-					Tags:      []string{"disk1"},
+				},
+				Status: diskv1.BlockDeviceStatus{
+					Tags: []string{"disk1"},
 				},
 			},
 			newBlockDeice: &diskv1.BlockDevice{
@@ -96,13 +102,15 @@ func TestUpdate(t *testing.T) {
 						Longhorn: &diskv1.LonghornProvisionerInfo{},
 					},
 					Provision: false,
-					Tags:      []string{"disk1"},
+				},
+				Status: diskv1.BlockDeviceStatus{
+					Tags: []string{"disk1"},
 				},
 			},
 			expectedErr: false,
 		},
 		{
-			name: "disk removal passes with healthy volumes on single node no vm images",
+			name: "disk removal passes with healthy volumes on single node no backing images",
 			nodesToCache: []*v1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -137,7 +145,8 @@ func TestUpdate(t *testing.T) {
 					},
 				},
 			},
-			vmImagesToCache: []*harvv1beta1.VirtualMachineImage{},
+			biToCache:      []*lhv1.BackingImage{},
+			lhNodesToCache: []*lhv1.Node{},
 			oldBlockDevice: &diskv1.BlockDevice{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: "default",
@@ -148,7 +157,9 @@ func TestUpdate(t *testing.T) {
 						Longhorn: &diskv1.LonghornProvisionerInfo{},
 					},
 					Provision: true,
-					Tags:      []string{"disk1"},
+				},
+				Status: diskv1.BlockDeviceStatus{
+					Tags: []string{"disk1"},
 				},
 			},
 			newBlockDeice: &diskv1.BlockDevice{
@@ -161,13 +172,88 @@ func TestUpdate(t *testing.T) {
 						Longhorn: &diskv1.LonghornProvisionerInfo{},
 					},
 					Provision: false,
-					Tags:      []string{"disk1"},
+				},
+				Status: diskv1.BlockDeviceStatus{
+					Tags: []string{"disk1"},
 				},
 			},
 			expectedErr: false,
 		},
 		{
-			name: "disk removal rejected with degraded volume on single node with successful vm image",
+			name: "disk removal passes with empty volumes on single node with failed backing image not related to the disk",
+			nodesToCache: []*v1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "harvester",
+					},
+				},
+			},
+			volsToCache: []*lhv1.Volume{},
+			pvsToCache: []*v1.PersistentVolume{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "vol-1",
+					},
+					Spec: v1.PersistentVolumeSpec{
+						PersistentVolumeSource: v1.PersistentVolumeSource{
+							CSI: &v1.CSIPersistentVolumeSource{
+								VolumeAttributes: map[string]string{
+									utils.DiskSelectorKey: "disk1",
+								},
+							},
+						},
+					},
+				},
+			},
+			biToCache: []*lhv1.BackingImage{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "failed-image"},
+					Status: lhv1.BackingImageStatus{
+						DiskFileStatusMap: map[string]*lhv1.BackingImageDiskFileStatus{
+							"1234": {State: lhv1.BackingImageStateReady},
+						},
+					},
+				},
+			},
+			lhNodesToCache: []*lhv1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "harvester"},
+				},
+			},
+			oldBlockDevice: &diskv1.BlockDevice{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "default",
+					Name:      "testbd",
+				},
+				Spec: diskv1.BlockDeviceSpec{
+					Provisioner: &diskv1.ProvisionerInfo{
+						Longhorn: &diskv1.LonghornProvisionerInfo{},
+					},
+					Provision: true,
+				},
+				Status: diskv1.BlockDeviceStatus{
+					Tags: []string{"disk1"},
+				},
+			},
+			newBlockDeice: &diskv1.BlockDevice{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "default",
+					Name:      "testbd",
+				},
+				Spec: diskv1.BlockDeviceSpec{
+					Provisioner: &diskv1.ProvisionerInfo{
+						Longhorn: &diskv1.LonghornProvisionerInfo{},
+					},
+					Provision: false,
+				},
+				Status: diskv1.BlockDeviceStatus{
+					Tags: []string{"disk1"},
+				},
+			},
+			expectedErr: false,
+		},
+		{
+			name: "disk removal rejected with degraded volume on single node with successful backing image",
 			nodesToCache: []*v1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -202,18 +288,23 @@ func TestUpdate(t *testing.T) {
 					},
 				},
 			},
-			vmImagesToCache: []*harvv1beta1.VirtualMachineImage{
+			biToCache: []*lhv1.BackingImage{
 				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "ubuntu",
-					},
-					Spec: harvv1beta1.VirtualMachineImageSpec{
-						StorageClassParameters: map[string]string{
-							utils.DiskSelectorKey: "disk1",
+					ObjectMeta: metav1.ObjectMeta{Name: "ready-image"},
+					Status: lhv1.BackingImageStatus{
+						DiskFileStatusMap: map[string]*lhv1.BackingImageDiskFileStatus{
+							"1234": {State: lhv1.BackingImageStateReady},
 						},
 					},
-					Status: harvv1beta1.VirtualMachineImageStatus{
-						Failed: 0,
+				},
+			},
+			lhNodesToCache: []*lhv1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "harvester"},
+					Status: lhv1.NodeStatus{
+						DiskStatus: map[string]*lhv1.DiskStatus{
+							"testbd": {DiskUUID: "1234"},
+						},
 					},
 				},
 			},
@@ -227,7 +318,9 @@ func TestUpdate(t *testing.T) {
 						Longhorn: &diskv1.LonghornProvisionerInfo{},
 					},
 					Provision: true,
-					Tags:      []string{"disk1"},
+				},
+				Status: diskv1.BlockDeviceStatus{
+					Tags: []string{"disk1"},
 				},
 			},
 			newBlockDeice: &diskv1.BlockDevice{
@@ -240,13 +333,15 @@ func TestUpdate(t *testing.T) {
 						Longhorn: &diskv1.LonghornProvisionerInfo{},
 					},
 					Provision: false,
-					Tags:      []string{"disk1"},
+				},
+				Status: diskv1.BlockDeviceStatus{
+					Tags: []string{"disk1"},
 				},
 			},
 			expectedErr: true,
 		},
 		{
-			name: "disk removal rejected with healthy volume on single node but with failed vm image",
+			name: "disk removal rejected with healthy volume on single node but with failed backing image",
 			nodesToCache: []*v1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -281,18 +376,23 @@ func TestUpdate(t *testing.T) {
 					},
 				},
 			},
-			vmImagesToCache: []*harvv1beta1.VirtualMachineImage{
+			biToCache: []*lhv1.BackingImage{
 				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "ubuntu",
-					},
-					Spec: harvv1beta1.VirtualMachineImageSpec{
-						StorageClassParameters: map[string]string{
-							utils.DiskSelectorKey: "disk1",
+					ObjectMeta: metav1.ObjectMeta{Name: "failed-image"},
+					Status: lhv1.BackingImageStatus{
+						DiskFileStatusMap: map[string]*lhv1.BackingImageDiskFileStatus{
+							"1234": {State: lhv1.BackingImageStateFailed},
 						},
 					},
-					Status: harvv1beta1.VirtualMachineImageStatus{
-						Failed: 1,
+				},
+			},
+			lhNodesToCache: []*lhv1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "harvester"},
+					Status: lhv1.NodeStatus{
+						DiskStatus: map[string]*lhv1.DiskStatus{
+							"testbd": {DiskUUID: "1234"},
+						},
 					},
 				},
 			},
@@ -306,7 +406,9 @@ func TestUpdate(t *testing.T) {
 						Longhorn: &diskv1.LonghornProvisionerInfo{},
 					},
 					Provision: true,
-					Tags:      []string{"disk1"},
+				},
+				Status: diskv1.BlockDeviceStatus{
+					Tags: []string{"disk1"},
 				},
 			},
 			newBlockDeice: &diskv1.BlockDevice{
@@ -319,13 +421,15 @@ func TestUpdate(t *testing.T) {
 						Longhorn: &diskv1.LonghornProvisionerInfo{},
 					},
 					Provision: false,
-					Tags:      []string{"disk1"},
+				},
+				Status: diskv1.BlockDeviceStatus{
+					Tags: []string{"disk1"},
 				},
 			},
 			expectedErr: true,
 		},
 		{
-			name: "disk removal passes on multi node with healthy volume but with failed vm image",
+			name: "disk removal passes on multi node with healthy volume but with failed backing image",
 			nodesToCache: []*v1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -365,18 +469,23 @@ func TestUpdate(t *testing.T) {
 					},
 				},
 			},
-			vmImagesToCache: []*harvv1beta1.VirtualMachineImage{
+			biToCache: []*lhv1.BackingImage{
 				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "ubuntu",
-					},
-					Spec: harvv1beta1.VirtualMachineImageSpec{
-						StorageClassParameters: map[string]string{
-							utils.DiskSelectorKey: "disk1",
+					ObjectMeta: metav1.ObjectMeta{Name: "failed-image"},
+					Status: lhv1.BackingImageStatus{
+						DiskFileStatusMap: map[string]*lhv1.BackingImageDiskFileStatus{
+							"1234": {State: lhv1.BackingImageStateFailed},
 						},
 					},
-					Status: harvv1beta1.VirtualMachineImageStatus{
-						Failed: 1,
+				},
+			},
+			lhNodesToCache: []*lhv1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "harvester"},
+					Status: lhv1.NodeStatus{
+						DiskStatus: map[string]*lhv1.DiskStatus{
+							"testbd": {DiskUUID: "1234"},
+						},
 					},
 				},
 			},
@@ -390,7 +499,9 @@ func TestUpdate(t *testing.T) {
 						Longhorn: &diskv1.LonghornProvisionerInfo{},
 					},
 					Provision: true,
-					Tags:      []string{"disk1"},
+				},
+				Status: diskv1.BlockDeviceStatus{
+					Tags: []string{"disk1"},
 				},
 			},
 			newBlockDeice: &diskv1.BlockDevice{
@@ -403,7 +514,9 @@ func TestUpdate(t *testing.T) {
 						Longhorn: &diskv1.LonghornProvisionerInfo{},
 					},
 					Provision: false,
-					Tags:      []string{"disk1"},
+				},
+				Status: diskv1.BlockDeviceStatus{
+					Tags: []string{"disk1"},
 				},
 			},
 			expectedErr: false,
@@ -444,21 +557,8 @@ func TestUpdate(t *testing.T) {
 					},
 				},
 			},
-			vmImagesToCache: []*harvv1beta1.VirtualMachineImage{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "ubuntu",
-					},
-					Spec: harvv1beta1.VirtualMachineImageSpec{
-						StorageClassParameters: map[string]string{
-							utils.DiskSelectorKey: "disk1",
-						},
-					},
-					Status: harvv1beta1.VirtualMachineImageStatus{
-						Failed: 1,
-					},
-				},
-			},
+			biToCache:      []*lhv1.BackingImage{},
+			lhNodesToCache: []*lhv1.Node{},
 			oldBlockDevice: &diskv1.BlockDevice{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: "default",
@@ -494,7 +594,8 @@ func TestUpdate(t *testing.T) {
 			var pvCache ctlcorev1.PersistentVolumeCache
 			var volCache lhv1beta2.VolumeCache
 			var nodeCache ctlcorev1.NodeCache
-			var vmImageCache ctlharvv1beta1.VirtualMachineImageCache
+			var lhNodeCache lhv1beta2.NodeCache
+			var backingImageCache lhv1beta2.BackingImageCache
 			if test.blockDeviceToCache != nil {
 				bdCache = fake.NewBlockDeviceCache(test.blockDeviceToCache)
 			}
@@ -510,10 +611,13 @@ func TestUpdate(t *testing.T) {
 			if test.nodesToCache != nil {
 				nodeCache = fake.NewNodeCache(test.nodesToCache)
 			}
-			if test.vmImagesToCache != nil {
-				vmImageCache = fake.NewVMImageCache(test.vmImagesToCache)
+			if test.lhNodesToCache != nil {
+				lhNodeCache = fake.NewLonghornNodeCache(test.lhNodesToCache)
 			}
-			validator := NewBlockdeviceValidator(bdCache, scCache, pvCache, volCache, nodeCache, vmImageCache)
+			if test.biToCache != nil {
+				backingImageCache = fake.NewBackingImageCache(test.biToCache)
+			}
+			validator := NewBlockdeviceValidator(bdCache, scCache, pvCache, volCache, nodeCache, backingImageCache, lhNodeCache)
 			err := validator.Update(nil, test.oldBlockDevice, test.newBlockDeice)
 			if test.expectedErr {
 				assert.Error(t, err)

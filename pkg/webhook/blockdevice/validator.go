@@ -2,6 +2,7 @@ package blockdevice
 
 import (
 	"fmt"
+	"strings"
 
 	lhv1beta2 "github.com/harvester/harvester/pkg/generated/controllers/longhorn.io/v1beta2"
 	werror "github.com/harvester/webhook/pkg/error"
@@ -15,10 +16,14 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	ctlharvv1beta1 "github.com/harvester/harvester/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/utils"
+)
+
+const (
+	BackingImageByDiskUUID = "longhorn.io/backingimage-by-diskuuid"
+	NodeByBlockDeviceName  = "longhorn.io/node-by-blockdevice-name"
 )
 
 type Validator struct {
@@ -27,20 +32,25 @@ type Validator struct {
 	BlockdeviceCache  ctldiskv1.BlockDeviceCache
 	storageClassCache ctlstoragev1.StorageClassCache
 	pvCache           ctlcorev1.PersistentVolumeCache
-	volumeCache       lhv1beta2.VolumeCache
 	nodeCache         ctlcorev1.NodeCache
-	vmImageCache      ctlharvv1beta1.VirtualMachineImageCache
+	volumeCache       lhv1beta2.VolumeCache
+	backingImageCache lhv1beta2.BackingImageCache
+	lhNodeCache       lhv1beta2.NodeCache
 }
 
 func NewBlockdeviceValidator(blockdeviceCache ctldiskv1.BlockDeviceCache, storageClassCache ctlstoragev1.StorageClassCache,
-	pvCache ctlcorev1.PersistentVolumeCache, volumeCache lhv1beta2.VolumeCache, nodeCache ctlcorev1.NodeCache, vmImageCache ctlharvv1beta1.VirtualMachineImageCache) *Validator {
+	pvCache ctlcorev1.PersistentVolumeCache, volumeCache lhv1beta2.VolumeCache, nodeCache ctlcorev1.NodeCache,
+	backingImageCache lhv1beta2.BackingImageCache, lhNodeCache lhv1beta2.NodeCache) *Validator {
+	backingImageCache.AddIndexer(BackingImageByDiskUUID, backingImageByDiskUUIDIndexer)
+	lhNodeCache.AddIndexer(NodeByBlockDeviceName, nodeByBlockDeviceNameIndexer)
 	return &Validator{
 		BlockdeviceCache:  blockdeviceCache,
 		storageClassCache: storageClassCache,
 		pvCache:           pvCache,
 		volumeCache:       volumeCache,
 		nodeCache:         nodeCache,
-		vmImageCache:      vmImageCache,
+		backingImageCache: backingImageCache,
+		lhNodeCache:       lhNodeCache,
 	}
 }
 
@@ -84,12 +94,12 @@ func (v *Validator) validateLHDisk(oldBd, newBd *diskv1.BlockDevice) error {
 		if err != nil {
 			return err
 		}
-		if len(nodeList) == 1 && len(oldBd.Spec.Tags) > 0 {
+		if len(nodeList) == 1 && len(oldBd.Status.Tags) > 0 {
 			err := v.validateDegradedVolumes(oldBd)
 			if err != nil {
 				return err
 			}
-			err = v.validateFailedVMImages(oldBd)
+			err = v.validateBackingImages(oldBd)
 			if err != nil {
 				return err
 			}
@@ -195,7 +205,7 @@ func (v *Validator) validateDegradedVolumes(old *diskv1.BlockDevice) error {
 		}
 	}
 	degradedVolString := ""
-	for _, diskTag := range old.Spec.Tags {
+	for _, diskTag := range old.Status.Tags {
 		if val, ok := selectorDegradedVol[diskTag]; ok {
 			degradedVolString += fmt.Sprintf(" %s: %v", diskTag, val)
 		}
@@ -207,33 +217,33 @@ func (v *Validator) validateDegradedVolumes(old *diskv1.BlockDevice) error {
 	return nil
 }
 
-func (v *Validator) validateFailedVMImages(old *diskv1.BlockDevice) error {
-	vmImageList, err := v.vmImageCache.List("", labels.Everything())
+func (v *Validator) validateBackingImages(old *diskv1.BlockDevice) error {
+	lhNode, err := v.lhNodeCache.GetByIndex(NodeByBlockDeviceName, old.Name)
 	if err != nil {
-		return err
+		return fmt.Errorf("error looking up node by blockdevice name %s: %w", old.Name, err)
 	}
-	if len(vmImageList) == 0 {
+	if len(lhNode) != 1 {
 		return nil
 	}
-	selectorFailedVMIMage := make(map[string][]string)
-	for _, vmImage := range vmImageList {
-		if vmImage.Status.Failed == 0 {
-			continue
-		}
-		diskSelectorValue := vmImage.Spec.StorageClassParameters[utils.DiskSelectorKey]
-		if vmImage.Status.Failed != 0 && len(diskSelectorValue) > 0 {
-			selectorFailedVMIMage[diskSelectorValue] = append(selectorFailedVMIMage[diskSelectorValue], vmImage.Spec.DisplayName)
+	diskStatus, ok := lhNode[0].Status.DiskStatus[old.Name]
+	if !ok || diskStatus.DiskUUID == "" {
+		return nil
+	}
+	uuid := diskStatus.DiskUUID
+	backingImages, err := v.backingImageCache.GetByIndex(BackingImageByDiskUUID, uuid)
+	if err != nil {
+		return fmt.Errorf("error looking up backing images by disk UUID %s: %w", uuid, err)
+	}
+	var failedBackingImages []string
+	for _, backingImage := range backingImages {
+		if backingImage.Status.DiskFileStatusMap[uuid].State != lhv1.BackingImageStateReady {
+			failedBackingImages = append(failedBackingImages, backingImage.Name)
 		}
 	}
-	failedVMImages := ""
-	for _, diskTag := range old.Spec.Tags {
-		if val, ok := selectorFailedVMIMage[diskTag]; ok {
-			failedVMImages += fmt.Sprintf(" %s: %v", diskTag, val)
-		}
-	}
-	if len(failedVMImages) > 0 {
-		return fmt.Errorf("the following tags referenced by virtualmachineimages: %s attached to disk: %s are in failed state; evict disk before proceeding",
-			failedVMImages, old.Spec.DevPath)
+	if len(failedBackingImages) > 0 {
+		failedBackingImageList := strings.Join(failedBackingImages, ",")
+		return fmt.Errorf("the following backingimages: %v attached to blockdevice: %v are in a %s state; make sure state is fixed before disk deletion",
+			failedBackingImageList, old.Name, lhv1.BackingImageStateFailed)
 	}
 	return nil
 }
@@ -261,4 +271,26 @@ func getLVMTopologyNodes(sc *storagev1.StorageClass) string {
 		}
 	}
 	return ""
+}
+
+func backingImageByDiskUUIDIndexer(bi *lhv1.BackingImage) ([]string, error) {
+	if bi.Spec.DiskFileSpecMap == nil {
+		return []string{}, nil
+	}
+	diskUUIDs := make([]string, 0, len(bi.Spec.DiskFileSpecMap))
+	for key := range bi.Spec.DiskFileSpecMap {
+		diskUUIDs = append(diskUUIDs, key)
+	}
+	return diskUUIDs, nil
+}
+
+func nodeByBlockDeviceNameIndexer(node *lhv1.Node) ([]string, error) {
+	if node.Status.DiskStatus == nil {
+		return []string{}, nil
+	}
+	blockDeviceNames := make([]string, 0, len(node.Status.DiskStatus))
+	for key := range node.Status.DiskStatus {
+		blockDeviceNames = append(blockDeviceNames, key)
+	}
+	return blockDeviceNames, nil
 }
