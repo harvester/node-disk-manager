@@ -277,8 +277,8 @@ func backingImageByDiskUUIDIndexer(bi *lhv1.BackingImage) ([]string, error) {
 	if bi.Spec.DiskFileSpecMap == nil {
 		return []string{}, nil
 	}
-	diskUUIDs := make([]string, 0, len(bi.Spec.DiskFileSpecMap))
-	for key := range bi.Spec.DiskFileSpecMap {
+	diskUUIDs := make([]string, 0, len(bi.Status.DiskFileStatusMap))
+	for key := range bi.Status.DiskFileStatusMap {
 		diskUUIDs = append(diskUUIDs, key)
 	}
 	return diskUUIDs, nil
