@@ -25,6 +25,9 @@ jobs:
         run: |
           make validate
           make validate-ci
+      - name: "Run unit-tests"
+        run: |
+          make unit-test
   job-new-installation:
     needs: validation
     runs-on:
