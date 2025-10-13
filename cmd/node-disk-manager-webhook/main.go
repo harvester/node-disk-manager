@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	ctrllh "github.com/harvester/harvester/pkg/generated/controllers/longhorn.io"
+	lhv1beta2 "github.com/harvester/harvester/pkg/generated/controllers/longhorn.io/v1beta2"
 	"github.com/harvester/webhook/pkg/config"
 	"github.com/harvester/webhook/pkg/server"
 	"github.com/harvester/webhook/pkg/server/admission"
@@ -32,6 +34,10 @@ type resourceCaches struct {
 	lvmVGCache        ctldiskv1.LVMVolumeGroupCache
 	storageClassCache ctlstoragev1.StorageClassCache
 	pvCache           ctlcorev1.PersistentVolumeCache
+	volumeCache       lhv1beta2.VolumeCache
+	backingImageCache lhv1beta2.BackingImageCache
+	lhNodeCache       lhv1beta2.NodeCache
+	replicaCache      lhv1beta2.ReplicaCache
 }
 
 func main() {
@@ -117,7 +123,8 @@ func runWebhookServer(ctx context.Context, cfg *rest.Config, options *config.Opt
 		bdMutator,
 	}
 
-	bdValidator := blockdevice.NewBlockdeviceValidator(resourceCaches.bdCache, resourceCaches.storageClassCache, resourceCaches.pvCache)
+	bdValidator := blockdevice.NewBlockdeviceValidator(resourceCaches.bdCache, resourceCaches.storageClassCache, resourceCaches.pvCache,
+		resourceCaches.volumeCache, resourceCaches.backingImageCache, resourceCaches.lhNodeCache, resourceCaches.replicaCache)
 	scValidator := storageclass.NewStorageClassValidator(resourceCaches.lvmVGCache)
 	var validators = []admission.Validator{
 		bdValidator,
@@ -156,12 +163,21 @@ func newCaches(ctx context.Context, cfg *rest.Config, threadiness int) (*resourc
 	if err != nil {
 		return nil, err
 	}
-	starters = append(starters, disks, storageFactory, coreFactory)
+	lhFactory, err := ctrllh.NewFactoryFromConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	starters = append(starters, disks, storageFactory, coreFactory, lhFactory)
 	resourceCaches := &resourceCaches{
 		bdCache:           disks.Harvesterhci().V1beta1().BlockDevice().Cache(),
 		lvmVGCache:        disks.Harvesterhci().V1beta1().LVMVolumeGroup().Cache(),
 		storageClassCache: storageFactory.Storage().V1().StorageClass().Cache(),
 		pvCache:           coreFactory.Core().V1().PersistentVolume().Cache(),
+		volumeCache:       lhFactory.Longhorn().V1beta2().Volume().Cache(),
+		backingImageCache: lhFactory.Longhorn().V1beta2().BackingImage().Cache(),
+		lhNodeCache:       lhFactory.Longhorn().V1beta2().Node().Cache(),
+		replicaCache:      lhFactory.Longhorn().V1beta2().Replica().Cache(),
 	}
 
 	if err := start.All(ctx, threadiness, starters...); err != nil {

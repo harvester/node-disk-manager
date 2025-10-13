@@ -87,6 +87,8 @@ github.com/harvester/harvester/pkg/apis/harvesterhci.io
 github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1
 github.com/harvester/harvester/pkg/generated/controllers/harvesterhci.io
 github.com/harvester/harvester/pkg/generated/controllers/harvesterhci.io/v1beta1
+github.com/harvester/harvester/pkg/generated/controllers/longhorn.io
+github.com/harvester/harvester/pkg/generated/controllers/longhorn.io/v1beta2
 # github.com/harvester/webhook v0.1.5
 ## explicit; go 1.22.7
 github.com/harvester/webhook/pkg/clients

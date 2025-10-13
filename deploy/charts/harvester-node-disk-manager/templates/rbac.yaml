@@ -57,7 +57,7 @@ rules:
     resources: [ "storageclasses" ]
     verbs: [ "*" ]
   - apiGroups: [ "harvesterhci.io" ]
-    resources: [ "blockdevices", "lvmvolumegroups", "lvmvolumegroups/status" ]
+    resources: [ "blockdevices", "lvmvolumegroups", "lvmvolumegroups/status"]
     verbs: [ "*" ]
   - apiGroups: [ "apiregistration.k8s.io" ]
     resources: [ "apiservices" ]
@@ -68,6 +68,9 @@ rules:
   - apiGroups: [ "admissionregistration.k8s.io" ]
     resources: [ "validatingwebhookconfigurations", "mutatingwebhookconfigurations" ]
     verbs: [ "*" ]
+  - apiGroups: ["longhorn.io"]
+    resources: ["volumes", "nodes", "backingimages", "replicas"] 
+    verbs: [ "get", "watch", "list" ]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
