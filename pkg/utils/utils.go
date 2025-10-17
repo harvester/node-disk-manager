@@ -8,6 +8,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -247,11 +249,21 @@ func IsManagedByMultipath(deviceName string) (string, error) {
 		return "", fmt.Errorf("failed to create executor with namespace: %v", err)
 	}
 
-	// Execute multipath -c /dev/xxx command to check if device is managed by multipath
-	// multipath -c returns exit code 0 if device belongs to multipath, non-zero if not
-	output, err := executor.Execute("multipath", []string{"-c", fmt.Sprintf("/dev/%s", deviceName)})
+	// Execute multipath -u /dev/xxx command to check if device is managed by multipath
+	// multipath -u return two results with exit code 0:
+	// DM_MULTIPATH_DEVICE_PATH="0" -> device is not managed by multipath
+	// DM_MULTIPATH_DEVICE_PATH="1" -> device is managed by multipath
+	output, err := executor.Execute("multipath", []string{"-u", fmt.Sprintf("/dev/%s", deviceName)})
 	if err != nil {
 		return output, err
+	}
+
+	output = strings.TrimSpace(output)
+
+	logrus.Debugf("multipath -u output for device %s: %s", deviceName, output)
+
+	if strings.Contains(output, "0") {
+		return output, fmt.Errorf("device %s is not managed by multipath", deviceName)
 	}
 
 	return output, nil
