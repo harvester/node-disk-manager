@@ -91,17 +91,22 @@ func (v *Validator) validateProvisioner(bd *diskv1.BlockDevice) error {
 }
 
 func (v *Validator) validateLHDisk(oldBd, newBd *diskv1.BlockDevice) error {
-	if oldBd.Spec.Provisioner != nil && newBd.Spec.Provisioner != nil &&
-		oldBd.Spec.Provisioner.Longhorn != nil && newBd.Spec.Provisioner.Longhorn != nil &&
-		oldBd.Spec.Provision && !newBd.Spec.Provision {
-		err := v.validateVolumes(oldBd)
-		if err != nil {
-			return err
-		}
-		err = v.validateBackingImages(oldBd)
-		if err != nil {
-			return err
-		}
+	if oldBd.Spec.Provisioner == nil || newBd.Spec.Provisioner == nil {
+		return nil
+	}
+	if oldBd.Spec.Provisioner.Longhorn == nil || newBd.Spec.Provisioner.Longhorn == nil {
+		return nil
+	}
+	if !oldBd.Spec.Provision || newBd.Spec.Provision {
+		return nil
+	}
+	err := v.validateVolumes(oldBd)
+	if err != nil {
+		return err
+	}
+	err = v.validateBackingImages(oldBd)
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -172,38 +177,102 @@ func (v *Validator) validateVGIsAlreadyUsed(bd *diskv1.BlockDevice) error {
 }
 
 func (v *Validator) validateVolumes(old *diskv1.BlockDevice) error {
-	lhNode, err := v.lhNodeCache.Get(utils.LonghornSystemNamespaceName, old.Spec.NodeName)
+	uuid, err := v.getDiskUUID(old)
 	if err != nil {
-		errStr := fmt.Sprintf("Failed to get longhorn node %s: %s", old.Spec.NodeName, err.Error())
-		return werror.NewBadRequest(errStr)
+		return err
 	}
-
-	diskStatus, ok := lhNode.Status.DiskStatus[old.Name]
-	if !ok || diskStatus == nil {
+	if uuid == "" {
 		return nil
 	}
 
-	targetDiskUUID := diskStatus.DiskUUID
+	volumesToCheck, err := v.getVolumesOnDisk(uuid)
+	if err != nil {
+		return err
+	}
+
+	unsafeVolumes, err := v.findUnsafeVolumes(volumesToCheck, uuid)
+	if err != nil {
+		return err
+	}
+
+	if len(unsafeVolumes) > 0 {
+		errStr := fmt.Sprintf("Cannot remove disk %s because it hosts the only healthy replica for the following volumes: %s",
+			old.Spec.DevPath, strings.Join(unsafeVolumes, ", "))
+		return werror.NewBadRequest(errStr)
+	}
+
+	return nil
+}
+
+func (v *Validator) validateBackingImages(old *diskv1.BlockDevice) error {
+	uuid, err := v.getDiskUUID(old)
+	if err != nil {
+		return err
+	}
+	if uuid == "" {
+		return nil
+	}
+
+	backingImages, err := v.backingImageCache.GetByIndex(BackingImageByDiskUUID, uuid)
+	if err != nil {
+		errStr := fmt.Sprintf("Error looking up backing images by disk UUID %s: %s", uuid, err.Error())
+		return werror.NewBadRequest(errStr)
+	}
+	if len(backingImages) == 0 {
+		return nil
+	}
+
+	unsafeToRemoveBackingImages := v.findUnsafeUnsafeBackingImages(backingImages, uuid)
+	if len(unsafeToRemoveBackingImages) > 0 {
+		errStr := fmt.Sprintf("Cannot remove disk %s as it contains the only ready copy for the following backing images: %s",
+			old.Name, strings.Join(unsafeToRemoveBackingImages, ", "))
+		return werror.NewBadRequest(errStr)
+	}
+
+	return nil
+}
+
+func (v *Validator) getDiskUUID(bd *diskv1.BlockDevice) (string, error) {
+	lhNodes, err := v.lhNodeCache.GetByIndex(NodeByBlockDeviceName, bd.Name)
+	if err != nil {
+		errStr := fmt.Sprintf("Error looking up node by blockdevice name %s: %s", bd.Name, err.Error())
+		return "", werror.NewBadRequest(errStr)
+	}
+	if len(lhNodes) != 1 || lhNodes[0] == nil {
+		return "", nil
+	}
+
+	lhNode := lhNodes[0]
+	diskStatus, ok := lhNode.Status.DiskStatus[bd.Name]
+	if !ok || diskStatus.DiskUUID == "" {
+		return "", nil
+	}
+
+	return diskStatus.DiskUUID, nil
+}
+
+func (v *Validator) getVolumesOnDisk(targetDiskUUID string) ([]string, error) {
 	replicaObjs, err := v.replicaCache.GetByIndex(ReplicaByDiskUUID, targetDiskUUID)
 	if err != nil {
 		errStr := fmt.Sprintf("Failed to get replicas by disk UUID %s: %s", targetDiskUUID, err.Error())
-		return werror.NewBadRequest(errStr)
-	}
-	if len(replicaObjs) == 0 {
-		return nil
+		return nil, werror.NewBadRequest(errStr)
 	}
 
-	volumesToCheck := make(map[string]struct{})
+	volumesToCheck := make([]string, 0, len(replicaObjs))
 	for _, replicaObj := range replicaObjs {
-		volumesToCheck[replicaObj.Spec.VolumeName] = struct{}{}
+		volumesToCheck = append(volumesToCheck, replicaObj.Spec.VolumeName)
 	}
 
-	var unsafeVolumes []string
-	for volName := range volumesToCheck {
+	return volumesToCheck, nil
+}
+
+func (v *Validator) findUnsafeVolumes(volumesToCheck []string, targetDiskUUID string) ([]string, error) {
+	unsafeVolumes := make([]string, 0, len(volumesToCheck))
+	for _, volName := range volumesToCheck {
 		replicaObjsForVolume, err := v.replicaCache.GetByIndex(ReplicaByVolume, volName)
 		if err != nil {
 			errStr := fmt.Sprintf("Failed to get replicas for volume %s from index: %s", volName, err.Error())
-			return werror.NewBadRequest(errStr)
+			return nil, werror.NewBadRequest(errStr)
 		}
 
 		var healthyReplicaCount int
@@ -222,42 +291,11 @@ func (v *Validator) validateVolumes(old *diskv1.BlockDevice) error {
 		}
 	}
 
-	if len(unsafeVolumes) > 0 {
-		errStr := fmt.Sprintf("Cannot remove disk %s because it hosts the only healthy replica for the following volumes: %s",
-			old.Spec.DevPath, strings.Join(unsafeVolumes, ", "))
-		return werror.NewBadRequest(errStr)
-	}
-
-	return nil
+	return unsafeVolumes, nil
 }
 
-func (v *Validator) validateBackingImages(old *diskv1.BlockDevice) error {
-	lhNodes, err := v.lhNodeCache.GetByIndex(NodeByBlockDeviceName, old.Name)
-	if err != nil {
-		errStr := fmt.Sprintf("Error looking up node by blockdevice name %s: %s", old.Name, err.Error())
-		return werror.NewBadRequest(errStr)
-	}
-	if len(lhNodes) != 1 || lhNodes[0] == nil {
-		return nil
-	}
-
-	lhNode := lhNodes[0]
-	diskStatus, ok := lhNode.Status.DiskStatus[old.Name]
-	if !ok || diskStatus.DiskUUID == "" {
-		return nil
-	}
-
-	uuid := diskStatus.DiskUUID
-	backingImages, err := v.backingImageCache.GetByIndex(BackingImageByDiskUUID, uuid)
-	if err != nil {
-		errStr := fmt.Sprintf("Error looking up backing images by disk UUID %s: %s", uuid, err.Error())
-		return werror.NewBadRequest(errStr)
-	}
-	if len(backingImages) == 0 {
-		return nil
-	}
-
-	var unsafeToRemoveBackingImages []string
+func (v *Validator) findUnsafeUnsafeBackingImages(backingImages []*lhv1.BackingImage, targetDiskUUID string) []string {
+	unsafeToRemoveBackingImages := make([]string, 0, len(backingImages))
 	for _, backingImage := range backingImages {
 		if backingImage == nil {
 			continue
@@ -273,18 +311,11 @@ func (v *Validator) validateBackingImages(old *diskv1.BlockDevice) error {
 				readyDiskUUID = diskUUID
 			}
 		}
-		if readyCount == 1 && readyDiskUUID == uuid {
+		if readyCount == 1 && readyDiskUUID == targetDiskUUID {
 			unsafeToRemoveBackingImages = append(unsafeToRemoveBackingImages, backingImage.Name)
 		}
 	}
-
-	if len(unsafeToRemoveBackingImages) > 0 {
-		errStr := fmt.Sprintf("Cannot remove disk %s as it contains the only ready copy for the following backing images: %s",
-			old.Name, strings.Join(unsafeToRemoveBackingImages, ", "))
-		return werror.NewBadRequest(errStr)
-	}
-
-	return nil
+	return unsafeToRemoveBackingImages
 }
 
 func (v *Validator) Resource() admission.Resource {
