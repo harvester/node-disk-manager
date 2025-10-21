@@ -1,44 +1,108 @@
-name: Harvester-Node-Disk-Manager CI
+name: PR and Branch Image Build and Push
 
-# synchronize for pull request update
 on:
+  pull_request:
+    types: [opened, reopened, synchronize]
   push:
     branches:
       - master
       - 'v**'
-  pull_request:
-    types: [opened, reopened, synchronize]
 
 env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
   LIBVIRT_DEFAULT_URI: "qemu:///system"
   VM_DEPLOYED: false
 
 jobs:
-  validation:
-    runs-on:
-      - self-hosted
-      - golang
+
+  basic-validateion:
+    runs-on: ubuntu-latest
     steps:
-      - name: "Clone and check"
-        uses: actions/checkout@v3
-      - name: "Run validations"
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run validations
         run: |
           make validate
           make validate-ci
-  job-new-installation:
-    needs: validation
+
+  build-and-push-temporary-images:
+    needs: basic-validateion
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Run dapper
+      run: make ci
+
+    - name: Determine image tag
+      id: tag
+      run: |
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          echo "tag=pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+        else
+          echo "tag=${{ github.ref_name }}-head" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Build and push controller image
+      uses: docker/build-push-action@v5
+      with:
+        provenance: false
+        context: .
+        platforms: linux/amd64
+        file: package/Dockerfile
+        push: true
+        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
+
+    - name: Build and push webhook image
+      uses: docker/build-push-action@v5
+      with:
+        provenance: false
+        context: .
+        platforms: linux/amd64
+        file: package/Dockerfile.webhook
+        push: true
+        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-webhook:${{ steps.tag.outputs.tag }}
+
+  ci-job-new-installation:
+    needs: build-and-push-temporary-images
     runs-on:
       - self-hosted
       - golang
     steps:
       - name: "Clone and check"
-        uses: actions/checkout@v3
-      - name: "Build the Image for the Integration Test"
+        uses: actions/checkout@v4
+
+      - name: "Patch Image target"
         run: |
-          BUILD_FOR_CI=true make
-          ./ci/scripts/patch-ttl-repo.sh
+          TAG=${{ needs.build-and-push-temporary-images.outputs.image_tag }}
+          yq e -i ".image.repository = \"${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\"" ci/charts/ndm-override.yaml
+          yq e -i ".image.tag = \"${TAG}\"" ci/charts/ndm-override.yaml
+          yq e -i ".webhook.repository = \"${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-webhook\"" ci/charts/ndm-override.yaml
+          yq e -i ".webhook.tag = \"${TAG}\"" ci/charts/ndm-override.yaml
           echo "NDM override result as below:"
           cat ci/charts/ndm-override.yaml
+
       - name: "Local Deployment (Harvester+Longhorn+Node-Disk-Manager) for testing"
         id: vm_deploy
         run: |
@@ -50,18 +114,15 @@ jobs:
           echo "VM_DEPLOYED=true" >> "$GITHUB_ENV"
           yq e -i ".longhorn_version = \"1.7.1\"" settings.yaml
           ./scripts/deploy_longhorn.sh
-          popd 
-      - name: "Patch Image target"
-        run: |
-          ./ci/scripts/patch-ttl-repo.sh
-          echo "NDM override result as below:"
-          cat ci/charts/ndm-override.yaml
+          popd
+
       - name: "Add disk"
         run: |
           pushd ndm-new-vagrant-k3s
           ./scripts/attach-disk.sh node1 ndm-new-vagrant-k3s
           sleep 30
           popd
+
       - name: "Deploy NDM"
         run: |
           pushd ndm-new-vagrant-k3s
@@ -70,6 +131,7 @@ jobs:
           cp ../ci/charts/ndm-override.yaml ./ndm-override.yaml
           ./deploy_ndm_current.sh
           popd
+
       - name: "Patch NDM autoProvision"
         run: |
           pushd ndm-new-vagrant-k3s
@@ -77,6 +139,7 @@ jobs:
           cp ../ci/scripts/patch_ndm.sh ./patch_ndm.sh
           ./patch_ndm.sh
           popd
+
       - name: "Run Basic Test"
         id: basic-test
         run: |
@@ -86,6 +149,7 @@ jobs:
           popd
           echo Running integration tests
           NDM_HOME=`pwd` go test -v ./tests/...
+
       - name: "Get NDM logs"
         if: always()
         run: |
@@ -94,6 +158,7 @@ jobs:
             exit 0
           fi
           ./ci/scripts/get-debug-info.sh
+
       - name: "Tear Down / Cleanup"
         if: always()
         run: |
@@ -106,20 +171,25 @@ jobs:
           vagrant destroy -f --parallel
           popd
 
-  jobs-upgrade:
-    needs: validation
+  ci-jobs-upgrade:
+    needs: build-and-push-temporary-images
     runs-on:
       - self-hosted
       - golang
     steps:
       - name: "Clone and check"
-        uses: actions/checkout@v3
-      - name: "Build the Image for the Integration Test"
+        uses: actions/checkout@v4
+
+      - name: "Patch Image target"
         run: |
-          BUILD_FOR_CI=true make
-          ./ci/scripts/patch-ttl-repo.sh
+          TAG=${{ needs.build-and-push-temporary-images.outputs.image_tag }}
+          yq e -i ".image.repository = \"${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\"" ci/charts/ndm-override.yaml
+          yq e -i ".image.tag = \"${TAG}\"" ci/charts/ndm-override.yaml
+          yq e -i ".webhook.repository = \"${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-webhook\"" ci/charts/ndm-override.yaml
+          yq e -i ".webhook.tag = \"${TAG}\"" ci/charts/ndm-override.yaml
           echo "NDM override result as below:"
           cat ci/charts/ndm-override.yaml
+
       - name: "Local Deployment (Harvester+Longhorn+Node-Disk-Manager) for testing"
         id: vm_deploy
         run: |
@@ -135,17 +205,14 @@ jobs:
           cp ../ci/scripts/deploy_ndm_chart.sh ./deploy_ndm_chart.sh
           ./deploy_ndm_chart.sh
           popd
+
       - name: "Add disk"
         run: |
           pushd ndm-upgrade-vagrant-k3s
           ./scripts/attach-disk.sh node1 ndm-upgrade-vagrant-k3s
           sleep 30
           popd
-      - name: "Patch Image target (for upgrade)"
-        run: |
-          ./ci/scripts/patch-ttl-repo.sh
-          echo "NDM override result as below:"
-          cat ci/charts/ndm-override.yaml 
+
       - name: "Upgrade NDM"
         run: |
           pushd ndm-upgrade-vagrant-k3s
@@ -153,6 +220,7 @@ jobs:
           cp ../ci/scripts/upgrade_ndm.sh ./upgrade_ndm.sh
           ./upgrade_ndm.sh
           popd
+
       - name: "Patch NDM autoProvision"
         run: |
           pushd ndm-upgrade-vagrant-k3s
@@ -160,6 +228,7 @@ jobs:
           cp ../ci/scripts/patch_ndm.sh ./patch_ndm.sh
           ./patch_ndm.sh
           popd
+
       - name: "Run Basic Test"
         id: basic-test
         run: |
@@ -169,6 +238,7 @@ jobs:
           popd
           echo Running integration tests
           NDM_HOME=`pwd` go test -v ./tests/...
+
       - name: "Get NDM logs"
         if: always()
         run: |
@@ -177,6 +247,7 @@ jobs:
             exit 0
           fi
           ./ci/scripts/get-debug-info.sh
+
       - name: "Tear Down / Cleanup"
         if: always()
         run: |
