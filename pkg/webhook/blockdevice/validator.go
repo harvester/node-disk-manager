@@ -278,7 +278,7 @@ func (v *Validator) findUnsafeVolumes(volumesToCheck []string, targetDiskUUID st
 		var healthyReplicaCount int
 		var replicaOnTargetDiskIsHealthy bool
 		for _, rep := range replicaObjsForVolume {
-			if rep.Spec.FailedAt == "" {
+			if rep.Spec.FailedAt == "" && rep.Spec.HealthyAt != "" {
 				healthyReplicaCount++
 				if rep.Spec.DiskID == targetDiskUUID {
 					replicaOnTargetDiskIsHealthy = true

@@ -35,8 +35,8 @@ func TestUpdate(t *testing.T) {
 		{
 			name: "disk removal with a volume and backingimage that has healthy replicas elsewhere",
 			replicasToCache: []*lhv1.Replica{
-				newReplica("rep-1", "vol-1", "node-1", "disk-uuid-1", false),
-				newReplica("rep-2", "vol-1", "node-2", "disk-uuid-2", false),
+				newReplica("rep-1", "vol-1", "node-1", "disk-uuid-1", false, true),
+				newReplica("rep-2", "vol-1", "node-2", "disk-uuid-2", false, true),
 			},
 			volsToCache: []*lhv1.Volume{
 				newVolume("vol-1"),
@@ -57,7 +57,7 @@ func TestUpdate(t *testing.T) {
 		{
 			name: "disk removal rejected with a volume with single replica and backing image with multiple replicas",
 			replicasToCache: []*lhv1.Replica{
-				newReplica("rep-1", "vol-1", "node-1", "disk-uuid-1", false),
+				newReplica("rep-1", "vol-1", "node-1", "disk-uuid-1", false, true),
 			},
 			volsToCache: []*lhv1.Volume{
 				newVolume("vol-1"),
@@ -78,8 +78,8 @@ func TestUpdate(t *testing.T) {
 		{
 			name: "disk removal rejected with replicated volume but single healthy backing image",
 			replicasToCache: []*lhv1.Replica{
-				newReplica("rep-1", "vol-1", "node-1", "disk-uuid-1", false),
-				newReplica("rep-2", "vol-1", "node-2", "disk-uuid-2", false),
+				newReplica("rep-1", "vol-1", "node-1", "disk-uuid-1", false, true),
+				newReplica("rep-2", "vol-1", "node-2", "disk-uuid-2", false, true),
 			},
 			volsToCache: []*lhv1.Volume{
 				newVolume("vol-1"),
@@ -99,8 +99,8 @@ func TestUpdate(t *testing.T) {
 		{
 			name: "disk removal allowed when volumes contain all failed replicas and replicated backing image",
 			replicasToCache: []*lhv1.Replica{
-				newReplica("rep-1", "vol-1", "node-1", "disk-uuid-1", true),
-				newReplica("rep-2", "vol-1", "node-2", "disk-uuid-2", true),
+				newReplica("rep-1", "vol-1", "node-1", "disk-uuid-1", true, false),
+				newReplica("rep-2", "vol-1", "node-2", "disk-uuid-2", true, false),
 			},
 			volsToCache: []*lhv1.Volume{
 				newVolume("vol-1"),
@@ -121,8 +121,8 @@ func TestUpdate(t *testing.T) {
 		{
 			name: "disk removal allowed when volumes are all failed and backing images are all in non ready state",
 			replicasToCache: []*lhv1.Replica{
-				newReplica("rep-1", "vol-1", "node-1", "disk-uuid-1", true),
-				newReplica("rep-2", "vol-1", "node-2", "disk-uuid-2", true),
+				newReplica("rep-1", "vol-1", "node-1", "disk-uuid-1", true, false),
+				newReplica("rep-2", "vol-1", "node-2", "disk-uuid-2", true, false),
 			},
 			volsToCache: []*lhv1.Volume{
 				newVolume("vol-1"),
@@ -224,10 +224,14 @@ func newVolume(name string) *lhv1.Volume {
 	}
 }
 
-func newReplica(name, volName, nodeID, diskID string, isFailed bool) *lhv1.Replica {
+func newReplica(name, volName, nodeID, diskID string, isFailed, isHealthy bool) *lhv1.Replica {
 	failedAt := ""
 	if isFailed {
 		failedAt = "2025-10-13T10:00:00Z"
+	}
+	healthyAt := ""
+	if isHealthy {
+		healthyAt = "2025-10-20T20:00:00Z"
 	}
 	return &lhv1.Replica{
 		ObjectMeta: metav1.ObjectMeta{
@@ -239,8 +243,9 @@ func newReplica(name, volName, nodeID, diskID string, isFailed bool) *lhv1.Repli
 				VolumeName: volName,
 				NodeID:     nodeID,
 			},
-			DiskID:   diskID,
-			FailedAt: failedAt,
+			DiskID:    diskID,
+			FailedAt:  failedAt,
+			HealthyAt: healthyAt,
 		},
 	}
 }
