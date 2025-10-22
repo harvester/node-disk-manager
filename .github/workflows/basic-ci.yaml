@@ -25,9 +25,6 @@ jobs:
         run: |
           make validate
           make validate-ci
-      - name: "Run unit-tests"
-        run: |
-          make unit-test
   job-new-installation:
     needs: validation
     runs-on:
@@ -36,7 +33,7 @@ jobs:
     steps:
       - name: "Clone and check"
         uses: actions/checkout@v3
-      - name: "Build the Image for the Integration Test"
+      - name: "Build Integration Test Image and run Unit Tests"
         run: |
           BUILD_FOR_CI=true make
           ./ci/scripts/patch-ttl-repo.sh
@@ -117,7 +114,7 @@ jobs:
     steps:
       - name: "Clone and check"
         uses: actions/checkout@v3
-      - name: "Build the Image for the Integration Test"
+      - name: "Build Integration Test Image and run Unit Tests"
         run: |
           BUILD_FOR_CI=true make
           ./ci/scripts/patch-ttl-repo.sh
