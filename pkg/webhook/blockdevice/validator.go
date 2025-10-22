@@ -31,30 +31,30 @@ const (
 type Validator struct {
 	admission.DefaultValidator
 
-	BlockdeviceCache  ctldiskv1.BlockDeviceCache
-	storageClassCache ctlstoragev1.StorageClassCache
-	pvCache           ctlcorev1.PersistentVolumeCache
-	volumeCache       lhv1beta2.VolumeCache
-	backingImageCache lhv1beta2.BackingImageCache
-	lhNodeCache       lhv1beta2.NodeCache
-	replicaCache      lhv1beta2.ReplicaCache
+	BlockdeviceCache    ctldiskv1.BlockDeviceCache
+	storageClassCache   ctlstoragev1.StorageClassCache
+	pvCache             ctlcorev1.PersistentVolumeCache
+	lhVolumeCache       lhv1beta2.VolumeCache
+	lhBackingImageCache lhv1beta2.BackingImageCache
+	lhNodeCache         lhv1beta2.NodeCache
+	lhReplicaCache      lhv1beta2.ReplicaCache
 }
 
 func NewBlockdeviceValidator(blockdeviceCache ctldiskv1.BlockDeviceCache, storageClassCache ctlstoragev1.StorageClassCache,
-	pvCache ctlcorev1.PersistentVolumeCache, volumeCache lhv1beta2.VolumeCache, backingImageCache lhv1beta2.BackingImageCache,
-	lhNodeCache lhv1beta2.NodeCache, replicaCache lhv1beta2.ReplicaCache) *Validator {
-	backingImageCache.AddIndexer(BackingImageByDiskUUID, backingImageByDiskUUIDIndexer)
+	pvCache ctlcorev1.PersistentVolumeCache, lhVolumeCache lhv1beta2.VolumeCache, lhBackingImageCache lhv1beta2.BackingImageCache,
+	lhNodeCache lhv1beta2.NodeCache, lhReplicaCache lhv1beta2.ReplicaCache) *Validator {
+	lhBackingImageCache.AddIndexer(BackingImageByDiskUUID, backingImageByDiskUUIDIndexer)
 	lhNodeCache.AddIndexer(NodeByBlockDeviceName, nodeByBlockDeviceNameIndexer)
-	replicaCache.AddIndexer(ReplicaByDiskUUID, replicaByDiskUUIDIndexer)
-	replicaCache.AddIndexer(ReplicaByVolume, replicaByVolumeIndexer)
+	lhReplicaCache.AddIndexer(ReplicaByDiskUUID, replicaByDiskUUIDIndexer)
+	lhReplicaCache.AddIndexer(ReplicaByVolume, replicaByVolumeIndexer)
 	return &Validator{
-		BlockdeviceCache:  blockdeviceCache,
-		storageClassCache: storageClassCache,
-		pvCache:           pvCache,
-		volumeCache:       volumeCache,
-		backingImageCache: backingImageCache,
-		lhNodeCache:       lhNodeCache,
-		replicaCache:      replicaCache,
+		BlockdeviceCache:    blockdeviceCache,
+		storageClassCache:   storageClassCache,
+		pvCache:             pvCache,
+		lhVolumeCache:       lhVolumeCache,
+		lhBackingImageCache: lhBackingImageCache,
+		lhNodeCache:         lhNodeCache,
+		lhReplicaCache:      lhReplicaCache,
 	}
 }
 
@@ -100,11 +100,18 @@ func (v *Validator) validateLHDisk(oldBd, newBd *diskv1.BlockDevice) error {
 	if !oldBd.Spec.Provision || newBd.Spec.Provision {
 		return nil
 	}
-	err := v.validateVolumes(oldBd)
+	uuid, err := v.validateDiskInNode(oldBd)
 	if err != nil {
 		return err
 	}
-	err = v.validateBackingImages(oldBd)
+	if uuid == "" {
+		return nil
+	}
+	err = v.validateVolumes(oldBd, uuid)
+	if err != nil {
+		return err
+	}
+	err = v.validateBackingImages(oldBd, uuid)
 	if err != nil {
 		return err
 	}
@@ -176,15 +183,7 @@ func (v *Validator) validateVGIsAlreadyUsed(bd *diskv1.BlockDevice) error {
 	return nil
 }
 
-func (v *Validator) validateVolumes(old *diskv1.BlockDevice) error {
-	uuid, err := v.getDiskUUID(old)
-	if err != nil {
-		return err
-	}
-	if uuid == "" {
-		return nil
-	}
-
+func (v *Validator) validateVolumes(old *diskv1.BlockDevice, uuid string) error {
 	volumesToCheck, err := v.getVolumesOnDisk(uuid)
 	if err != nil {
 		return err
@@ -204,16 +203,8 @@ func (v *Validator) validateVolumes(old *diskv1.BlockDevice) error {
 	return nil
 }
 
-func (v *Validator) validateBackingImages(old *diskv1.BlockDevice) error {
-	uuid, err := v.getDiskUUID(old)
-	if err != nil {
-		return err
-	}
-	if uuid == "" {
-		return nil
-	}
-
-	backingImages, err := v.backingImageCache.GetByIndex(BackingImageByDiskUUID, uuid)
+func (v *Validator) validateBackingImages(old *diskv1.BlockDevice, uuid string) error {
+	backingImages, err := v.lhBackingImageCache.GetByIndex(BackingImageByDiskUUID, uuid)
 	if err != nil {
 		errStr := fmt.Sprintf("Error looking up backing images by disk UUID %s: %s", uuid, err.Error())
 		return werror.NewBadRequest(errStr)
@@ -222,7 +213,7 @@ func (v *Validator) validateBackingImages(old *diskv1.BlockDevice) error {
 		return nil
 	}
 
-	unsafeToRemoveBackingImages := v.findUnsafeUnsafeBackingImages(backingImages, uuid)
+	unsafeToRemoveBackingImages := v.findUnsafeBackingImages(backingImages, uuid)
 	if len(unsafeToRemoveBackingImages) > 0 {
 		errStr := fmt.Sprintf("Cannot remove disk %s as it contains the only ready copy for the following backing images: %s",
 			old.Name, strings.Join(unsafeToRemoveBackingImages, ", "))
@@ -232,7 +223,7 @@ func (v *Validator) validateBackingImages(old *diskv1.BlockDevice) error {
 	return nil
 }
 
-func (v *Validator) getDiskUUID(bd *diskv1.BlockDevice) (string, error) {
+func (v *Validator) validateDiskInNode(bd *diskv1.BlockDevice) (string, error) {
 	lhNodes, err := v.lhNodeCache.GetByIndex(NodeByBlockDeviceName, bd.Name)
 	if err != nil {
 		errStr := fmt.Sprintf("Error looking up node by blockdevice name %s: %s", bd.Name, err.Error())
@@ -252,7 +243,7 @@ func (v *Validator) getDiskUUID(bd *diskv1.BlockDevice) (string, error) {
 }
 
 func (v *Validator) getVolumesOnDisk(targetDiskUUID string) ([]string, error) {
-	replicaObjs, err := v.replicaCache.GetByIndex(ReplicaByDiskUUID, targetDiskUUID)
+	replicaObjs, err := v.lhReplicaCache.GetByIndex(ReplicaByDiskUUID, targetDiskUUID)
 	if err != nil {
 		errStr := fmt.Sprintf("Failed to get replicas by disk UUID %s: %s", targetDiskUUID, err.Error())
 		return nil, werror.NewBadRequest(errStr)
@@ -266,27 +257,16 @@ func (v *Validator) getVolumesOnDisk(targetDiskUUID string) ([]string, error) {
 	return volumesToCheck, nil
 }
 
-func (v *Validator) findUnsafeVolumes(volumesToCheck []string, targetDiskUUID string) ([]string, error) {
+func (v *Validator) findUnsafeVolumes(volumesToCheck []string, uuid string) ([]string, error) {
 	unsafeVolumes := make([]string, 0, len(volumesToCheck))
 	for _, volName := range volumesToCheck {
-		replicaObjsForVolume, err := v.replicaCache.GetByIndex(ReplicaByVolume, volName)
+		replicaObjsForVolume, err := v.lhReplicaCache.GetByIndex(ReplicaByVolume, volName)
 		if err != nil {
 			errStr := fmt.Sprintf("Failed to get replicas for volume %s from index: %s", volName, err.Error())
 			return nil, werror.NewBadRequest(errStr)
 		}
-
-		var healthyReplicaCount int
-		var replicaOnTargetDiskIsHealthy bool
-		for _, rep := range replicaObjsForVolume {
-			if rep.Spec.FailedAt == "" && rep.Spec.HealthyAt != "" {
-				healthyReplicaCount++
-				if rep.Spec.DiskID == targetDiskUUID {
-					replicaOnTargetDiskIsHealthy = true
-				}
-			}
-		}
-
-		if healthyReplicaCount == 1 && replicaOnTargetDiskIsHealthy {
+		replicaCount, replicaIsHealthy := countHealthyReplicaOnDisk(replicaObjsForVolume, uuid)
+		if replicaCount == 1 && replicaIsHealthy {
 			unsafeVolumes = append(unsafeVolumes, volName)
 		}
 	}
@@ -294,28 +274,47 @@ func (v *Validator) findUnsafeVolumes(volumesToCheck []string, targetDiskUUID st
 	return unsafeVolumes, nil
 }
 
-func (v *Validator) findUnsafeUnsafeBackingImages(backingImages []*lhv1.BackingImage, targetDiskUUID string) []string {
+func countHealthyReplicaOnDisk(replicas []*lhv1.Replica, uuid string) (int, bool) {
+	var healthyReplicaCount int
+	var replicaOnTargetDiskIsHealthy bool
+	for _, replica := range replicas {
+		if replica.Spec.FailedAt == "" && replica.Spec.HealthyAt != "" {
+			healthyReplicaCount++
+			if replica.Spec.DiskID == uuid {
+				replicaOnTargetDiskIsHealthy = true
+			}
+		}
+	}
+	return healthyReplicaCount, replicaOnTargetDiskIsHealthy
+}
+
+func (v *Validator) findUnsafeBackingImages(backingImages []*lhv1.BackingImage, targetDiskUUID string) []string {
 	unsafeToRemoveBackingImages := make([]string, 0, len(backingImages))
 	for _, backingImage := range backingImages {
 		if backingImage == nil {
 			continue
 		}
-		readyCount := 0
-		var readyDiskUUID string
-		for diskUUID, fileStatus := range backingImage.Status.DiskFileStatusMap {
-			if fileStatus == nil {
-				continue
-			}
-			if fileStatus.State == lhv1.BackingImageStateReady {
-				readyCount++
-				readyDiskUUID = diskUUID
-			}
-		}
+		readyCount, readyDiskUUID := countReadyBackingImages(backingImage)
 		if readyCount == 1 && readyDiskUUID == targetDiskUUID {
 			unsafeToRemoveBackingImages = append(unsafeToRemoveBackingImages, backingImage.Name)
 		}
 	}
 	return unsafeToRemoveBackingImages
+}
+
+func countReadyBackingImages(backingImage *lhv1.BackingImage) (int, string) {
+	var readyCount int
+	var readyDiskUUID string
+	for diskUUID, fileStatus := range backingImage.Status.DiskFileStatusMap {
+		if fileStatus == nil {
+			continue
+		}
+		if fileStatus.State == lhv1.BackingImageStateReady {
+			readyCount++
+			readyDiskUUID = diskUUID
+		}
+	}
+	return readyCount, readyDiskUUID
 }
 
 func (v *Validator) Resource() admission.Resource {
