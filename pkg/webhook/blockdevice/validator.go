@@ -21,6 +21,7 @@ import (
 	"github.com/harvester/node-disk-manager/pkg/utils"
 )
 
+// Constants representing the names of the indexes
 const (
 	BackingImageByDiskUUID = "longhorn.io/backingimage-by-diskuuid"
 	NodeByBlockDeviceName  = "longhorn.io/node-by-blockdevice-name"
