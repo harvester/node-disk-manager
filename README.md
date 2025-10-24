@@ -27,6 +27,20 @@ The binaries for each architecture can be run directly for development or testin
 ./bin/node-disk-manager-arm64 --node-name "$(hostname -s)"
 ```
 
+## Chart
+
+The chart definition is managed on a central repo `https://github.com/harvester/charts`. Changes need to be sent to it.
+
+https://github.com/harvester/charts/tree/master/charts/harvester-node-disk-manager
+
+For more information, see [Chart README] https://github.com/harvester/charts/blob/master/README.md.
+
+### Example PRs adopting chart changes from the repo:
+
+1. Add change against `master` branch - [#423](https://github.com/harvester/charts/pull/423)
+1. Release the change by adding to `release` branch - [#427](https://github.com/harvester/charts/pull/427)
+1. Integrate change in harvester build - [#9365](https://github.com/harvester/harvester/pull/9365)
+
 ## Features
 
 - [x] Disk provisioning as Longhorn disks with a simple boolean.
