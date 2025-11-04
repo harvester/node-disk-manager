@@ -13,7 +13,15 @@ jobs:
       tag: master-head
       push: true
     secrets: inherit
-  
+
+  build-for-v1_7:
+    uses: ./.github/workflows/factory.yaml
+    with:
+      refs: v1.7
+      tag: v1.7-head
+      push: true
+    secrets: inherit
+    
   build-for-v1_6:
     uses: ./.github/workflows/factory.yaml
     with:
