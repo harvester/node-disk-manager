@@ -270,3 +270,31 @@ func IsManagedByMultipath(deviceName string) (string, error) {
 
 	return output, nil
 }
+
+// GetMapperDeviceFromDM retrieves the mapper device for a dm-x device using dmsetup
+// For example, dm-0 might return "0QEMU_QEMU_HARDDISK_disk2"
+// This provides a stable device name that persists across reboots, unlike dm-x which can change
+func GetMapperDeviceFromDM(dmDevice string) (string, error) {
+	ns := GetHostNamespacePath(HostProcPath)
+	executor, err := NewExecutorWithNS(ns)
+	if err != nil {
+		return "", fmt.Errorf("failed to create executor with namespace: %v", err)
+	}
+
+	dmDevice = strings.TrimPrefix(dmDevice, "/dev/")
+
+	// Execute dmsetup info command to get mapper name
+	// dmsetup info -c --noheading -o name /dev/dm-x
+	output, err := executor.Execute("dmsetup", []string{"info", "-c", "--noheading", "-o", "name", fmt.Sprintf("/dev/%s", dmDevice)})
+	if err != nil {
+		return "", fmt.Errorf("failed to get mapper name for %s: %v", dmDevice, err)
+	}
+
+	mapperName := strings.TrimSpace(output)
+	if mapperName == "" {
+		return "", fmt.Errorf("empty mapper name returned for device %s", dmDevice)
+	}
+
+	logrus.Debugf("Mapper name for device %s: %s", dmDevice, mapperName)
+	return fmt.Sprintf("/dev/mapper/%s", mapperName), nil
+}

@@ -297,9 +297,18 @@ func ResolvePersistentDevPath(device *diskv1.BlockDevice) (string, error) {
 				return path, nil
 			}
 
+			// Verify it's a multipath device before using mapper path
 			if _, err := utils.IsMultipathDevice(path); err == nil {
-				logrus.Debugf("Resolved device path %s for %s", path, device.Name)
-				return path, nil
+				logrus.Debugf("Confirmed %s is a multipath device", path)
+
+				mapperPath, err := utils.GetMapperDeviceFromDM(path)
+				if err != nil {
+					logrus.Errorf("Failed to resolve mapper path for %s: %v, will try by-path", path, err)
+					return "", err
+				}
+
+				logrus.Infof("Resolved dm device %s to stable mapper path: %s for %s", path, mapperPath, device.Name)
+				return mapperPath, nil
 			}
 		}
 		// ...in the latter two cases, we can try to resolve via "/dev/disk/by-path/...",
