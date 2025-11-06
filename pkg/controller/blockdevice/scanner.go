@@ -2,6 +2,7 @@ package blockdevice
 
 import (
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -158,7 +159,9 @@ func (s *Scanner) handleExistingDev(oldBd *diskv1.BlockDevice, newBd *diskv1.Blo
 		// Then the block device will become active from inactive.
 		oldBdCp := oldBd.DeepCopy()
 
-		if _, err := utils.IsMultipathDevice(oldBd.Status.DeviceStatus.DevPath); err == nil {
+		// We've checked it outside, we can skip error
+		path, _ := filepath.EvalSymlinks(oldBd.Status.DeviceStatus.DevPath)
+		if _, err := utils.IsMultipathDevice(path); err == nil {
 			logrus.Infof("The multipath device %s is available, change it to active.", oldBd.Name)
 			oldBdCp.Status.State = diskv1.BlockDeviceActive
 		}
@@ -378,5 +381,17 @@ func isDevAlreadyProvisioned(newBd *diskv1.BlockDevice) bool {
 }
 
 func isDMDevice(name string) bool {
-	return strings.Contains(name, "dm-")
+	// Check if the name directly contains "dm-"
+	if strings.Contains(name, "dm-") {
+		return true
+	}
+
+	// For mapper paths like /dev/mapper/xxx, resolve symlink to check if it points to dm-x
+	// filepath.EvalSymlinks will resolve /dev/mapper/0QEMU_QEMU_HARDDISK_disk1 -> /dev/dm-0
+	path, err := filepath.EvalSymlinks(name)
+	if err == nil && strings.Contains(path, "dm-") {
+		return true
+	}
+
+	return false
 }
