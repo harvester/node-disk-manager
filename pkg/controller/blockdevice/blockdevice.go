@@ -1,6 +1,9 @@
 package blockdevice
 
 import (
+	"strings"
+
+	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -24,6 +27,18 @@ func GetDiskBlockDevice(disk *block.Disk, nodeName, namespace string) *diskv1.Bl
 		IsReadOnly: disk.FileSystemInfo.IsReadOnly,
 	}
 	devPath := utils.GetFullDevPath(disk.Name)
+
+	// For dm-* devices, use the stable /dev/mapper/xxx path
+	// This ensures device paths remain consistent across reboots
+	if strings.HasPrefix(disk.Name, "dm-") {
+		if mapperPath, err := utils.GetMapperDeviceFromDM(disk.Name); err == nil {
+			logrus.Infof("Using stable mapper path %s for dm device %s", mapperPath, disk.Name)
+			devPath = mapperPath
+		} else {
+			logrus.Debugf("Failed to resolve mapper path for %s, using dm path: %v", disk.Name, err)
+		}
+	}
+
 	status := diskv1.BlockDeviceStatus{
 		State:          diskv1.BlockDeviceActive,
 		ProvisionPhase: diskv1.ProvisionPhaseUnprovisioned,
