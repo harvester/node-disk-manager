@@ -381,13 +381,9 @@ func isDevAlreadyProvisioned(newBd *diskv1.BlockDevice) bool {
 }
 
 func isDMDevice(name string) bool {
-	// Check if the name directly contains "dm-"
-	if strings.Contains(name, "dm-") {
-		return true
-	}
-
-	// For mapper paths like /dev/mapper/xxx, resolve symlink to check if it points to dm-x
-	// filepath.EvalSymlinks will resolve /dev/mapper/0QEMU_QEMU_HARDDISK_disk1 -> /dev/dm-0
+	// Resolve symlink to check if it points to dm-x
+	// Resolve /dev/mapper/0QEMU_QEMU_HARDDISK_disk1 -> /dev/dm-0
+	// Resolve /dev/dm-0 -> /dev/dm-0
 	path, err := filepath.EvalSymlinks(name)
 	if err == nil && strings.Contains(path, "dm-") {
 		return true
