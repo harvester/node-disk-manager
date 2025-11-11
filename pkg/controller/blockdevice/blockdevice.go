@@ -35,7 +35,7 @@ func GetDiskBlockDevice(disk *block.Disk, nodeName, namespace string) *diskv1.Bl
 			logrus.Infof("Using stable mapper path %s for dm device %s", mapperPath, disk.Name)
 			devPath = mapperPath
 		} else {
-			logrus.Debugf("Failed to resolve mapper path for %s, using dm path: %v", disk.Name, err)
+			logrus.Warnf("Failed to resolve mapper path for %s, using dm path: %v", disk.Name, err)
 		}
 	}
 
