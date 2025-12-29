@@ -3,10 +3,10 @@ package blockdevice
 import (
 	"testing"
 
+	"github.com/harvester/go-common/common"
 	lhv1beta2 "github.com/harvester/harvester/pkg/generated/controllers/longhorn.io/v1beta2"
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
-	"github.com/harvester/node-disk-manager/pkg/utils"
 	"github.com/harvester/node-disk-manager/pkg/utils/fake"
 	lhv1 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	ctlcorev1 "github.com/rancher/wrangler/v3/pkg/generated/controllers/core/v1"
@@ -207,7 +207,7 @@ func newLHNode(name string, disks map[string]string) *lhv1.Node {
 	return &lhv1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: utils.LonghornSystemNamespaceName,
+			Namespace: common.LonghornSystemNamespaceName,
 		},
 		Status: lhv1.NodeStatus{
 			DiskStatus: diskStatus,
@@ -219,7 +219,7 @@ func newVolume(name string) *lhv1.Volume {
 	return &lhv1.Volume{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: utils.LonghornSystemNamespaceName,
+			Namespace: common.LonghornSystemNamespaceName,
 		},
 	}
 }
@@ -236,7 +236,7 @@ func newReplica(name, volName, nodeID, diskID string, isFailed, isHealthy bool) 
 	return &lhv1.Replica{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: utils.LonghornSystemNamespaceName,
+			Namespace: common.LonghornSystemNamespaceName,
 		},
 		Spec: lhv1.ReplicaSpec{
 			InstanceSpec: lhv1.InstanceSpec{
@@ -259,7 +259,7 @@ func newBackingImage(name string, diskStatuses map[string]lhv1.BackingImageState
 	return &lhv1.BackingImage{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: utils.LonghornSystemNamespaceName,
+			Namespace: common.LonghornSystemNamespaceName,
 		},
 		Status: lhv1.BackingImageStatus{
 			DiskFileStatusMap: statusMap,
