@@ -462,7 +462,7 @@ func isOnUpgrade(upgrades ctlharvesterv1.UpgradeClient) bool {
 		return false
 	}
 
-	upgradesItems, err := upgrades.List(utils.HarvesterNS, metav1.ListOptions{
+	upgradesItems, err := upgrades.List(gocommon.HarvesterSystemNamespaceName, metav1.ListOptions{
 		LabelSelector: labels.NewSelector().Add(*req).String(),
 	})
 	if err != nil {

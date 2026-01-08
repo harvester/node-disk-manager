@@ -149,7 +149,7 @@ func runWebhookServer(ctx context.Context, cfg *rest.Config, options *config.Opt
 }
 
 func newCaches(ctx context.Context, cfg *rest.Config, threadiness int) (*resourceCaches, error) {
-	var starters []start.Starter
+	var starters []start.Starter // nolint: prealloc
 
 	disks, err := ctldisk.NewFactoryFromConfig(cfg)
 	if err != nil {
