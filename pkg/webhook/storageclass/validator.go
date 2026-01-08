@@ -37,7 +37,7 @@ func (v *Validator) validateVGStatus(sc *storagev1.StorageClass) error {
 	if sc.Provisioner != utils.LVMCSIDriver {
 		return nil
 	}
-	vgs, err := v.lvmVGCache.List(common.HarvesterNS, labels.Everything())
+	vgs, err := v.lvmVGCache.List(common.HarvesterSystemNamespaceName, labels.Everything())
 	if err != nil {
 		return err
 	}

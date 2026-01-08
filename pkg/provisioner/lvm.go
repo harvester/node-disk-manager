@@ -185,7 +185,7 @@ func (l *LVMProvisioner) addDevOrCreateLVMVgCRD(lvmVG *diskv1.LVMVolumeGroup, fo
 		lvmVG = &diskv1.LVMVolumeGroup{
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: fmt.Sprintf("%s-", l.vgName),
-				Namespace:    common.HarvesterNS,
+				Namespace:    common.HarvesterSystemNamespaceName,
 				Labels: map[string]string{
 					lvm.LVMTopoKeyNode: l.nodeName,
 				},
@@ -268,7 +268,7 @@ func (l *LVMProvisioner) getTargetLVMVG() (target *diskv1.LVMVolumeGroup, err er
 		err = fmt.Errorf("failed to generate selector: %w", err)
 		return
 	}
-	lvmvgs, err := l.vgClient.List(common.HarvesterNS, metav1.ListOptions{LabelSelector: selector.String()})
+	lvmvgs, err := l.vgClient.List(common.HarvesterSystemNamespaceName, metav1.ListOptions{LabelSelector: selector.String()})
 	if err != nil {
 		err = fmt.Errorf("failed to list LVMVolumeGroup %s: %w", l.vgName, err)
 		return
