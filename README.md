@@ -149,7 +149,7 @@ Here we give the Sample XML for `libvirt` to create a SCSI device with `WWN`.
 That has some limitations. For example, the UUID will be missing if the filesystem metadata is broken.
 
 ## License
-Copyright (c) 2025 [Rancher Labs, Inc.](http://rancher.com)
+Copyright (c) 2026 [SUSE, LLC.](https://www.suse.com/)
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
