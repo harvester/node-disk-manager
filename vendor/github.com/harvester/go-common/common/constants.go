@@ -1,6 +1,8 @@
 package common
 
 const (
-	LonghornSystemNamespaceName = "longhorn-system"
-	HarvesterNS                 = "harvester-system"
+	LonghornSystemNamespaceName  = "longhorn-system"
+	HarvesterSystemNamespaceName = "harvester-system"
+	// Deprecated: use HarvesterSystemNamespaceName instead
+	HarvesterNS = HarvesterSystemNamespaceName
 )

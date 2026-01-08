@@ -70,7 +70,7 @@ github.com/google/uuid
 # github.com/gorilla/mux v1.8.1
 ## explicit; go 1.20
 github.com/gorilla/mux
-# github.com/harvester/go-common v0.0.0-20250109132713-e748ce72a7ba => github.com/martindekov/go-common v0.0.0-20251229123151-e86c53def107
+# github.com/harvester/go-common v0.0.0-20260108124725-70d352e21314
 ## explicit; go 1.25
 github.com/harvester/go-common/common
 github.com/harvester/go-common/ds
@@ -769,7 +769,6 @@ sigs.k8s.io/structured-merge-diff/v4/value
 ## explicit; go 1.22
 sigs.k8s.io/yaml
 sigs.k8s.io/yaml/goyaml.v2
-# github.com/harvester/go-common => github.com/martindekov/go-common v0.0.0-20251229123151-e86c53def107
 # github.com/openshift/api => github.com/openshift/api v0.0.0-20191219222812-2987a591a72c
 # github.com/openshift/client-go => github.com/openshift/client-go v0.0.0-20200521150516-05eb9880269c
 # github.com/rancher/rancher/pkg/apis => github.com/rancher/rancher/pkg/apis v0.0.0-20240919204204-3da2ae0cabd1
