@@ -8,6 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 
+	"github.com/harvester/go-common/common"
 	"github.com/harvester/node-disk-manager/pkg/utils"
 )
 
@@ -16,7 +17,7 @@ const (
 )
 
 func GetPVScanResult() (map[string]string, error) {
-	ns := utils.GetHostNamespacePath(utils.HostProcPath)
+	ns := common.GetHostNamespacePath(utils.HostProcPath)
 	executor, err := utils.NewExecutorWithNS(ns)
 	if err != nil {
 		return nil, fmt.Errorf("generate executor failed: %v", err)
@@ -48,7 +49,7 @@ func GetPVScanResult() (map[string]string, error) {
 }
 
 func executeCommandWithNS(cmd string, args []string) error {
-	ns := utils.GetHostNamespacePath(utils.HostProcPath)
+	ns := common.GetHostNamespacePath(utils.HostProcPath)
 	executor, err := utils.NewExecutorWithNS(ns)
 	if err != nil {
 		return fmt.Errorf("generate executor failed: %v", err)

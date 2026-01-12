@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 
+	"github.com/harvester/go-common/common"
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/utils"
@@ -36,7 +37,7 @@ func (v *Validator) validateVGStatus(sc *storagev1.StorageClass) error {
 	if sc.Provisioner != utils.LVMCSIDriver {
 		return nil
 	}
-	vgs, err := v.lvmVGCache.List(utils.HarvesterNS, labels.Everything())
+	vgs, err := v.lvmVGCache.List(common.HarvesterSystemNamespaceName, labels.Everything())
 	if err != nil {
 		return err
 	}
