@@ -17,6 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/blake2b"
 
+	"github.com/harvester/go-common/common"
 	ndmutils "github.com/harvester/node-disk-manager/pkg/utils"
 )
 
@@ -509,7 +510,7 @@ func partitionInfo(ctx *context.Context, paths *linuxpath.Paths, part string) (s
 func openProcMounts(ctx *context.Context, paths *linuxpath.Paths) (*os.File, error) {
 	file := paths.ProcMounts
 	if path, ok := ctx.PathOverrides[ndmutils.ProcPath]; ok {
-		ns := ndmutils.GetHostNamespacePath(path)
+		ns := common.GetHostNamespacePath(path)
 		file = strings.TrimSuffix(ns, "ns/") + "mounts"
 	}
 	return os.Open(file)

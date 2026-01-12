@@ -9,11 +9,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/harvester/go-common/common"
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/lvm"
-	"github.com/harvester/node-disk-manager/pkg/utils"
 )
 
 type LVMProvisioner struct {
@@ -185,7 +185,7 @@ func (l *LVMProvisioner) addDevOrCreateLVMVgCRD(lvmVG *diskv1.LVMVolumeGroup, fo
 		lvmVG = &diskv1.LVMVolumeGroup{
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: fmt.Sprintf("%s-", l.vgName),
-				Namespace:    utils.HarvesterNS,
+				Namespace:    common.HarvesterSystemNamespaceName,
 				Labels: map[string]string{
 					lvm.LVMTopoKeyNode: l.nodeName,
 				},
@@ -268,7 +268,7 @@ func (l *LVMProvisioner) getTargetLVMVG() (target *diskv1.LVMVolumeGroup, err er
 		err = fmt.Errorf("failed to generate selector: %w", err)
 		return
 	}
-	lvmvgs, err := l.vgClient.List(utils.HarvesterNS, metav1.ListOptions{LabelSelector: selector.String()})
+	lvmvgs, err := l.vgClient.List(common.HarvesterSystemNamespaceName, metav1.ListOptions{LabelSelector: selector.String()})
 	if err != nil {
 		err = fmt.Errorf("failed to list LVMVolumeGroup %s: %w", l.vgName, err)
 		return

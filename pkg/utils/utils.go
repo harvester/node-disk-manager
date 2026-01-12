@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/harvester/go-common/common"
 	"github.com/sirupsen/logrus"
 )
 
@@ -19,14 +20,10 @@ const (
 	HostProcPath = "/host/proc"
 	// DiskRemoveTag indicates a Longhorn is pending to remove.
 	DiskRemoveTag = "harvester-ndm-disk-remove"
-	// Harvester Namespace
-	HarvesterNS = "harvester-system"
 	// LVMCSIDriver is the LVM CSI driver name
 	LVMCSIDriver = "lvm.driver.harvesterhci.io"
 	// LVMTopologyNodeKey is the key of LVM topology node
 	LVMTopologyNodeKey = "topology.lvm.csi/node"
-	// LonghornSystemNamespaceName is the namespace containing longhorn components
-	LonghornSystemNamespaceName = "longhorn-system"
 )
 
 var CmdTimeoutError error
@@ -166,7 +163,7 @@ func mountExt4(device, path string, readonly bool) error {
 
 // mountExt4OnHostNamespace provides the same functionality as mountExt4 but on host namespace.
 func mountExt4OnHostNamespace(device, path string, readonly bool) error {
-	ns := GetHostNamespacePath(HostProcPath)
+	ns := common.GetHostNamespacePath(HostProcPath)
 	executor, err := NewExecutorWithNS(ns)
 	if err != nil {
 		return err
@@ -184,7 +181,7 @@ func mountExt4OnHostNamespace(device, path string, readonly bool) error {
 // executeOnHostNamespace executes the command in the host namespace
 // return the command result and error
 func executeOnHostNamespace(cmd string, args []string) (string, error) {
-	ns := GetHostNamespacePath(HostProcPath)
+	ns := common.GetHostNamespacePath(HostProcPath)
 	executor, err := NewExecutorWithNS(ns)
 	if err != nil {
 		return "", err
@@ -195,7 +192,7 @@ func executeOnHostNamespace(cmd string, args []string) (string, error) {
 // executeOnHostNamespace executes the command with timeout value in the host namespace
 // return the command result and error
 func executeOnHostNamespaceWithTimeout(cmd string, args []string, cmdTimeout time.Duration) (string, error) {
-	ns := GetHostNamespacePath(HostProcPath)
+	ns := common.GetHostNamespacePath(HostProcPath)
 	executor, err := NewExecutorWithNS(ns)
 	executor.SetTimeout(cmdTimeout)
 	if err != nil {
@@ -227,7 +224,7 @@ func CallerWithCondLock[T any](cond *sync.Cond, f func() T) T {
 
 // IsMultipathDevice checks if a dm-x device is multipath device
 func IsMultipathDevice(path string) (string, error) {
-	ns := GetHostNamespacePath(HostProcPath)
+	ns := common.GetHostNamespacePath(HostProcPath)
 	executor, err := NewExecutorWithNS(ns)
 	if err != nil {
 		return "", fmt.Errorf("failed to create executor with namespace: %v", err)
@@ -245,7 +242,7 @@ func IsMultipathDevice(path string) (string, error) {
 
 // IsManagedByMultipath checks if a /dev/xxx device is managed by multipath
 func IsManagedByMultipath(deviceName string) (string, error) {
-	ns := GetHostNamespacePath(HostProcPath)
+	ns := common.GetHostNamespacePath(HostProcPath)
 	executor, err := NewExecutorWithNS(ns)
 	if err != nil {
 		return "", fmt.Errorf("failed to create executor with namespace: %v", err)
@@ -275,7 +272,7 @@ func IsManagedByMultipath(deviceName string) (string, error) {
 // For example, dm-0 might return "0QEMU_QEMU_HARDDISK_disk2"
 // This provides a stable device name that persists across reboots, unlike dm-x which can change
 func GetMapperDeviceFromDM(dmDevice string) (string, error) {
-	ns := GetHostNamespacePath(HostProcPath)
+	ns := common.GetHostNamespacePath(HostProcPath)
 	executor, err := NewExecutorWithNS(ns)
 	if err != nil {
 		return "", fmt.Errorf("failed to create executor with namespace: %v", err)

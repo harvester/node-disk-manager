@@ -37,7 +37,7 @@ replace (
 
 require (
 	github.com/ehazlett/simplelog v0.0.0-20200226020431-d374894e92a4
-	github.com/harvester/go-common v0.0.0-20250109132713-e748ce72a7ba
+	github.com/harvester/go-common v0.0.0-20260108124725-70d352e21314
 	github.com/harvester/harvester v1.5.1
 	github.com/harvester/webhook v0.1.5
 	github.com/jaypipes/ghw v0.8.1-0.20210701154532-dd036bd38c40
@@ -46,7 +46,6 @@ require (
 	github.com/melbahja/goph v1.3.0
 	github.com/pilebones/go-udev v0.0.0-20210126000448-a3c2a7a4afb7
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/procfs v0.16.1
 	github.com/rancher/lasso v0.2.3
 	github.com/rancher/wrangler/v3 v3.2.4
 	github.com/sirupsen/logrus v1.9.3
@@ -92,6 +91,7 @@ require (
 	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.66.1 // indirect
+	github.com/prometheus/procfs v0.17.0 // indirect
 	github.com/rancher/dynamiclistener v0.7.0 // indirect
 	github.com/rancher/wrangler v1.1.2 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect

@@ -98,7 +98,7 @@ func (v *Validator) validateLHDisk(oldBd, newBd *diskv1.BlockDevice) error {
 	if oldBd.Spec.Provisioner.Longhorn == nil || newBd.Spec.Provisioner.Longhorn == nil {
 		return nil
 	}
-	if !oldBd.Spec.Provision || newBd.Spec.Provision {
+	if !isProvisioningDisabled(oldBd, newBd) {
 		return nil
 	}
 	uuid, err := v.validateDiskInNode(oldBd)
@@ -377,4 +377,8 @@ func replicaByVolumeIndexer(replica *lhv1.Replica) ([]string, error) {
 		return []string{}, nil
 	}
 	return []string{replica.Spec.VolumeName}, nil
+}
+
+func isProvisioningDisabled(oldBd, newBd *diskv1.BlockDevice) bool {
+	return oldBd.Spec.Provision && !newBd.Spec.Provision
 }
