@@ -46,14 +46,15 @@ func (exec *Executor) Execute(cmd string, args []string) (string, error) {
 	command := cmd
 	cmdArgs := args
 	if exec.namespace != "" {
-		cmdArgs = []string{ // nolint: prealloc
-			"--mount=" + filepath.Join(exec.namespace, "mnt"),
-			"--net=" + filepath.Join(exec.namespace, "net"),
-			"--ipc=" + filepath.Join(exec.namespace, "ipc"),
+		cmdArgs = make([]string, 0, len(args)+4)
+		cmdArgs = append(cmdArgs,
+			"--mount="+filepath.Join(exec.namespace, "mnt"),
+			"--net="+filepath.Join(exec.namespace, "net"),
+			"--ipc="+filepath.Join(exec.namespace, "ipc"),
 			cmd,
-		}
-		command = NSBinary
+		)
 		cmdArgs = append(cmdArgs, args...)
+		command = NSBinary
 	}
 	return execute(command, cmdArgs, exec.cmdTimeout)
 }
