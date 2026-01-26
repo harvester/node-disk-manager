@@ -204,22 +204,22 @@ func (s *Scanner) deactivateBlockDevices(oldBds map[string]*diskv1.BlockDevice) 
 
 // reloadConfigMapFilters reloads filter and auto-provision configurations from ConfigMap
 // Falls back to environment variables if ConfigMap is not available or empty
-func (s *Scanner) loadConfigMapFilters(ctx context.Context) error {
-	vendorFilter, pathFilter, labelFilter, err := s.ConfigMapLoader.LoadFiltersFromConfigMap(ctx)
+func (s *Scanner) loadConfigMapFilters(ctx context.Context) {
+	deviceFilter, vendorFilter, pathFilter, labelFilter, err := s.ConfigMapLoader.LoadFiltersFromConfigMap(ctx)
 	if err != nil {
 		logrus.Warnf("Failed to reload filters from ConfigMap: %v, using environment variable fallback", err)
-		vendorFilter, pathFilter, labelFilter = s.ConfigMapLoader.GetEnvFilters()
-	} else if vendorFilter == "" && pathFilter == "" && labelFilter == "" {
+		deviceFilter, vendorFilter, pathFilter, labelFilter = s.ConfigMapLoader.GetEnvFilters()
+	} else if deviceFilter == "" && vendorFilter == "" && pathFilter == "" && labelFilter == "" {
 		// ConfigMap exists but is empty, use env var fallback
 		logrus.Info("ConfigMap filter data is empty, using environment variable fallback")
-		vendorFilter, pathFilter, labelFilter = s.ConfigMapLoader.GetEnvFilters()
+		deviceFilter, vendorFilter, pathFilter, labelFilter = s.ConfigMapLoader.GetEnvFilters()
 	} else {
 		// Use ConfigMap values (they take precedence)
 		logrus.Info("Using filter configuration from ConfigMap")
 	}
 
 	// Update filters
-	s.ExcludeFilters = filter.SetExcludeFilters(vendorFilter, pathFilter, labelFilter)
+	s.ExcludeFilters = filter.SetExcludeFilters(deviceFilter, vendorFilter, pathFilter, labelFilter)
 
 	autoProvisionFilter, err := s.ConfigMapLoader.LoadAutoProvisionFromConfigMap(ctx)
 	if err != nil {
@@ -236,7 +236,6 @@ func (s *Scanner) loadConfigMapFilters(ctx context.Context) error {
 
 	// Update auto-provision filters
 	s.AutoProvisionFilters = filter.SetAutoProvisionFilters(autoProvisionFilter)
-	return nil
 }
 
 func (s *Scanner) debugFilter() {
@@ -278,9 +277,7 @@ func (s *Scanner) scanBlockDevicesOnNode(ctx context.Context) error {
 	logrus.Debugf("Scan block devices of node: %s", s.NodeName)
 
 	// load filter and auto-provision configurations from ConfigMap
-	if err := s.loadConfigMapFilters(ctx); err != nil {
-		return err
-	}
+	s.loadConfigMapFilters(ctx)
 	s.debugFilter()
 
 	// list all the block devices

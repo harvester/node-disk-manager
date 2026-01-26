@@ -232,6 +232,7 @@ func TestMergeFilterConfigs(t *testing.T) {
 		name           string
 		nodeName       string
 		configs        []FilterConfig
+		expectedDevice string
 		expectedVendor string
 		expectedPath   string
 		expectedLabel  string
@@ -247,6 +248,7 @@ func TestMergeFilterConfigs(t *testing.T) {
 					ExcludeLabels:  []string{"COS_*"},
 				},
 			},
+			expectedDevice: "",
 			expectedVendor: "QEMU,VMware",
 			expectedPath:   "/mount/path",
 			expectedLabel:  "COS_*",
@@ -261,6 +263,7 @@ func TestMergeFilterConfigs(t *testing.T) {
 					ExcludePaths:   []string{"/mount/global"},
 				},
 			},
+			expectedDevice: "",
 			expectedVendor: "QEMU",
 			expectedPath:   "/mount/global",
 			expectedLabel:  "",
@@ -275,6 +278,7 @@ func TestMergeFilterConfigs(t *testing.T) {
 					ExcludePaths:   []string{"/mount/default"},
 				},
 			},
+			expectedDevice: "",
 			expectedVendor: "VMware",
 			expectedPath:   "/mount/default",
 			expectedLabel:  "",
@@ -294,6 +298,7 @@ func TestMergeFilterConfigs(t *testing.T) {
 					ExcludePaths:   []string{"/mount/node1"},
 				},
 			},
+			expectedDevice: "",
 			expectedVendor: "QEMU,VMware",
 			expectedPath:   "/mount/global,/mount/node1",
 			expectedLabel:  "",
@@ -311,6 +316,7 @@ func TestMergeFilterConfigs(t *testing.T) {
 					ExcludeVendors: []string{"VMware"},
 				},
 			},
+			expectedDevice: "",
 			expectedVendor: "QEMU",
 			expectedPath:   "",
 			expectedLabel:  "",
@@ -319,6 +325,88 @@ func TestMergeFilterConfigs(t *testing.T) {
 			name:           "empty configs",
 			nodeName:       "node-1",
 			configs:        []FilterConfig{},
+			expectedDevice: "",
+			expectedVendor: "",
+			expectedPath:   "",
+			expectedLabel:  "",
+		},
+		{
+			name:     "excludeDevices global config",
+			nodeName: "node-1",
+			configs: []FilterConfig{
+				{
+					Hostname:       "*",
+					ExcludeDevices: []string{"/dev/sda", "/dev/sdb"},
+				},
+			},
+			expectedDevice: "/dev/sda,/dev/sdb",
+			expectedVendor: "",
+			expectedPath:   "",
+			expectedLabel:  "",
+		},
+		{
+			name:     "excludeDevices node-specific overrides global",
+			nodeName: "node-1",
+			configs: []FilterConfig{
+				{
+					Hostname:       "*",
+					ExcludeDevices: []string{"/dev/sda"},
+				},
+				{
+					Hostname:       "node-1",
+					ExcludeDevices: []string{"/dev/nvme0n1"},
+				},
+			},
+			expectedDevice: "/dev/sda,/dev/nvme0n1",
+			expectedVendor: "",
+			expectedPath:   "",
+			expectedLabel:  "",
+		},
+		{
+			name:     "excludeDevices with wildcards",
+			nodeName: "node-1",
+			configs: []FilterConfig{
+				{
+					Hostname:       "*",
+					ExcludeDevices: []string{"/dev/sd*", "/dev/nvme*"},
+				},
+			},
+			expectedDevice: "/dev/sd*,/dev/nvme*",
+			expectedVendor: "",
+			expectedPath:   "",
+			expectedLabel:  "",
+		},
+		{
+			name:     "excludeDevices mixed with other filters",
+			nodeName: "node-1",
+			configs: []FilterConfig{
+				{
+					Hostname:       "*",
+					ExcludeDevices: []string{"/dev/sda"},
+					ExcludeVendors: []string{"QEMU"},
+					ExcludePaths:   []string{"/mount/path"},
+					ExcludeLabels:  []string{"COS_*"},
+				},
+			},
+			expectedDevice: "/dev/sda",
+			expectedVendor: "QEMU",
+			expectedPath:   "/mount/path",
+			expectedLabel:  "COS_*",
+		},
+		{
+			name:     "excludeDevices different node, only global applies",
+			nodeName: "node-2",
+			configs: []FilterConfig{
+				{
+					Hostname:       "*",
+					ExcludeDevices: []string{"/dev/sda"},
+				},
+				{
+					Hostname:       "node-1",
+					ExcludeDevices: []string{"/dev/sdb"},
+				},
+			},
+			expectedDevice: "/dev/sda",
 			expectedVendor: "",
 			expectedPath:   "",
 			expectedLabel:  "",
@@ -328,8 +416,9 @@ func TestMergeFilterConfigs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			loader := &ConfigMapLoader{nodeName: tt.nodeName}
-			vendor, path, label := loader.mergeFilterConfigs(tt.configs)
+			device, vendor, path, label := loader.mergeFilterConfigs(tt.configs)
 
+			assert.Equal(t, tt.expectedDevice, device)
 			assert.Equal(t, tt.expectedVendor, vendor)
 			assert.Equal(t, tt.expectedPath, path)
 			assert.Equal(t, tt.expectedLabel, label)
@@ -468,6 +557,7 @@ func TestLoadFiltersFromConfigMap(t *testing.T) {
 		configMapData  map[string]string
 		nodeName       string
 		expectError    bool
+		expectedDevice string
 		expectedVendor string
 		expectedPath   string
 		expectedLabel  string
@@ -482,6 +572,7 @@ func TestLoadFiltersFromConfigMap(t *testing.T) {
 			},
 			nodeName:       "node-1",
 			expectError:    false,
+			expectedDevice: "",
 			expectedVendor: "QEMU",
 			expectedPath:   "/mount/path",
 			expectedLabel:  "COS_*",
@@ -496,6 +587,7 @@ func TestLoadFiltersFromConfigMap(t *testing.T) {
 			},
 			nodeName:       "node-1",
 			expectError:    false,
+			expectedDevice: "",
 			expectedVendor: "QEMU,VMware",
 			expectedPath:   "",
 			expectedLabel:  "",
@@ -505,6 +597,7 @@ func TestLoadFiltersFromConfigMap(t *testing.T) {
 			configMapData:  map[string]string{},
 			nodeName:       "node-1",
 			expectError:    false,
+			expectedDevice: "",
 			expectedVendor: "",
 			expectedPath:   "",
 			expectedLabel:  "",
@@ -516,9 +609,67 @@ func TestLoadFiltersFromConfigMap(t *testing.T) {
 			},
 			nodeName:       "node-1",
 			expectError:    false, // Should not error, just fallback
+			expectedDevice: "",
 			expectedVendor: "",
 			expectedPath:   "",
 			expectedLabel:  "",
+		},
+		{
+			name: "excludeDevices global config",
+			configMapData: map[string]string{
+				FiltersConfigKey: `- hostname: "*"
+  excludeDevices: ["/dev/sda", "/dev/sdb"]`,
+			},
+			nodeName:       "node-1",
+			expectError:    false,
+			expectedDevice: "/dev/sda,/dev/sdb",
+			expectedVendor: "",
+			expectedPath:   "",
+			expectedLabel:  "",
+		},
+		{
+			name: "excludeDevices node-specific config",
+			configMapData: map[string]string{
+				FiltersConfigKey: `- hostname: "*"
+  excludeDevices: ["/dev/sda"]
+- hostname: "node-1"
+  excludeDevices: ["/dev/nvme0n1"]`,
+			},
+			nodeName:       "node-1",
+			expectError:    false,
+			expectedDevice: "/dev/sda,/dev/nvme0n1",
+			expectedVendor: "",
+			expectedPath:   "",
+			expectedLabel:  "",
+		},
+		{
+			name: "excludeDevices with wildcards",
+			configMapData: map[string]string{
+				FiltersConfigKey: `- hostname: "*"
+  excludeDevices: ["/dev/sd*", "/dev/nvme*"]`,
+			},
+			nodeName:       "node-1",
+			expectError:    false,
+			expectedDevice: "/dev/sd*,/dev/nvme*",
+			expectedVendor: "",
+			expectedPath:   "",
+			expectedLabel:  "",
+		},
+		{
+			name: "excludeDevices mixed with all filters",
+			configMapData: map[string]string{
+				FiltersConfigKey: `- hostname: "*"
+  excludeDevices: ["/dev/sda"]
+  excludeVendors: ["QEMU"]
+  excludePaths: ["/mount/path"]
+  excludeLabels: ["COS_*"]`,
+			},
+			nodeName:       "node-1",
+			expectError:    false,
+			expectedDevice: "/dev/sda",
+			expectedVendor: "QEMU",
+			expectedPath:   "/mount/path",
+			expectedLabel:  "COS_*",
 		},
 	}
 
@@ -540,12 +691,13 @@ func TestLoadFiltersFromConfigMap(t *testing.T) {
 			}
 
 			loader := NewConfigMapLoader(fakecleint.FakeConfigMapClient(fakeClientset.CoreV1().ConfigMaps), DefaultConfigMapNamespace, tt.nodeName, "", "", "", "")
-			vendor, path, label, err := loader.LoadFiltersFromConfigMap(context.Background())
+			device, vendor, path, label, err := loader.LoadFiltersFromConfigMap(context.Background())
 
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedDevice, device)
 				assert.Equal(t, tt.expectedVendor, vendor)
 				assert.Equal(t, tt.expectedPath, path)
 				assert.Equal(t, tt.expectedLabel, label)
