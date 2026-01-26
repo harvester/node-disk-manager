@@ -63,8 +63,9 @@ func NewConfigMapLoader(configMapClient k8scorev1.ConfigMapClient, namespace, no
 }
 
 // GetEnvFilters returns the fallback environment variable values for filters
-func (c *ConfigMapLoader) GetEnvFilters() (vendorFilter, pathFilter, labelFilter string) {
-	return c.envVendorFilter, c.envPathFilter, c.envLabelFilter
+// deviceFilter is always empty as it's a new feature only available via ConfigMap
+func (c *ConfigMapLoader) GetEnvFilters() (deviceFilter, vendorFilter, pathFilter, labelFilter string) {
+	return "", c.envVendorFilter, c.envPathFilter, c.envLabelFilter
 }
 
 // GetEnvAutoProvisionFilter returns the fallback environment variable value for auto-provision filter
@@ -74,40 +75,41 @@ func (c *ConfigMapLoader) GetEnvAutoProvisionFilter() string {
 
 // LoadFiltersFromConfigMap loads filter configurations from ConfigMap
 // Returns the merged filter strings for the current node, or empty strings if ConfigMap doesn't exist
-func (c *ConfigMapLoader) LoadFiltersFromConfigMap(ctx context.Context) (vendorFilter, pathFilter, labelFilter string, err error) {
+func (c *ConfigMapLoader) LoadFiltersFromConfigMap(ctx context.Context) (deviceFilter, vendorFilter, pathFilter, labelFilter string, err error) {
 	logrus.Debug("Attempting to load filter configuration from ConfigMap")
 
 	configMap, err := c.configMapClient.Get(c.namespace, DefaultConfigMapName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			logrus.Infof("ConfigMap %s/%s not found, will fallback to environment variables", c.namespace, DefaultConfigMapName)
-			return "", "", "", nil
+			return "", "", "", "", nil
 		}
-		return "", "", "", fmt.Errorf("failed to get ConfigMap: %w", err)
+		return "", "", "", "", fmt.Errorf("failed to get ConfigMap: %w", err)
 	}
 
 	// Parse filters.yaml
 	filtersYAML, exists := configMap.Data[FiltersConfigKey]
 	if !exists {
 		logrus.Warnf("ConfigMap %s/%s exists but missing %s key, will fallback to environment variables", c.namespace, DefaultConfigMapName, FiltersConfigKey)
-		return "", "", "", nil
+		return "", "", "", "", nil
 	}
 
 	filterConfigs, err := c.parseFilterConfigs(filtersYAML)
 	if err != nil {
 		logrus.Errorf("Failed to parse %s from ConfigMap: %v, will fallback to environment variables", FiltersConfigKey, err)
-		return "", "", "", nil
+		return "", "", "", "", nil
 	}
 
 	// Merge configurations: global ("*") + node-specific
-	vendorFilter, pathFilter, labelFilter = c.mergeFilterConfigs(filterConfigs)
+	deviceFilter, vendorFilter, pathFilter, labelFilter = c.mergeFilterConfigs(filterConfigs)
 
 	logrus.Infof("Successfully loaded filter configuration from ConfigMap for node %s", c.nodeName)
+	logrus.Debugf("  - ExcludeDevices: %s", deviceFilter)
 	logrus.Debugf("  - ExcludeVendors: %s", vendorFilter)
 	logrus.Debugf("  - ExcludePaths: %s", pathFilter)
 	logrus.Debugf("  - ExcludeLabels: %s", labelFilter)
 
-	return vendorFilter, pathFilter, labelFilter, nil
+	return deviceFilter, vendorFilter, pathFilter, labelFilter, nil
 }
 
 // LoadAutoProvisionFromConfigMap loads auto-provision configurations from ConfigMap
@@ -176,12 +178,13 @@ func (c *ConfigMapLoader) parseAutoProvisionConfigs(yamlContent string) ([]AutoP
 
 // mergeFilterConfigs merges global and node-specific filter configurations
 // Priority: node-specific > global
-func (c *ConfigMapLoader) mergeFilterConfigs(configs []FilterConfig) (vendorFilter, pathFilter, labelFilter string) {
-	var vendors, paths, labels []string
+func (c *ConfigMapLoader) mergeFilterConfigs(configs []FilterConfig) (deviceFilter, vendorFilter, pathFilter, labelFilter string) {
+	var devices, vendors, paths, labels []string
 
 	// First, collect global rules (hostname: "*" or empty)
 	for _, config := range configs {
 		if c.matchesHostname(config.Hostname, c.nodeName) && (config.Hostname == "*" || config.Hostname == "") {
+			devices = append(devices, config.ExcludeDevices...)
 			vendors = append(vendors, config.ExcludeVendors...)
 			paths = append(paths, config.ExcludePaths...)
 			labels = append(labels, config.ExcludeLabels...)
@@ -191,13 +194,14 @@ func (c *ConfigMapLoader) mergeFilterConfigs(configs []FilterConfig) (vendorFilt
 	// Then, collect node-specific rules (higher priority)
 	for _, config := range configs {
 		if c.matchesHostname(config.Hostname, c.nodeName) && config.Hostname != "*" && config.Hostname != "" {
+			devices = append(devices, config.ExcludeDevices...)
 			vendors = append(vendors, config.ExcludeVendors...)
 			paths = append(paths, config.ExcludePaths...)
 			labels = append(labels, config.ExcludeLabels...)
 		}
 	}
 
-	return strings.Join(vendors, ","), strings.Join(paths, ","), strings.Join(labels, ",")
+	return strings.Join(devices, ","), strings.Join(vendors, ","), strings.Join(paths, ","), strings.Join(labels, ",")
 }
 
 // mergeAutoProvisionConfigs merges global and node-specific auto-provision configurations
