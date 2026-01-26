@@ -698,11 +698,12 @@ func TestLoadFiltersWithFallback(t *testing.T) {
 
 			fakeClient := fakecleint.FakeConfigMapClient(fakeClientset.CoreV1().ConfigMaps)
 
+			// Create ConfigMapLoader
+			loader := NewConfigMapLoader(fakeClient, DefaultConfigMapNamespace, tt.nodeName)
+
 			vendor, path, label := LoadFiltersWithFallback(
 				context.Background(),
-				fakeClient,
-				DefaultConfigMapNamespace,
-				tt.nodeName,
+				loader,
 				tt.envVendor,
 				tt.envPath,
 				tt.envLabel,
@@ -773,11 +774,12 @@ func TestLoadAutoProvisionWithFallback(t *testing.T) {
 
 			fakeClient := fakecleint.FakeConfigMapClient(fakeClientset.CoreV1().ConfigMaps)
 
+			// Create ConfigMapLoader
+			loader := NewConfigMapLoader(fakeClient, DefaultConfigMapNamespace, tt.nodeName)
+
 			devices := LoadAutoProvisionWithFallback(
 				context.Background(),
-				fakeClient,
-				DefaultConfigMapNamespace,
-				tt.nodeName,
+				loader,
 				tt.envAutoProv,
 			)
 

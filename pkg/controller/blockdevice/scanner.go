@@ -1,6 +1,7 @@
 package blockdevice
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"reflect"
@@ -30,6 +31,7 @@ type Scanner struct {
 	BlockInfo            block.Info
 	ExcludeFilters       []*filter.Filter
 	AutoProvisionFilters []*filter.Filter
+	ConfigMapLoader      *filter.ConfigMapLoader
 	Cond                 *sync.Cond
 	Shutdown             bool
 	TerminatedChannels   *chan bool
@@ -46,6 +48,7 @@ func NewScanner(
 	bds ctldiskv1.BlockDeviceController,
 	block block.Info,
 	excludeFilters, autoProvisionFilters []*filter.Filter,
+	configMapLoader *filter.ConfigMapLoader,
 	cond *sync.Cond,
 	shutdown bool,
 	ch *chan bool,
@@ -58,14 +61,15 @@ func NewScanner(
 		BlockInfo:            block,
 		ExcludeFilters:       excludeFilters,
 		AutoProvisionFilters: autoProvisionFilters,
+		ConfigMapLoader:      configMapLoader,
 		Cond:                 cond,
 		Shutdown:             shutdown,
 		TerminatedChannels:   ch,
 	}
 }
 
-func (s *Scanner) Start() error {
-	if err := s.scanBlockDevicesOnNode(); err != nil {
+func (s *Scanner) Start(ctx context.Context) error {
+	if err := s.scanBlockDevicesOnNode(ctx); err != nil {
 		return err
 	}
 	go func() {
@@ -83,7 +87,7 @@ func (s *Scanner) Start() error {
 			}
 
 			logrus.Infof("scanner waked up, do scan...")
-			if err := s.scanBlockDevicesOnNode(); err != nil {
+			if err := s.scanBlockDevicesOnNode(ctx); err != nil {
 				logrus.Errorf("Failed to rescan block devices on node %s: %v", s.NodeName, err)
 			}
 			s.Cond.L.Unlock()
@@ -200,9 +204,33 @@ func (s *Scanner) deactivateBlockDevices(oldBds map[string]*diskv1.BlockDevice) 
 	return nil
 }
 
+// reloadConfigMapFilters reloads filter and auto-provision configurations from ConfigMap
+func (s *Scanner) reloadConfigMapFilters(ctx context.Context) {
+	vendorFilter, pathFilter, labelFilter, err := s.ConfigMapLoader.LoadFiltersFromConfigMap(ctx)
+	if err != nil {
+		logrus.Warnf("Failed to reload filters from ConfigMap: %v", err)
+	} else if vendorFilter != "" || pathFilter != "" || labelFilter != "" {
+		// Update filters if ConfigMap has data
+		logrus.Info("Reloading exclude filters from ConfigMap")
+		s.ExcludeFilters = filter.SetExcludeFilters(vendorFilter, pathFilter, labelFilter)
+	}
+
+	autoProvisionFilter, err := s.ConfigMapLoader.LoadAutoProvisionFromConfigMap(ctx)
+	if err != nil {
+		logrus.Warnf("Failed to reload auto-provision from ConfigMap: %v", err)
+	} else if autoProvisionFilter != "" {
+		// Update auto-provision filters if ConfigMap has data
+		logrus.Info("Reloading auto-provision filters from ConfigMap")
+		s.AutoProvisionFilters = filter.SetAutoProvisionFilters(autoProvisionFilter)
+	}
+}
+
 // scanBlockDevicesOnNode scans block devices on the node, and it will either create or update them.
-func (s *Scanner) scanBlockDevicesOnNode() error {
+func (s *Scanner) scanBlockDevicesOnNode(ctx context.Context) error {
 	logrus.Debugf("Scan block devices of node: %s", s.NodeName)
+
+	// Reload filter and auto-provision configurations from ConfigMap
+	s.reloadConfigMapFilters(ctx)
 
 	// list all the block devices
 	allDevices := s.collectAllDevices()
