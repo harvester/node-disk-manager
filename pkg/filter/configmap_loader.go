@@ -3,7 +3,7 @@ package filter
 import (
 	"context"
 	"fmt"
-	"os"
+	"path/filepath"
 	"strings"
 
 	k8scorev1 "github.com/rancher/wrangler/v3/pkg/generated/controllers/core/v1"
@@ -227,28 +227,18 @@ func (c *ConfigMapLoader) mergeAutoProvisionConfigs(configs []AutoProvisionConfi
 }
 
 // matchesHostname checks if the hostname pattern matches the node name
-// Supports wildcard "*", empty string (both treated as global), and exact match
+// Supports wildcard "*", empty string (both treated as global), glob patterns, and exact match
 func (c *ConfigMapLoader) matchesHostname(pattern, nodeName string) bool {
 	if pattern == "*" || pattern == "" {
 		return true
 	}
-	// TODO: Add glob pattern matching support in future phases
-	// For now, only support exact match, "*", and empty string
-	return pattern == nodeName
-}
 
-// Helper function for testing - allows reading ConfigMap name from env
-func getConfigMapName() string {
-	if name := os.Getenv("NDM_CONFIGMAP_NAME"); name != "" {
-		return name
+	matched, err := filepath.Match(pattern, nodeName)
+	if err != nil {
+		logrus.Warnf("Invalid hostname pattern '%s': %v, falling back to exact match", pattern, err)
+		// Fall back to exact match if pattern is invalid
+		return pattern == nodeName
 	}
-	return DefaultConfigMapName
-}
 
-// Helper function for testing - allows reading ConfigMap namespace from env
-func getConfigMapNamespace() string {
-	if ns := os.Getenv("NDM_CONFIGMAP_NAMESPACE"); ns != "" {
-		return ns
-	}
-	return DefaultConfigMapNamespace
+	return matched
 }

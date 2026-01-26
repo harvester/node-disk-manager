@@ -411,6 +411,57 @@ func TestMergeFilterConfigs(t *testing.T) {
 			expectedPath:   "",
 			expectedLabel:  "",
 		},
+		{
+			name:     "glob pattern prefix match",
+			nodeName: "harvester-node-1",
+			configs: []FilterConfig{
+				{
+					Hostname:       "harvester*",
+					ExcludeDevices: []string{"/dev/sda"},
+					ExcludeVendors: []string{"QEMU"},
+				},
+			},
+			expectedDevice: "/dev/sda",
+			expectedVendor: "QEMU",
+			expectedPath:   "",
+			expectedLabel:  "",
+		},
+		{
+			name:     "glob pattern no match, only global applies",
+			nodeName: "worker-node-1",
+			configs: []FilterConfig{
+				{
+					Hostname:       "*",
+					ExcludeVendors: []string{"VMware"},
+				},
+				{
+					Hostname:       "harvester*",
+					ExcludeDevices: []string{"/dev/sda"},
+				},
+			},
+			expectedDevice: "",
+			expectedVendor: "VMware",
+			expectedPath:   "",
+			expectedLabel:  "",
+		},
+		{
+			name:     "glob pattern with global and specific",
+			nodeName: "node-gpu-1",
+			configs: []FilterConfig{
+				{
+					Hostname:       "*",
+					ExcludeVendors: []string{"QEMU"},
+				},
+				{
+					Hostname:       "*-gpu-*",
+					ExcludeDevices: []string{"/dev/nvme0n1"},
+				},
+			},
+			expectedDevice: "/dev/nvme0n1",
+			expectedVendor: "QEMU",
+			expectedPath:   "",
+			expectedLabel:  "",
+		},
 	}
 
 	for _, tt := range tests {
@@ -537,6 +588,54 @@ func TestMatchesHostname(t *testing.T) {
 			name:     "no match",
 			pattern:  "node-1",
 			nodeName: "node-2",
+			expected: false,
+		},
+		{
+			name:     "glob pattern prefix match",
+			pattern:  "harvester*",
+			nodeName: "harvester-node-1",
+			expected: true,
+		},
+		{
+			name:     "glob pattern prefix no match",
+			pattern:  "harvester*",
+			nodeName: "worker-node-1",
+			expected: false,
+		},
+		{
+			name:     "glob pattern suffix match",
+			pattern:  "*-gpu",
+			nodeName: "node-gpu",
+			expected: true,
+		},
+		{
+			name:     "glob pattern contains match",
+			pattern:  "*-gpu-*",
+			nodeName: "node-gpu-1",
+			expected: true,
+		},
+		{
+			name:     "glob pattern character class match",
+			pattern:  "node-[1-3]",
+			nodeName: "node-2",
+			expected: true,
+		},
+		{
+			name:     "glob pattern character class no match",
+			pattern:  "node-[1-3]",
+			nodeName: "node-5",
+			expected: false,
+		},
+		{
+			name:     "glob pattern question mark match",
+			pattern:  "node-?",
+			nodeName: "node-1",
+			expected: true,
+		},
+		{
+			name:     "glob pattern question mark no match",
+			pattern:  "node-?",
+			nodeName: "node-10",
 			expected: false,
 		},
 	}
@@ -670,6 +769,48 @@ func TestLoadFiltersFromConfigMap(t *testing.T) {
 			expectedVendor: "QEMU",
 			expectedPath:   "/mount/path",
 			expectedLabel:  "COS_*",
+		},
+		{
+			name: "glob pattern prefix match",
+			configMapData: map[string]string{
+				FiltersConfigKey: `- hostname: "harvester*"
+  excludeDevices: ["/dev/sda"]
+  excludeVendors: ["QEMU"]`,
+			},
+			nodeName:       "harvester-node-1",
+			expectError:    false,
+			expectedDevice: "/dev/sda",
+			expectedVendor: "QEMU",
+			expectedPath:   "",
+			expectedLabel:  "",
+		},
+		{
+			name: "glob pattern no match",
+			configMapData: map[string]string{
+				FiltersConfigKey: `- hostname: "harvester*"
+  excludeDevices: ["/dev/sda"]`,
+			},
+			nodeName:       "worker-node-1",
+			expectError:    false,
+			expectedDevice: "",
+			expectedVendor: "",
+			expectedPath:   "",
+			expectedLabel:  "",
+		},
+		{
+			name: "glob pattern with global fallback",
+			configMapData: map[string]string{
+				FiltersConfigKey: `- hostname: "*"
+  excludeVendors: ["VMware"]
+- hostname: "*-gpu-*"
+  excludeDevices: ["/dev/nvme0n1"]`,
+			},
+			nodeName:       "node-gpu-1",
+			expectError:    false,
+			expectedDevice: "/dev/nvme0n1",
+			expectedVendor: "VMware",
+			expectedPath:   "",
+			expectedLabel:  "",
 		},
 	}
 
