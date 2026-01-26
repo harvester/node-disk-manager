@@ -224,36 +224,18 @@ func run(opt *option.Option) error {
 	configmap := corev1.Core().V1().ConfigMap()
 
 	// Create ConfigMapLoader for dynamic configuration reloading
-	configMapLoader := filter.NewConfigMapLoader(configmap, filter.DefaultConfigMapNamespace, opt.NodeName)
-
-	// Load filter configurations with ConfigMap support and env var fallback
-	vendorFilter, pathFilter, labelFilter := filter.LoadFiltersWithFallback(
-		ctx,
-		configMapLoader,
+	// The env variables are used as fallback when ConfigMap is not available or empty
+	configMapLoader := filter.NewConfigMapLoader(
+		configmap,
+		filter.DefaultConfigMapNamespace,
+		opt.NodeName,
 		opt.VendorFilter,
 		opt.PathFilter,
 		opt.LabelFilter,
-	)
-
-	// Debug: Log loaded filter values (after ConfigMap fallback)
-	logrus.Debugf("Loaded filter values (after ConfigMap/env fallback):")
-	logrus.Debugf("  - VendorFilter (loaded): %q", vendorFilter)
-	logrus.Debugf("  - PathFilter (loaded): %q", pathFilter)
-	logrus.Debugf("  - LabelFilter (loaded): %q", labelFilter)
-
-	// Load auto-provision configurations with ConfigMap support and env var fallback
-	autoProvisionFilter := filter.LoadAutoProvisionWithFallback(
-		ctx,
-		configMapLoader,
 		opt.AutoProvisionFilter,
 	)
 
-	// Debug: Log loaded auto-provision value
-	logrus.Debugf("  - AutoProvisionFilter (loaded): %q", autoProvisionFilter)
-
 	terminatedChannel := make(chan bool, 1)
-	excludeFilters := filter.SetExcludeFilters(vendorFilter, pathFilter, labelFilter)
-	autoProvisionFilters := filter.SetAutoProvisionFilters(autoProvisionFilter)
 
 	locker := &sync.Mutex{}
 	cond := sync.NewCond(locker)
@@ -267,8 +249,6 @@ func run(opt *option.Option) error {
 		upgrades,
 		bds,
 		block,
-		excludeFilters,
-		autoProvisionFilters,
 		configMapLoader,
 		cond,
 		false,

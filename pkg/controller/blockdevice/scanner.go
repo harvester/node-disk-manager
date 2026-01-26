@@ -47,24 +47,21 @@ func NewScanner(
 	upgrades ctlharvesterv1.UpgradeController,
 	bds ctldiskv1.BlockDeviceController,
 	block block.Info,
-	excludeFilters, autoProvisionFilters []*filter.Filter,
 	configMapLoader *filter.ConfigMapLoader,
 	cond *sync.Cond,
 	shutdown bool,
 	ch *chan bool,
 ) *Scanner {
 	return &Scanner{
-		NodeName:             nodeName,
-		Namespace:            namespace,
-		Blockdevices:         bds,
-		UpgradeClient:        upgrades,
-		BlockInfo:            block,
-		ExcludeFilters:       excludeFilters,
-		AutoProvisionFilters: autoProvisionFilters,
-		ConfigMapLoader:      configMapLoader,
-		Cond:                 cond,
-		Shutdown:             shutdown,
-		TerminatedChannels:   ch,
+		NodeName:           nodeName,
+		Namespace:          namespace,
+		Blockdevices:       bds,
+		UpgradeClient:      upgrades,
+		BlockInfo:          block,
+		ConfigMapLoader:    configMapLoader,
+		Cond:               cond,
+		Shutdown:           shutdown,
+		TerminatedChannels: ch,
 	}
 }
 
@@ -72,6 +69,7 @@ func (s *Scanner) Start(ctx context.Context) error {
 	if err := s.scanBlockDevicesOnNode(ctx); err != nil {
 		return err
 	}
+
 	go func() {
 		for {
 			s.Cond.L.Lock()
@@ -205,24 +203,40 @@ func (s *Scanner) deactivateBlockDevices(oldBds map[string]*diskv1.BlockDevice) 
 }
 
 // reloadConfigMapFilters reloads filter and auto-provision configurations from ConfigMap
-func (s *Scanner) reloadConfigMapFilters(ctx context.Context) {
+// Falls back to environment variables if ConfigMap is not available or empty
+func (s *Scanner) loadConfigMapFilters(ctx context.Context) error {
 	vendorFilter, pathFilter, labelFilter, err := s.ConfigMapLoader.LoadFiltersFromConfigMap(ctx)
 	if err != nil {
-		logrus.Warnf("Failed to reload filters from ConfigMap: %v", err)
-	} else if vendorFilter != "" || pathFilter != "" || labelFilter != "" {
-		// Update filters if ConfigMap has data
-		logrus.Info("Reloading exclude filters from ConfigMap")
-		s.ExcludeFilters = filter.SetExcludeFilters(vendorFilter, pathFilter, labelFilter)
+		logrus.Warnf("Failed to reload filters from ConfigMap: %v, using environment variable fallback", err)
+		vendorFilter, pathFilter, labelFilter = s.ConfigMapLoader.GetEnvFilters()
+	} else if vendorFilter == "" && pathFilter == "" && labelFilter == "" {
+		// ConfigMap exists but is empty, use env var fallback
+		logrus.Info("ConfigMap filter data is empty, using environment variable fallback")
+		vendorFilter, pathFilter, labelFilter = s.ConfigMapLoader.GetEnvFilters()
+	} else {
+		// Use ConfigMap values (they take precedence)
+		logrus.Info("Using filter configuration from ConfigMap")
 	}
+
+	// Update filters
+	s.ExcludeFilters = filter.SetExcludeFilters(vendorFilter, pathFilter, labelFilter)
 
 	autoProvisionFilter, err := s.ConfigMapLoader.LoadAutoProvisionFromConfigMap(ctx)
 	if err != nil {
-		logrus.Warnf("Failed to reload auto-provision from ConfigMap: %v", err)
-	} else if autoProvisionFilter != "" {
-		// Update auto-provision filters if ConfigMap has data
-		logrus.Info("Reloading auto-provision filters from ConfigMap")
-		s.AutoProvisionFilters = filter.SetAutoProvisionFilters(autoProvisionFilter)
+		logrus.Warnf("Failed to reload auto-provision from ConfigMap: %v, using environment variable fallback", err)
+		autoProvisionFilter = s.ConfigMapLoader.GetEnvAutoProvisionFilter()
+	} else if autoProvisionFilter == "" {
+		// ConfigMap exists but is empty, use env var fallback
+		logrus.Debug("ConfigMap auto-provision data is empty, using environment variable fallback")
+		autoProvisionFilter = s.ConfigMapLoader.GetEnvAutoProvisionFilter()
+	} else {
+		// Use ConfigMap values (they take precedence)
+		logrus.Info("Using auto-provision configuration from ConfigMap")
 	}
+
+	// Update auto-provision filters
+	s.AutoProvisionFilters = filter.SetAutoProvisionFilters(autoProvisionFilter)
+	return nil
 }
 
 func (s *Scanner) debugFilter() {
@@ -263,8 +277,10 @@ func (s *Scanner) debugFilter() {
 func (s *Scanner) scanBlockDevicesOnNode(ctx context.Context) error {
 	logrus.Debugf("Scan block devices of node: %s", s.NodeName)
 
-	// Reload filter and auto-provision configurations from ConfigMap
-	s.reloadConfigMapFilters(ctx)
+	// load filter and auto-provision configurations from ConfigMap
+	if err := s.loadConfigMapFilters(ctx); err != nil {
+		return err
+	}
 	s.debugFilter()
 
 	// list all the block devices
