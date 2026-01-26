@@ -235,6 +235,12 @@ func run(opt *option.Option) error {
 		opt.LabelFilter,
 	)
 
+	// Debug: Log loaded filter values (after ConfigMap fallback)
+	logrus.Debugf("Loaded filter values (after ConfigMap/env fallback):")
+	logrus.Debugf("  - VendorFilter (loaded): %q", vendorFilter)
+	logrus.Debugf("  - PathFilter (loaded): %q", pathFilter)
+	logrus.Debugf("  - LabelFilter (loaded): %q", labelFilter)
+
 	// Load auto-provision configurations with ConfigMap support and env var fallback
 	autoProvisionFilter := filter.LoadAutoProvisionWithFallback(
 		ctx,
@@ -242,9 +248,13 @@ func run(opt *option.Option) error {
 		opt.AutoProvisionFilter,
 	)
 
+	// Debug: Log loaded auto-provision value
+	logrus.Debugf("  - AutoProvisionFilter (loaded): %q", autoProvisionFilter)
+
 	terminatedChannel := make(chan bool, 1)
 	excludeFilters := filter.SetExcludeFilters(vendorFilter, pathFilter, labelFilter)
 	autoProvisionFilters := filter.SetAutoProvisionFilters(autoProvisionFilter)
+
 	locker := &sync.Mutex{}
 	cond := sync.NewCond(locker)
 	upgrades := harvesters.Harvesterhci().V1beta1().Upgrade()

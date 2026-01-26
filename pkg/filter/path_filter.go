@@ -1,6 +1,8 @@
 package filter
 
 import (
+	"strings"
+
 	"github.com/harvester/node-disk-manager/pkg/block"
 	"github.com/harvester/node-disk-manager/pkg/utils"
 )
@@ -50,4 +52,20 @@ func (f *diskPathFilter) Match(disk *block.Disk) bool {
 		return false
 	}
 	return utils.MatchesIgnoredCase(f.mountPaths, disk.FileSystemInfo.MountPoint)
+}
+
+// Details returns the list of excluded mount paths
+func (f *partPathFilter) Details() string {
+	if len(f.mountPaths) == 0 {
+		return "none"
+	}
+	return "mount paths: [" + strings.Join(f.mountPaths, ", ") + "]"
+}
+
+// Details returns the list of excluded mount paths
+func (f *diskPathFilter) Details() string {
+	if len(f.mountPaths) == 0 {
+		return "none"
+	}
+	return "mount paths: [" + strings.Join(f.mountPaths, ", ") + "]"
 }
