@@ -225,12 +225,47 @@ func (s *Scanner) reloadConfigMapFilters(ctx context.Context) {
 	}
 }
 
+func (s *Scanner) debugFilter() {
+	// Debug: Log final filter details including defaults
+	logrus.Debugf("Final filter configuration (including defaults):")
+	logrus.Debugf("  Exclude Filters (%d total):", len(s.ExcludeFilters))
+	for i, f := range s.ExcludeFilters {
+		diskDetails := "N/A"
+		partDetails := "N/A"
+		if f.DiskFilter != nil {
+			diskDetails = f.DiskFilter.Details()
+		}
+		if f.PartFilter != nil {
+			partDetails = f.PartFilter.Details()
+		}
+		logrus.Debugf("    [%d] %s", i, f.Name)
+		logrus.Debugf("        Disk: %s", diskDetails)
+		logrus.Debugf("        Part: %s", partDetails)
+	}
+
+	logrus.Debugf("  Auto-Provision Filters (%d total):", len(s.AutoProvisionFilters))
+	for i, f := range s.AutoProvisionFilters {
+		diskDetails := "N/A"
+		partDetails := "N/A"
+		if f.DiskFilter != nil {
+			diskDetails = f.DiskFilter.Details()
+		}
+		if f.PartFilter != nil {
+			partDetails = f.PartFilter.Details()
+		}
+		logrus.Debugf("    [%d] %s", i, f.Name)
+		logrus.Debugf("        Disk: %s", diskDetails)
+		logrus.Debugf("        Part: %s", partDetails)
+	}
+}
+
 // scanBlockDevicesOnNode scans block devices on the node, and it will either create or update them.
 func (s *Scanner) scanBlockDevicesOnNode(ctx context.Context) error {
 	logrus.Debugf("Scan block devices of node: %s", s.NodeName)
 
 	// Reload filter and auto-provision configurations from ConfigMap
 	s.reloadConfigMapFilters(ctx)
+	s.debugFilter()
 
 	// list all the block devices
 	allDevices := s.collectAllDevices()

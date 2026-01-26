@@ -46,11 +46,15 @@ func SetExcludeFilters(vendorString, pathString, labelString string) []*Filter {
 type DiskFilter interface {
 	// Match returns true if passing disk matches with the value
 	Match(disk *block.Disk) bool
+	// Details returns a human-readable string describing the filter criteria
+	Details() string
 }
 
 type PartFilter interface {
 	// Match returns true if passing partition matches with the value
 	Match(part *block.Partition) bool
+	// Details returns a human-readable string describing the filter criteria
+	Details() string
 }
 
 func (f *Filter) ApplyDiskFilter(disk *block.Disk) bool {
