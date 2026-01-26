@@ -42,15 +42,34 @@ type ConfigMapLoader struct {
 	configMapClient k8scorev1.ConfigMapClient
 	namespace       string
 	nodeName        string
+	// Fallback values from environment variables (used when ConfigMap is not available or empty)
+	envVendorFilter        string
+	envPathFilter          string
+	envLabelFilter         string
+	envAutoProvisionFilter string
 }
 
 // NewConfigMapLoader creates a new ConfigMapLoader
-func NewConfigMapLoader(configMapClient k8scorev1.ConfigMapClient, namespace, nodeName string) *ConfigMapLoader {
+func NewConfigMapLoader(configMapClient k8scorev1.ConfigMapClient, namespace, nodeName string, envVendorFilter, envPathFilter, envLabelFilter, envAutoProvisionFilter string) *ConfigMapLoader {
 	return &ConfigMapLoader{
-		configMapClient: configMapClient,
-		namespace:       namespace,
-		nodeName:        nodeName,
+		configMapClient:        configMapClient,
+		namespace:              namespace,
+		nodeName:               nodeName,
+		envVendorFilter:        envVendorFilter,
+		envPathFilter:          envPathFilter,
+		envLabelFilter:         envLabelFilter,
+		envAutoProvisionFilter: envAutoProvisionFilter,
 	}
+}
+
+// GetEnvFilters returns the fallback environment variable values for filters
+func (c *ConfigMapLoader) GetEnvFilters() (vendorFilter, pathFilter, labelFilter string) {
+	return c.envVendorFilter, c.envPathFilter, c.envLabelFilter
+}
+
+// GetEnvAutoProvisionFilter returns the fallback environment variable value for auto-provision filter
+func (c *ConfigMapLoader) GetEnvAutoProvisionFilter() string {
+	return c.envAutoProvisionFilter
 }
 
 // LoadFiltersFromConfigMap loads filter configurations from ConfigMap
@@ -212,46 +231,6 @@ func (c *ConfigMapLoader) matchesHostname(pattern, nodeName string) bool {
 	// TODO: Add glob pattern matching support in future phases
 	// For now, only support exact match, "*", and empty string
 	return pattern == nodeName
-}
-
-// LoadFiltersWithFallback loads filter configurations from ConfigMap with env var fallback
-func LoadFiltersWithFallback(ctx context.Context, loader *ConfigMapLoader, envVendorFilter, envPathFilter, envLabelFilter string) (vendorFilter, pathFilter, labelFilter string) {
-	cmVendor, cmPath, cmLabel, err := loader.LoadFiltersFromConfigMap(ctx)
-
-	if err != nil {
-		logrus.Errorf("Error loading filters from ConfigMap: %v, falling back to environment variables", err)
-		return envVendorFilter, envPathFilter, envLabelFilter
-	}
-
-	// If ConfigMap data is empty, fallback to env vars
-	if cmVendor == "" && cmPath == "" && cmLabel == "" {
-		logrus.Info("ConfigMap filter data is empty, using environment variables")
-		return envVendorFilter, envPathFilter, envLabelFilter
-	}
-
-	// Use ConfigMap values (they take precedence)
-	logrus.Info("Using filter configuration from ConfigMap")
-	return cmVendor, cmPath, cmLabel
-}
-
-// LoadAutoProvisionWithFallback loads auto-provision configurations from ConfigMap with env var fallback
-func LoadAutoProvisionWithFallback(ctx context.Context, loader *ConfigMapLoader, envAutoProvisionFilter string) string {
-	cmDevPaths, err := loader.LoadAutoProvisionFromConfigMap(ctx)
-
-	if err != nil {
-		logrus.Errorf("Error loading auto-provision from ConfigMap: %v, falling back to environment variables", err)
-		return envAutoProvisionFilter
-	}
-
-	// If ConfigMap data is empty, fallback to env vars
-	if cmDevPaths == "" {
-		logrus.Debug("ConfigMap auto-provision data is empty, using environment variables")
-		return envAutoProvisionFilter
-	}
-
-	// Use ConfigMap values (they take precedence)
-	logrus.Info("Using auto-provision configuration from ConfigMap")
-	return cmDevPaths
 }
 
 // Helper function for testing - allows reading ConfigMap name from env

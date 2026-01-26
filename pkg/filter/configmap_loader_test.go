@@ -539,7 +539,7 @@ func TestLoadFiltersFromConfigMap(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			loader := NewConfigMapLoader(fakecleint.FakeConfigMapClient(fakeClientset.CoreV1().ConfigMaps), DefaultConfigMapNamespace, tt.nodeName)
+			loader := NewConfigMapLoader(fakecleint.FakeConfigMapClient(fakeClientset.CoreV1().ConfigMaps), DefaultConfigMapNamespace, tt.nodeName, "", "", "", "")
 			vendor, path, label, err := loader.LoadFiltersFromConfigMap(context.Background())
 
 			if tt.expectError {
@@ -610,7 +610,7 @@ func TestLoadAutoProvisionFromConfigMap(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			loader := NewConfigMapLoader(fakecleint.FakeConfigMapClient(fakeClientset.CoreV1().ConfigMaps), DefaultConfigMapNamespace, tt.nodeName)
+			loader := NewConfigMapLoader(fakecleint.FakeConfigMapClient(fakeClientset.CoreV1().ConfigMaps), DefaultConfigMapNamespace, tt.nodeName, "", "", "", "")
 			devices, err := loader.LoadAutoProvisionFromConfigMap(context.Background())
 
 			if tt.expectError {
@@ -619,171 +619,6 @@ func TestLoadAutoProvisionFromConfigMap(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedDevices, devices)
 			}
-		})
-	}
-}
-
-func TestLoadFiltersWithFallback(t *testing.T) {
-	tests := []struct {
-		name            string
-		configMapData   map[string]string
-		createConfigMap bool
-		envVendor       string
-		envPath         string
-		envLabel        string
-		nodeName        string
-		expectedVendor  string
-		expectedPath    string
-		expectedLabel   string
-	}{
-		{
-			name: "ConfigMap exists and has data",
-			configMapData: map[string]string{
-				FiltersConfigKey: `- hostname: "*"
-  excludeVendors: ["ConfigMapVendor"]`,
-			},
-			createConfigMap: true,
-			envVendor:       "EnvVendor",
-			envPath:         "/env/path",
-			envLabel:        "EnvLabel",
-			nodeName:        "node-1",
-			expectedVendor:  "ConfigMapVendor",
-			expectedPath:    "",
-			expectedLabel:   "",
-		},
-		{
-			name:            "ConfigMap doesn't exist, fallback to env vars",
-			createConfigMap: false,
-			envVendor:       "EnvVendor",
-			envPath:         "/env/path",
-			envLabel:        "EnvLabel",
-			nodeName:        "node-1",
-			expectedVendor:  "EnvVendor",
-			expectedPath:    "/env/path",
-			expectedLabel:   "EnvLabel",
-		},
-		{
-			name: "ConfigMap exists but empty, fallback to env vars",
-			configMapData: map[string]string{
-				FiltersConfigKey: "",
-			},
-			createConfigMap: true,
-			envVendor:       "EnvVendor",
-			envPath:         "/env/path",
-			envLabel:        "EnvLabel",
-			nodeName:        "node-1",
-			expectedVendor:  "EnvVendor",
-			expectedPath:    "/env/path",
-			expectedLabel:   "EnvLabel",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create fake ConfigMap client
-			fakeClientset := corefake.NewClientset()
-
-			// Add ConfigMap to tracker if should be created
-			if tt.createConfigMap {
-				cm := &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      DefaultConfigMapName,
-						Namespace: DefaultConfigMapNamespace,
-					},
-					Data: tt.configMapData,
-				}
-				err := fakeClientset.Tracker().Add(cm)
-				assert.NoError(t, err)
-			}
-
-			fakeClient := fakecleint.FakeConfigMapClient(fakeClientset.CoreV1().ConfigMaps)
-
-			// Create ConfigMapLoader
-			loader := NewConfigMapLoader(fakeClient, DefaultConfigMapNamespace, tt.nodeName)
-
-			vendor, path, label := LoadFiltersWithFallback(
-				context.Background(),
-				loader,
-				tt.envVendor,
-				tt.envPath,
-				tt.envLabel,
-			)
-
-			assert.Equal(t, tt.expectedVendor, vendor)
-			assert.Equal(t, tt.expectedPath, path)
-			assert.Equal(t, tt.expectedLabel, label)
-		})
-	}
-}
-
-func TestLoadAutoProvisionWithFallback(t *testing.T) {
-	tests := []struct {
-		name            string
-		configMapData   map[string]string
-		createConfigMap bool
-		envAutoProv     string
-		nodeName        string
-		expectedDevices string
-	}{
-		{
-			name: "ConfigMap exists and has data",
-			configMapData: map[string]string{
-				AutoProvisionConfigKey: `- hostname: "*"
-  devices: ["/dev/nvme*"]`,
-			},
-			createConfigMap: true,
-			envAutoProv:     "/dev/sda",
-			nodeName:        "node-1",
-			expectedDevices: "/dev/nvme*",
-		},
-		{
-			name:            "ConfigMap doesn't exist, fallback to env vars",
-			createConfigMap: false,
-			envAutoProv:     "/dev/sda",
-			nodeName:        "node-1",
-			expectedDevices: "/dev/sda",
-		},
-		{
-			name: "ConfigMap exists but empty, fallback to env vars",
-			configMapData: map[string]string{
-				AutoProvisionConfigKey: "",
-			},
-			createConfigMap: true,
-			envAutoProv:     "/dev/sda",
-			nodeName:        "node-1",
-			expectedDevices: "/dev/sda",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			fakeClientset := corefake.NewClientset()
-
-			// Add ConfigMap to tracker if should be created
-			if tt.createConfigMap {
-				cm := &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      DefaultConfigMapName,
-						Namespace: DefaultConfigMapNamespace,
-					},
-					Data: tt.configMapData,
-				}
-				err := fakeClientset.Tracker().Add(cm)
-				assert.NoError(t, err)
-			}
-
-			fakeClient := fakecleint.FakeConfigMapClient(fakeClientset.CoreV1().ConfigMaps)
-
-			// Create ConfigMapLoader
-			loader := NewConfigMapLoader(fakeClient, DefaultConfigMapNamespace, tt.nodeName)
-
-			devices := LoadAutoProvisionWithFallback(
-				context.Background(),
-				loader,
-				tt.envAutoProv,
-			)
-
-			assert.Equal(t, tt.expectedDevices, devices)
 		})
 	}
 }
