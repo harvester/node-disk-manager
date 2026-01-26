@@ -223,12 +223,13 @@ func run(opt *option.Option) error {
 
 	configmap := corev1.Core().V1().ConfigMap()
 
+	// Create ConfigMapLoader for dynamic configuration reloading
+	configMapLoader := filter.NewConfigMapLoader(configmap, filter.DefaultConfigMapNamespace, opt.NodeName)
+
 	// Load filter configurations with ConfigMap support and env var fallback
 	vendorFilter, pathFilter, labelFilter := filter.LoadFiltersWithFallback(
 		ctx,
-		configmap,
-		opt.Namespace,
-		opt.NodeName,
+		configMapLoader,
 		opt.VendorFilter,
 		opt.PathFilter,
 		opt.LabelFilter,
@@ -237,9 +238,7 @@ func run(opt *option.Option) error {
 	// Load auto-provision configurations with ConfigMap support and env var fallback
 	autoProvisionFilter := filter.LoadAutoProvisionWithFallback(
 		ctx,
-		configmap,
-		opt.Namespace,
-		opt.NodeName,
+		configMapLoader,
 		opt.AutoProvisionFilter,
 	)
 
@@ -260,6 +259,7 @@ func run(opt *option.Option) error {
 		block,
 		excludeFilters,
 		autoProvisionFilters,
+		configMapLoader,
 		cond,
 		false,
 		&terminatedChannel,

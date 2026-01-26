@@ -215,8 +215,7 @@ func (c *ConfigMapLoader) matchesHostname(pattern, nodeName string) bool {
 }
 
 // LoadFiltersWithFallback loads filter configurations from ConfigMap with env var fallback
-func LoadFiltersWithFallback(ctx context.Context, configMapClient k8scorev1.ConfigMapClient, namespace, nodeName string, envVendorFilter, envPathFilter, envLabelFilter string) (vendorFilter, pathFilter, labelFilter string) {
-	loader := NewConfigMapLoader(configMapClient, namespace, nodeName)
+func LoadFiltersWithFallback(ctx context.Context, loader *ConfigMapLoader, envVendorFilter, envPathFilter, envLabelFilter string) (vendorFilter, pathFilter, labelFilter string) {
 	cmVendor, cmPath, cmLabel, err := loader.LoadFiltersFromConfigMap(ctx)
 
 	if err != nil {
@@ -236,8 +235,7 @@ func LoadFiltersWithFallback(ctx context.Context, configMapClient k8scorev1.Conf
 }
 
 // LoadAutoProvisionWithFallback loads auto-provision configurations from ConfigMap with env var fallback
-func LoadAutoProvisionWithFallback(ctx context.Context, configMapClient k8scorev1.ConfigMapClient, namespace, nodeName string, envAutoProvisionFilter string) string {
-	loader := NewConfigMapLoader(configMapClient, namespace, nodeName)
+func LoadAutoProvisionWithFallback(ctx context.Context, loader *ConfigMapLoader, envAutoProvisionFilter string) string {
 	cmDevPaths, err := loader.LoadAutoProvisionFromConfigMap(ctx)
 
 	if err != nil {
