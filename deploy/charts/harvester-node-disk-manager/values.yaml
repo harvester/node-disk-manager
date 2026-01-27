@@ -111,7 +111,5 @@ configMap:
     # Example:
     # - hostname: "*"
     #   devices:
-    #     - "/dev/nvme*"
-    #   provisioner: lvm
-    #   params:
-    #     vgName: "harvester-vg"
+    #     - "/dev/sdc"
+    #     - "/dev/sdd"
