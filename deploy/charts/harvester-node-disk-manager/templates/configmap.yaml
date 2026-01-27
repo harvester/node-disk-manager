@@ -6,11 +6,7 @@ metadata:
   labels:
     {{- include "harvester-node-disk-manager.labels" . | nindent 4 }}
 data:
-  {{- if .Values.configMap.filters }}
   filters.yaml: |
     {{- toYaml .Values.configMap.filters | nindent 4 }}
-  {{- end }}
-  {{- if .Values.configMap.autoprovision }}
   autoprovision.yaml: |
     {{- toYaml .Values.configMap.autoprovision | nindent 4 }}
-  {{- end }}
