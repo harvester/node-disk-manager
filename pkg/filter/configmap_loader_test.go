@@ -199,20 +199,17 @@ func TestLoadFiltersFromConfigMap(t *testing.T) {
 			ctx := context.Background()
 			fakeClientset := corefake.NewClientset()
 
-			// Create ConfigMap if filtersYAML is provided
-			if tt.filtersYAML != "" {
-				cm := &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      DefaultConfigMapName,
-						Namespace: DefaultConfigMapNamespace,
-					},
-					Data: map[string]string{
-						FiltersConfigKey: tt.filtersYAML,
-					},
-				}
-				err := fakeClientset.Tracker().Add(cm)
-				require.NoError(t, err)
+			cm := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      DefaultConfigMapName,
+					Namespace: DefaultConfigMapNamespace,
+				},
+				Data: map[string]string{
+					FiltersConfigKey: tt.filtersYAML,
+				},
 			}
+			err := fakeClientset.Tracker().Add(cm)
+			require.NoError(t, err)
 
 			loader := NewConfigMapLoader(
 				fakeclient.FakeConfigMapClient(fakeClientset.CoreV1().ConfigMaps),
@@ -418,20 +415,17 @@ func TestLoadAutoProvisionFromConfigMap(t *testing.T) {
 			ctx := context.Background()
 			fakeClientset := corefake.NewClientset()
 
-			// Create ConfigMap if autoProvisionYAML is provided
-			if tt.autoProvisionYAML != "" {
-				cm := &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      DefaultConfigMapName,
-						Namespace: DefaultConfigMapNamespace,
-					},
-					Data: map[string]string{
-						AutoProvisionConfigKey: tt.autoProvisionYAML,
-					},
-				}
-				err := fakeClientset.Tracker().Add(cm)
-				require.NoError(t, err)
+			cm := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      DefaultConfigMapName,
+					Namespace: DefaultConfigMapNamespace,
+				},
+				Data: map[string]string{
+					AutoProvisionConfigKey: tt.autoProvisionYAML,
+				},
 			}
+			err := fakeClientset.Tracker().Add(cm)
+			require.NoError(t, err)
 
 			loader := NewConfigMapLoader(
 				fakeclient.FakeConfigMapClient(fakeClientset.CoreV1().ConfigMaps),

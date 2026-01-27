@@ -218,7 +218,7 @@ func run(opt *option.Option) error {
 
 	corev1, err := k8scorev1.NewFactoryFromConfig(kubeConfig)
 	if err != nil {
-		return fmt.Errorf("error building node-disk-manager controllers: %s", err.Error())
+		return fmt.Errorf("error creating core/v1 factory access: %s", err.Error())
 	}
 
 	configmap := corev1.Core().V1().ConfigMap()
