@@ -11,6 +11,8 @@ import (
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/harvester/node-disk-manager/pkg/provisioner"
 )
 
 const (
@@ -31,8 +33,11 @@ type FilterConfig struct {
 
 // AutoProvisionConfig represents a single auto-provision configuration block
 type AutoProvisionConfig struct {
-	Hostname    string            `yaml:"hostname"`
-	Devices     []string          `yaml:"devices,omitempty"`
+	Hostname string   `yaml:"hostname"`
+	Devices  []string `yaml:"devices,omitempty"`
+
+	// We haven't support auto provision for longhorn v2 and LVM yet.
+	// But, we keep the provisioner and params fields for future extension.
 	Provisioner string            `yaml:"provisioner,omitempty"`
 	Params      map[string]string `yaml:"params,omitempty"`
 }
@@ -158,7 +163,7 @@ func (c *ConfigMapLoader) parseFilterConfigs(yamlContent string) ([]FilterConfig
 }
 
 // parseAutoProvisionConfigs parses the auto-provision YAML content
-// If provisioner is empty, defaults to "longhornv1"
+// If provisioner is empty, defaults to provisioner.TypeLonghornV1
 func (c *ConfigMapLoader) parseAutoProvisionConfigs(yamlContent string) ([]AutoProvisionConfig, error) {
 	var configs []AutoProvisionConfig
 	if err := yaml.Unmarshal([]byte(yamlContent), &configs); err != nil {
@@ -166,10 +171,11 @@ func (c *ConfigMapLoader) parseAutoProvisionConfigs(yamlContent string) ([]AutoP
 	}
 
 	// Set default provisioner if not specified
+	// Currently this field is not used, but we set it for future extension
 	for i := range configs {
 		if configs[i].Provisioner == "" {
-			configs[i].Provisioner = "longhornv1"
-			logrus.Debugf("Auto-provision config for hostname '%s' has no provisioner specified, defaulting to 'longhornv1'", configs[i].Hostname)
+			configs[i].Provisioner = provisioner.TypeLonghornV1
+			logrus.Debugf("Auto-provision config for hostname '%s' has no provisioner specified, defaulting to 'LonghornV1'", configs[i].Hostname)
 		}
 	}
 
@@ -177,23 +183,11 @@ func (c *ConfigMapLoader) parseAutoProvisionConfigs(yamlContent string) ([]AutoP
 }
 
 // mergeFilterConfigs merges global and node-specific filter configurations
-// Priority: node-specific > global
 func (c *ConfigMapLoader) mergeFilterConfigs(configs []FilterConfig) (deviceFilter, vendorFilter, pathFilter, labelFilter string) {
 	var devices, vendors, paths, labels []string
 
-	// First, collect global rules (hostname: "*" or empty)
 	for _, config := range configs {
-		if c.matchesHostname(config.Hostname, c.nodeName) && (config.Hostname == "*" || config.Hostname == "") {
-			devices = append(devices, config.ExcludeDevices...)
-			vendors = append(vendors, config.ExcludeVendors...)
-			paths = append(paths, config.ExcludePaths...)
-			labels = append(labels, config.ExcludeLabels...)
-		}
-	}
-
-	// Then, collect node-specific rules (higher priority)
-	for _, config := range configs {
-		if c.matchesHostname(config.Hostname, c.nodeName) && config.Hostname != "*" && config.Hostname != "" {
+		if c.matchesHostname(config.Hostname, c.nodeName) {
 			devices = append(devices, config.ExcludeDevices...)
 			vendors = append(vendors, config.ExcludeVendors...)
 			paths = append(paths, config.ExcludePaths...)
@@ -205,20 +199,11 @@ func (c *ConfigMapLoader) mergeFilterConfigs(configs []FilterConfig) (deviceFilt
 }
 
 // mergeAutoProvisionConfigs merges global and node-specific auto-provision configurations
-// Priority: node-specific > global
 func (c *ConfigMapLoader) mergeAutoProvisionConfigs(configs []AutoProvisionConfig) string {
 	var devices []string
 
-	// First, collect global rules (hostname: "*" or empty)
 	for _, config := range configs {
-		if c.matchesHostname(config.Hostname, c.nodeName) && (config.Hostname == "*" || config.Hostname == "") {
-			devices = append(devices, config.Devices...)
-		}
-	}
-
-	// Then, collect node-specific rules (higher priority)
-	for _, config := range configs {
-		if c.matchesHostname(config.Hostname, c.nodeName) && config.Hostname != "*" && config.Hostname != "" {
+		if c.matchesHostname(config.Hostname, c.nodeName) {
 			devices = append(devices, config.Devices...)
 		}
 	}
