@@ -22,10 +22,13 @@ func SetAutoProvisionFilters(devPathString string) []*Filter {
 	return []*Filter{devPathFilter}
 }
 
-func SetExcludeFilters(vendorString, pathString, labelString string) []*Filter {
+func SetExcludeFilters(deviceString, vendorString, pathString, labelString string) []*Filter {
 	logrus.Info("register exclude filters")
 
 	driveTypeFilter := RegisterDriveTypeFilter()
+
+	devices := strings.Split(deviceString, ",")
+	deviceFilter := RegisterDevicePathFilter(devices...)
 
 	vendors := strings.Split(vendorString, ",")
 	vendors = append(vendors, defaultExcludedVendors...)
@@ -40,17 +43,21 @@ func SetExcludeFilters(vendorString, pathString, labelString string) []*Filter {
 
 	partTypeFilters := RegisterPartTypeFilter(defaultExcludedPartTypes...)
 
-	return []*Filter{driveTypeFilter, vendorFilter, pathFilter, labelFilter, partTypeFilters}
+	return []*Filter{driveTypeFilter, deviceFilter, vendorFilter, pathFilter, labelFilter, partTypeFilters}
 }
 
 type DiskFilter interface {
 	// Match returns true if passing disk matches with the value
 	Match(disk *block.Disk) bool
+	// Details returns a human-readable string describing the filter criteria
+	Details() string
 }
 
 type PartFilter interface {
 	// Match returns true if passing partition matches with the value
 	Match(part *block.Partition) bool
+	// Details returns a human-readable string describing the filter criteria
+	Details() string
 }
 
 func (f *Filter) ApplyDiskFilter(disk *block.Disk) bool {

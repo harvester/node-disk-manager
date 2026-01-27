@@ -2,6 +2,7 @@ package filter
 
 import (
 	"path/filepath"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 
@@ -73,4 +74,17 @@ func matchDevLabel(devLabel, devName string, patterns []string) bool {
 		}
 	}
 	return false
+}
+
+// Details returns the list of filesystem label patterns
+func (f *partLabelFilter) Details() string {
+	if len(f.labels) == 0 {
+		return "none"
+	}
+	return "fs labels: [" + strings.Join(f.labels, ", ") + "]"
+}
+
+// Details returns the list of filesystem label patterns
+func (f *diskLabelFilter) Details() string {
+	return f.filter.Details()
 }

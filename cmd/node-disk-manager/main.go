@@ -13,6 +13,7 @@ import (
 
 	"github.com/ehazlett/simplelog"
 	ctlharvester "github.com/harvester/harvester/pkg/generated/controllers/harvesterhci.io"
+	k8scorev1 "github.com/rancher/wrangler/v3/pkg/generated/controllers/core"
 	"github.com/rancher/wrangler/v3/pkg/kubeconfig"
 	"github.com/rancher/wrangler/v3/pkg/signals"
 	"github.com/rancher/wrangler/v3/pkg/start"
@@ -215,9 +216,27 @@ func run(opt *option.Option) error {
 		return fmt.Errorf("error building node-disk-manager controllers: %s", err.Error())
 	}
 
+	corev1, err := k8scorev1.NewFactoryFromConfig(kubeConfig)
+	if err != nil {
+		return fmt.Errorf("error creating core/v1 factory access: %s", err.Error())
+	}
+
+	configmap := corev1.Core().V1().ConfigMap()
+
+	// Create ConfigMapLoader for dynamic configuration reloading
+	// The env variables are used as fallback when ConfigMap is not available or empty
+	configMapLoader := filter.NewConfigMapLoader(
+		configmap,
+		filter.DefaultConfigMapNamespace,
+		opt.NodeName,
+		opt.VendorFilter,
+		opt.PathFilter,
+		opt.LabelFilter,
+		opt.AutoProvisionFilter,
+	)
+
 	terminatedChannel := make(chan bool, 1)
-	excludeFilters := filter.SetExcludeFilters(opt.VendorFilter, opt.PathFilter, opt.LabelFilter)
-	autoProvisionFilters := filter.SetAutoProvisionFilters(opt.AutoProvisionFilter)
+
 	locker := &sync.Mutex{}
 	cond := sync.NewCond(locker)
 	upgrades := harvesters.Harvesterhci().V1beta1().Upgrade()
@@ -230,8 +249,7 @@ func run(opt *option.Option) error {
 		upgrades,
 		bds,
 		block,
-		excludeFilters,
-		autoProvisionFilters,
+		configMapLoader,
 		cond,
 		false,
 		&terminatedChannel,

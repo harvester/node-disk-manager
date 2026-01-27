@@ -1,6 +1,8 @@
 package filter
 
 import (
+	"strings"
+
 	"github.com/harvester/node-disk-manager/pkg/block"
 	"github.com/harvester/node-disk-manager/pkg/utils"
 )
@@ -54,4 +56,17 @@ func (f *diskPartTypeFilter) Match(disk *block.Disk) bool {
 		}
 	}
 	return false
+}
+
+// Details returns the list of excluded partition types
+func (f *partPartTypeFilter) Details() string {
+	if len(f.partType) == 0 {
+		return "none"
+	}
+	return "part types: [" + strings.Join(f.partType, ", ") + "]"
+}
+
+// Details returns the list of excluded partition types
+func (f *diskPartTypeFilter) Details() string {
+	return f.filter.Details()
 }

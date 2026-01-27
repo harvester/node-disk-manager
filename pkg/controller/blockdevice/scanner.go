@@ -1,6 +1,7 @@
 package blockdevice
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"reflect"
@@ -30,6 +31,7 @@ type Scanner struct {
 	BlockInfo            block.Info
 	ExcludeFilters       []*filter.Filter
 	AutoProvisionFilters []*filter.Filter
+	ConfigMapLoader      *filter.ConfigMapLoader
 	Cond                 *sync.Cond
 	Shutdown             bool
 	TerminatedChannels   *chan bool
@@ -45,29 +47,29 @@ func NewScanner(
 	upgrades ctlharvesterv1.UpgradeController,
 	bds ctldiskv1.BlockDeviceController,
 	block block.Info,
-	excludeFilters, autoProvisionFilters []*filter.Filter,
+	configMapLoader *filter.ConfigMapLoader,
 	cond *sync.Cond,
 	shutdown bool,
 	ch *chan bool,
 ) *Scanner {
 	return &Scanner{
-		NodeName:             nodeName,
-		Namespace:            namespace,
-		Blockdevices:         bds,
-		UpgradeClient:        upgrades,
-		BlockInfo:            block,
-		ExcludeFilters:       excludeFilters,
-		AutoProvisionFilters: autoProvisionFilters,
-		Cond:                 cond,
-		Shutdown:             shutdown,
-		TerminatedChannels:   ch,
+		NodeName:           nodeName,
+		Namespace:          namespace,
+		Blockdevices:       bds,
+		UpgradeClient:      upgrades,
+		BlockInfo:          block,
+		ConfigMapLoader:    configMapLoader,
+		Cond:               cond,
+		Shutdown:           shutdown,
+		TerminatedChannels: ch,
 	}
 }
 
-func (s *Scanner) Start() error {
-	if err := s.scanBlockDevicesOnNode(); err != nil {
+func (s *Scanner) Start(ctx context.Context) error {
+	if err := s.scanBlockDevicesOnNode(ctx); err != nil {
 		return err
 	}
+
 	go func() {
 		for {
 			s.Cond.L.Lock()
@@ -83,7 +85,7 @@ func (s *Scanner) Start() error {
 			}
 
 			logrus.Infof("scanner waked up, do scan...")
-			if err := s.scanBlockDevicesOnNode(); err != nil {
+			if err := s.scanBlockDevicesOnNode(ctx); err != nil {
 				logrus.Errorf("Failed to rescan block devices on node %s: %v", s.NodeName, err)
 			}
 			s.Cond.L.Unlock()
@@ -200,9 +202,83 @@ func (s *Scanner) deactivateBlockDevices(oldBds map[string]*diskv1.BlockDevice) 
 	return nil
 }
 
+// reloadConfigMapFilters reloads filter and auto-provision configurations from ConfigMap
+// Falls back to environment variables if ConfigMap is not available or empty
+func (s *Scanner) loadConfigMapFilters(ctx context.Context) {
+	deviceFilter, vendorFilter, pathFilter, labelFilter, err := s.ConfigMapLoader.LoadFiltersFromConfigMap(ctx)
+	if err != nil {
+		logrus.Warnf("Failed to reload filters from ConfigMap: %v, using environment variable fallback", err)
+		deviceFilter, vendorFilter, pathFilter, labelFilter = s.ConfigMapLoader.GetEnvFilters()
+	} else if deviceFilter == "" && vendorFilter == "" && pathFilter == "" && labelFilter == "" {
+		// ConfigMap exists but is empty, use env var fallback
+		logrus.Info("ConfigMap filter data is empty, using environment variable fallback")
+		deviceFilter, vendorFilter, pathFilter, labelFilter = s.ConfigMapLoader.GetEnvFilters()
+	} else {
+		// Use ConfigMap values (they take precedence)
+		logrus.Info("Using filter configuration from ConfigMap")
+	}
+
+	// Update filters
+	s.ExcludeFilters = filter.SetExcludeFilters(deviceFilter, vendorFilter, pathFilter, labelFilter)
+
+	autoProvisionFilter, err := s.ConfigMapLoader.LoadAutoProvisionFromConfigMap(ctx)
+	if err != nil {
+		logrus.Warnf("Failed to reload auto-provision from ConfigMap: %v, using environment variable fallback", err)
+		autoProvisionFilter = s.ConfigMapLoader.GetEnvAutoProvisionFilter()
+	} else if autoProvisionFilter == "" {
+		// ConfigMap exists but is empty, use env var fallback
+		logrus.Debug("ConfigMap auto-provision data is empty, using environment variable fallback")
+		autoProvisionFilter = s.ConfigMapLoader.GetEnvAutoProvisionFilter()
+	} else {
+		// Use ConfigMap values (they take precedence)
+		logrus.Info("Using auto-provision configuration from ConfigMap")
+	}
+
+	// Update auto-provision filters
+	s.AutoProvisionFilters = filter.SetAutoProvisionFilters(autoProvisionFilter)
+}
+
+func (s *Scanner) debugFilter() {
+	// Debug: Log final filter details including defaults
+	logrus.Debugf("Final filter configuration (including defaults):")
+	logrus.Debugf("  Exclude Filters (%d total):", len(s.ExcludeFilters))
+	for i, f := range s.ExcludeFilters {
+		diskDetails := "N/A"
+		partDetails := "N/A"
+		if f.DiskFilter != nil {
+			diskDetails = f.DiskFilter.Details()
+		}
+		if f.PartFilter != nil {
+			partDetails = f.PartFilter.Details()
+		}
+		logrus.Debugf("    [%d] %s", i, f.Name)
+		logrus.Debugf("        Disk: %s", diskDetails)
+		logrus.Debugf("        Part: %s", partDetails)
+	}
+
+	logrus.Debugf("  Auto-Provision Filters (%d total):", len(s.AutoProvisionFilters))
+	for i, f := range s.AutoProvisionFilters {
+		diskDetails := "N/A"
+		partDetails := "N/A"
+		if f.DiskFilter != nil {
+			diskDetails = f.DiskFilter.Details()
+		}
+		if f.PartFilter != nil {
+			partDetails = f.PartFilter.Details()
+		}
+		logrus.Debugf("    [%d] %s", i, f.Name)
+		logrus.Debugf("        Disk: %s", diskDetails)
+		logrus.Debugf("        Part: %s", partDetails)
+	}
+}
+
 // scanBlockDevicesOnNode scans block devices on the node, and it will either create or update them.
-func (s *Scanner) scanBlockDevicesOnNode() error {
+func (s *Scanner) scanBlockDevicesOnNode(ctx context.Context) error {
 	logrus.Debugf("Scan block devices of node: %s", s.NodeName)
+
+	// load filter and auto-provision configurations from ConfigMap
+	s.loadConfigMapFilters(ctx)
+	s.debugFilter()
 
 	// list all the block devices
 	allDevices := s.collectAllDevices()

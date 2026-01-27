@@ -96,7 +96,7 @@ func Register(
 		provisionerLock:  &sync.Mutex{},
 	}
 
-	if err := scanner.Start(); err != nil {
+	if err := scanner.Start(ctx); err != nil {
 		return err
 	}
 

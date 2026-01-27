@@ -1,6 +1,8 @@
 package filter
 
 import (
+	"strings"
+
 	"github.com/harvester/node-disk-manager/pkg/block"
 	"github.com/harvester/node-disk-manager/pkg/utils"
 )
@@ -47,4 +49,12 @@ func (vf *vendorFilter) Match(blockDevice *block.Disk) bool {
 		return true
 	}
 	return false
+}
+
+// Details returns the list of excluded vendors
+func (vf *vendorFilter) Details() string {
+	if len(vf.vendors) == 0 {
+		return "none"
+	}
+	return "vendors: [" + strings.Join(vf.vendors, ", ") + "]"
 }

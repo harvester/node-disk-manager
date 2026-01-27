@@ -2,6 +2,7 @@ package filter
 
 import (
 	"path/filepath"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 
@@ -54,6 +55,19 @@ func (f *diskDevicePathFilter) Match(disk *block.Disk) bool {
 		return false
 	}
 	return matchDevPath(devPath, f.devicePaths)
+}
+
+// Details returns the list of device path patterns
+func (f *diskDevicePathFilter) Details() string {
+	if len(f.devicePaths) == 0 {
+		return "none"
+	}
+	return "device paths: [" + strings.Join(f.devicePaths, ", ") + "]"
+}
+
+// Details returns the list of device path patterns
+func (f *partDevicePathFilter) Details() string {
+	return f.filter.Details()
 }
 
 func matchDevPath(devPath string, patterns []string) bool {

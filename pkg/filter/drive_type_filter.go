@@ -37,3 +37,13 @@ func (f *diskDriveTypeFilter) Match(disk *block.Disk) bool {
 func neitherHddNorSsd(driveType ghwblock.DriveType) bool {
 	return driveType != ghwblock.DRIVE_TYPE_HDD && driveType != ghwblock.DRIVE_TYPE_SSD
 }
+
+// Details returns the drive type filter criteria
+func (f *partDriveTypeFilter) Details() string {
+	return "exclude: non-HDD/SSD drives"
+}
+
+// Details returns the drive type filter criteria
+func (f *diskDriveTypeFilter) Details() string {
+	return "exclude: non-HDD/SSD drives"
+}
