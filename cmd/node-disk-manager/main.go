@@ -24,6 +24,7 @@ import (
 	blockdevicev1 "github.com/harvester/node-disk-manager/pkg/controller/blockdevice"
 	nodev1 "github.com/harvester/node-disk-manager/pkg/controller/node"
 	volumegroupv1 "github.com/harvester/node-disk-manager/pkg/controller/volumegroup"
+	"github.com/harvester/node-disk-manager/pkg/data"
 	"github.com/harvester/node-disk-manager/pkg/filter"
 	ctldisk "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io"
 	ctllonghorn "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io"
@@ -199,6 +200,11 @@ func run(opt *option.Option) error {
 	kubeConfig, err := kubeconfig.GetNonInteractiveClientConfig(opt.KubeConfig).ClientConfig()
 	if err != nil {
 		return fmt.Errorf("failed to find kubeconfig: %v", err)
+	}
+
+	// Initialize built-in resources (e.g., ConfigMap)
+	if err := data.Init(kubeConfig); err != nil {
+		return fmt.Errorf("failed to initialize built-in resources: %v", err)
 	}
 
 	harvesters, err := ctlharvester.NewFactoryFromConfig(kubeConfig)
