@@ -213,9 +213,6 @@ func (s *Scanner) loadConfigMapFilters(ctx context.Context) {
 		// ConfigMap exists but is empty, use env var fallback
 		logrus.Info("ConfigMap filter data is empty, using environment variable fallback")
 		deviceFilter, vendorFilter, pathFilter, labelFilter = s.ConfigMapLoader.GetEnvFilters()
-	} else {
-		// Use ConfigMap values (they take precedence)
-		logrus.Info("Using filter configuration from ConfigMap")
 	}
 
 	// Update filters
@@ -229,9 +226,6 @@ func (s *Scanner) loadConfigMapFilters(ctx context.Context) {
 		// ConfigMap exists but is empty, use env var fallback
 		logrus.Debug("ConfigMap auto-provision data is empty, using environment variable fallback")
 		autoProvisionFilter = s.ConfigMapLoader.GetEnvAutoProvisionFilter()
-	} else {
-		// Use ConfigMap values (they take precedence)
-		logrus.Info("Using auto-provision configuration from ConfigMap")
 	}
 
 	// Update auto-provision filters
