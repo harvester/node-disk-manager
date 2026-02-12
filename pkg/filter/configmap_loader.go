@@ -109,10 +109,10 @@ func (c *ConfigMapLoader) LoadFiltersFromConfigMap(ctx context.Context) (deviceF
 	deviceFilter, vendorFilter, pathFilter, labelFilter = c.mergeFilterConfigs(filterConfigs)
 
 	logrus.Infof("Successfully loaded filter configuration from ConfigMap for node %s", c.nodeName)
-	logrus.Debugf("  - ExcludeDevices: %s", deviceFilter)
-	logrus.Debugf("  - ExcludeVendors: %s", vendorFilter)
-	logrus.Debugf("  - ExcludePaths: %s", pathFilter)
-	logrus.Debugf("  - ExcludeLabels: %s", labelFilter)
+	logrus.Infof("  - ExcludeDevices: %s", deviceFilter)
+	logrus.Infof("  - ExcludeVendors: %s", vendorFilter)
+	logrus.Infof("  - ExcludePaths: %s", pathFilter)
+	logrus.Infof("  - ExcludeLabels: %s", labelFilter)
 
 	return deviceFilter, vendorFilter, pathFilter, labelFilter, nil
 }
@@ -120,7 +120,7 @@ func (c *ConfigMapLoader) LoadFiltersFromConfigMap(ctx context.Context) (deviceF
 // LoadAutoProvisionFromConfigMap loads auto-provision configurations from ConfigMap
 // Returns the merged device paths string for the current node, or empty string if ConfigMap doesn't exist
 func (c *ConfigMapLoader) LoadAutoProvisionFromConfigMap(ctx context.Context) (devPaths string, err error) {
-	logrus.Debug("Attempting to load auto-provision configuration from ConfigMap")
+	logrus.Info("Attempting to load auto-provision configuration from ConfigMap")
 
 	configMap, err := c.configMapClient.Get(c.namespace, DefaultConfigMapName, metav1.GetOptions{})
 	if err != nil {
@@ -134,7 +134,7 @@ func (c *ConfigMapLoader) LoadAutoProvisionFromConfigMap(ctx context.Context) (d
 	// Parse autoprovision.yaml
 	autoProvYAML, exists := configMap.Data[AutoProvisionConfigKey]
 	if !exists {
-		logrus.Debugf("ConfigMap %s/%s exists but missing %s key, auto-provision not configured", c.namespace, DefaultConfigMapName, AutoProvisionConfigKey)
+		logrus.Infof("ConfigMap %s/%s exists but missing %s key, auto-provision not configured", c.namespace, DefaultConfigMapName, AutoProvisionConfigKey)
 		return "", nil
 	}
 
@@ -148,7 +148,7 @@ func (c *ConfigMapLoader) LoadAutoProvisionFromConfigMap(ctx context.Context) (d
 	devPaths = c.mergeAutoProvisionConfigs(autoProvConfigs)
 
 	logrus.Infof("Successfully loaded auto-provision configuration from ConfigMap for node %s", c.nodeName)
-	logrus.Debugf("  - Devices: %s", devPaths)
+	logrus.Infof("  - Devices: %s", devPaths)
 
 	return devPaths, nil
 }
