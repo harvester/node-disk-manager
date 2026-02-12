@@ -46,6 +46,7 @@ type AutoProvisionConfig struct {
 type ConfigMapLoader struct {
 	configMapClient k8scorev1.ConfigMapClient
 	namespace       string
+	configMapName   string
 	nodeName        string
 	// Fallback values from environment variables (used when ConfigMap is not available or empty)
 	envVendorFilter        string
@@ -55,10 +56,11 @@ type ConfigMapLoader struct {
 }
 
 // NewConfigMapLoader creates a new ConfigMapLoader
-func NewConfigMapLoader(configMapClient k8scorev1.ConfigMapClient, namespace, nodeName string, envVendorFilter, envPathFilter, envLabelFilter, envAutoProvisionFilter string) *ConfigMapLoader {
+func NewConfigMapLoader(configMapClient k8scorev1.ConfigMapClient, nodeName string, envVendorFilter, envPathFilter, envLabelFilter, envAutoProvisionFilter string) *ConfigMapLoader {
 	return &ConfigMapLoader{
 		configMapClient:        configMapClient,
-		namespace:              namespace,
+		namespace:              DefaultConfigMapNamespace,
+		configMapName:          DefaultConfigMapName,
 		nodeName:               nodeName,
 		envVendorFilter:        envVendorFilter,
 		envPathFilter:          envPathFilter,
@@ -83,10 +85,10 @@ func (c *ConfigMapLoader) GetEnvAutoProvisionFilter() string {
 func (c *ConfigMapLoader) LoadFiltersFromConfigMap(ctx context.Context) (deviceFilter, vendorFilter, pathFilter, labelFilter string, err error) {
 	logrus.Debug("Attempting to load filter configuration from ConfigMap")
 
-	configMap, err := c.configMapClient.Get(c.namespace, DefaultConfigMapName, metav1.GetOptions{})
+	configMap, err := c.configMapClient.Get(c.namespace, c.configMapName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
-			logrus.Infof("ConfigMap %s/%s not found, will fallback to environment variables", c.namespace, DefaultConfigMapName)
+			logrus.Infof("ConfigMap %s/%s not found, will fallback to environment variables", c.namespace, c.configMapName)
 			return "", "", "", "", nil
 		}
 		return "", "", "", "", fmt.Errorf("failed to get ConfigMap: %w", err)
@@ -95,7 +97,7 @@ func (c *ConfigMapLoader) LoadFiltersFromConfigMap(ctx context.Context) (deviceF
 	// Parse filters.yaml
 	filtersYAML, exists := configMap.Data[FiltersConfigKey]
 	if !exists {
-		logrus.Warnf("ConfigMap %s/%s exists but missing %s key, will fallback to environment variables", c.namespace, DefaultConfigMapName, FiltersConfigKey)
+		logrus.Warnf("ConfigMap %s/%s exists but missing %s key, will fallback to environment variables", c.namespace, c.configMapName, FiltersConfigKey)
 		return "", "", "", "", nil
 	}
 

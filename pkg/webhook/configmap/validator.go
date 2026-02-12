@@ -25,7 +25,7 @@ type Validator struct {
 func NewConfigMapValidator() *Validator {
 	// Create a loader instance for parsing YAML
 	// The nil configMapClient and empty strings are fine since we only use the parse methods
-	loader := filter.NewConfigMapLoader(nil, "", "", "", "", "", "")
+	loader := filter.NewConfigMapLoader(nil, "", "", "", "", "")
 	return &Validator{
 		loader: loader,
 	}

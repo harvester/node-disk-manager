@@ -233,7 +233,6 @@ func run(opt *option.Option) error {
 	// The env variables are used as fallback when ConfigMap is not available or empty
 	configMapLoader := filter.NewConfigMapLoader(
 		configmap,
-		filter.DefaultConfigMapNamespace,
 		opt.NodeName,
 		opt.VendorFilter,
 		opt.PathFilter,

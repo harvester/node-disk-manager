@@ -243,7 +243,6 @@ func TestLoadFiltersFromConfigMap(t *testing.T) {
 
 			loader := NewConfigMapLoader(
 				fakeclient.FakeConfigMapClient(fakeClientset.CoreV1().ConfigMaps),
-				DefaultConfigMapNamespace,
 				tt.nodeName,
 				"", "", "", "", // env filters
 			)
@@ -483,7 +482,6 @@ func TestLoadAutoProvisionFromConfigMap(t *testing.T) {
 
 			loader := NewConfigMapLoader(
 				fakeclient.FakeConfigMapClient(fakeClientset.CoreV1().ConfigMaps),
-				DefaultConfigMapNamespace,
 				tt.nodeName,
 				"", "", "", "", // env filters
 			)
@@ -520,7 +518,6 @@ func TestLoadFiltersFromConfigMap_WithMissingConfigMapKey(t *testing.T) {
 
 	loader := NewConfigMapLoader(
 		fakeclient.FakeConfigMapClient(fakeClientset.CoreV1().ConfigMaps),
-		DefaultConfigMapNamespace,
 		"harvester1",
 		"", "", "", "",
 	)
@@ -553,7 +550,6 @@ func TestLoadAutoProvisionFromConfigMap_WithMissingConfigMapKey(t *testing.T) {
 
 	loader := NewConfigMapLoader(
 		fakeclient.FakeConfigMapClient(fakeClientset.CoreV1().ConfigMaps),
-		DefaultConfigMapNamespace,
 		"harvester1",
 		"", "", "", "",
 	)
@@ -582,7 +578,6 @@ func TestLoadFiltersFromConfigMap_WithInvalidYAML(t *testing.T) {
 
 	loader := NewConfigMapLoader(
 		fakeclient.FakeConfigMapClient(fakeClientset.CoreV1().ConfigMaps),
-		DefaultConfigMapNamespace,
 		"harvester1",
 		"", "", "", "",
 	)
@@ -615,7 +610,6 @@ func TestLoadAutoProvisionFromConfigMap_WithInvalidYAML(t *testing.T) {
 
 	loader := NewConfigMapLoader(
 		fakeclient.FakeConfigMapClient(fakeClientset.CoreV1().ConfigMaps),
-		DefaultConfigMapNamespace,
 		"harvester1",
 		"", "", "", "",
 	)
@@ -634,7 +628,6 @@ func TestLoadFiltersFromConfigMap_ConfigMapNotFound(t *testing.T) {
 
 	loader := NewConfigMapLoader(
 		fakeclient.FakeConfigMapClient(fakeClientset.CoreV1().ConfigMaps),
-		DefaultConfigMapNamespace,
 		"harvester1",
 		"", "", "", "",
 	)
@@ -656,7 +649,6 @@ func TestLoadAutoProvisionFromConfigMap_ConfigMapNotFound(t *testing.T) {
 
 	loader := NewConfigMapLoader(
 		fakeclient.FakeConfigMapClient(fakeClientset.CoreV1().ConfigMaps),
-		DefaultConfigMapNamespace,
 		"harvester1",
 		"", "", "", "",
 	)
