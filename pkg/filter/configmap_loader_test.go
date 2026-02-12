@@ -192,6 +192,36 @@ func TestLoadFiltersFromConfigMap(t *testing.T) {
 			expectedLabel:  "",
 			expectError:    false,
 		},
+		// Test 13: filters with empty string hostname (should be ignored)
+		{
+			name:     "filters with empty string hostname",
+			nodeName: "harvester1",
+			filtersYAML: `- hostname: ""
+  excludeLabels: ["COS_*", "HARV_*"]
+  excludeVendors: ["longhorn", "thisisaexample"]
+  excludeDevices: ["/dev/sdd"]`,
+			expectedDevice: "",
+			expectedVendor: "",
+			expectedPath:   "",
+			expectedLabel:  "",
+			expectError:    false,
+		},
+		// Test 14: filters with empty string and specific hostname (only specific hostname applies)
+		{
+			name:     "filters with empty string and specific hostname",
+			nodeName: "harvester1",
+			filtersYAML: `- hostname: ""
+  excludeLabels: ["COS_*"]
+  excludeVendors: ["longhorn"]
+- hostname: "harvester1"
+  excludeVendors: ["harvester1"]
+  excludeDevices: ["/dev/sde"]`,
+			expectedDevice: "/dev/sde",
+			expectedVendor: "harvester1",
+			expectedPath:   "",
+			expectedLabel:  "",
+			expectError:    false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -406,6 +436,30 @@ func TestLoadAutoProvisionFromConfigMap(t *testing.T) {
   devices:
     - "/dev/sdc"`,
 			expectedDevices: "/dev/sdc",
+			expectError:     false,
+		},
+		// Test 14: autoprovision with empty string hostname (should be ignored)
+		{
+			name:     "autoprovision with empty string hostname",
+			nodeName: "harvester1",
+			autoProvisionYAML: `- hostname: ""
+  devices:
+    - "/dev/sdc"
+    - "/dev/sdd"`,
+			expectedDevices: "",
+			expectError:     false,
+		},
+		// Test 15: autoprovision with empty string and specific hostname (only specific hostname applies)
+		{
+			name:     "autoprovision with empty string and specific hostname",
+			nodeName: "harvester1",
+			autoProvisionYAML: `- hostname: ""
+  devices:
+    - "/dev/sdc"
+- hostname: "harvester1"
+  devices:
+    - "/dev/sdf"`,
+			expectedDevices: "/dev/sdf",
 			expectError:     false,
 		},
 	}

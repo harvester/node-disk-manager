@@ -24,6 +24,7 @@ import (
 	ctldisk "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io"
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/webhook/blockdevice"
+	"github.com/harvester/node-disk-manager/pkg/webhook/configmap"
 	"github.com/harvester/node-disk-manager/pkg/webhook/storageclass"
 )
 
@@ -126,9 +127,11 @@ func runWebhookServer(ctx context.Context, cfg *rest.Config, options *config.Opt
 	bdValidator := blockdevice.NewBlockdeviceValidator(resourceCaches.bdCache, resourceCaches.storageClassCache, resourceCaches.pvCache,
 		resourceCaches.lhVolumeCache, resourceCaches.lhBackingImageCache, resourceCaches.lhNodeCache, resourceCaches.lhReplicaCache)
 	scValidator := storageclass.NewStorageClassValidator(resourceCaches.lvmVGCache)
+	cmValidator := configmap.NewConfigMapValidator()
 	var validators = []admission.Validator{
 		bdValidator,
 		scValidator,
+		cmValidator,
 	}
 
 	if err := webhookServer.RegisterMutators(mutators...); err != nil {

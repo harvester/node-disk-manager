@@ -99,7 +99,7 @@ func (c *ConfigMapLoader) LoadFiltersFromConfigMap(ctx context.Context) (deviceF
 		return "", "", "", "", nil
 	}
 
-	filterConfigs, err := c.parseFilterConfigs(filtersYAML)
+	filterConfigs, err := c.ParseFilterConfigs(filtersYAML)
 	if err != nil {
 		logrus.Errorf("Failed to parse %s from ConfigMap: %v, will fallback to environment variables", FiltersConfigKey, err)
 		return "", "", "", "", nil
@@ -138,7 +138,7 @@ func (c *ConfigMapLoader) LoadAutoProvisionFromConfigMap(ctx context.Context) (d
 		return "", nil
 	}
 
-	autoProvConfigs, err := c.parseAutoProvisionConfigs(autoProvYAML)
+	autoProvConfigs, err := c.ParseAutoProvisionConfigs(autoProvYAML)
 	if err != nil {
 		logrus.Errorf("Failed to parse %s from ConfigMap: %v, will fallback to environment variables", AutoProvisionConfigKey, err)
 		return "", nil
@@ -153,8 +153,8 @@ func (c *ConfigMapLoader) LoadAutoProvisionFromConfigMap(ctx context.Context) (d
 	return devPaths, nil
 }
 
-// parseFilterConfigs parses the filters YAML content
-func (c *ConfigMapLoader) parseFilterConfigs(yamlContent string) ([]FilterConfig, error) {
+// ParseFilterConfigs parses the filters YAML content
+func (c *ConfigMapLoader) ParseFilterConfigs(yamlContent string) ([]FilterConfig, error) {
 	var configs []FilterConfig
 	if err := yaml.Unmarshal([]byte(yamlContent), &configs); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal filters YAML: %w", err)
@@ -162,9 +162,9 @@ func (c *ConfigMapLoader) parseFilterConfigs(yamlContent string) ([]FilterConfig
 	return configs, nil
 }
 
-// parseAutoProvisionConfigs parses the auto-provision YAML content
+// ParseAutoProvisionConfigs parses the auto-provision YAML content
 // If provisioner is empty, defaults to provisioner.TypeLonghornV1
-func (c *ConfigMapLoader) parseAutoProvisionConfigs(yamlContent string) ([]AutoProvisionConfig, error) {
+func (c *ConfigMapLoader) ParseAutoProvisionConfigs(yamlContent string) ([]AutoProvisionConfig, error) {
 	var configs []AutoProvisionConfig
 	if err := yaml.Unmarshal([]byte(yamlContent), &configs); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal autoprovision YAML: %w", err)
@@ -212,9 +212,15 @@ func (c *ConfigMapLoader) mergeAutoProvisionConfigs(configs []AutoProvisionConfi
 }
 
 // matchesHostname checks if the hostname pattern matches the node name
-// Supports wildcard "*", empty string (both treated as global), glob patterns, and exact match
+// Supports wildcard "*" (global match), glob patterns, and exact match
+// Empty string hostname is treated as invalid and ignored
 func (c *ConfigMapLoader) matchesHostname(pattern, nodeName string) bool {
-	if pattern == "*" || pattern == "" {
+	if pattern == "" {
+		logrus.Warnf("Empty hostname pattern is not allowed, ignoring this configuration")
+		return false
+	}
+
+	if pattern == "*" {
 		return true
 	}
 
