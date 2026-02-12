@@ -232,47 +232,12 @@ func (s *Scanner) loadConfigMapFilters(ctx context.Context) {
 	s.AutoProvisionFilters = filter.SetAutoProvisionFilters(autoProvisionFilter)
 }
 
-func (s *Scanner) debugFilter() {
-	// Debug: Log final filter details including defaults
-	logrus.Debugf("Final filter configuration (including defaults):")
-	logrus.Debugf("  Exclude Filters (%d total):", len(s.ExcludeFilters))
-	for i, f := range s.ExcludeFilters {
-		diskDetails := "N/A"
-		partDetails := "N/A"
-		if f.DiskFilter != nil {
-			diskDetails = f.DiskFilter.Details()
-		}
-		if f.PartFilter != nil {
-			partDetails = f.PartFilter.Details()
-		}
-		logrus.Debugf("    [%d] %s", i, f.Name)
-		logrus.Debugf("        Disk: %s", diskDetails)
-		logrus.Debugf("        Part: %s", partDetails)
-	}
-
-	logrus.Debugf("  Auto-Provision Filters (%d total):", len(s.AutoProvisionFilters))
-	for i, f := range s.AutoProvisionFilters {
-		diskDetails := "N/A"
-		partDetails := "N/A"
-		if f.DiskFilter != nil {
-			diskDetails = f.DiskFilter.Details()
-		}
-		if f.PartFilter != nil {
-			partDetails = f.PartFilter.Details()
-		}
-		logrus.Debugf("    [%d] %s", i, f.Name)
-		logrus.Debugf("        Disk: %s", diskDetails)
-		logrus.Debugf("        Part: %s", partDetails)
-	}
-}
-
 // scanBlockDevicesOnNode scans block devices on the node, and it will either create or update them.
 func (s *Scanner) scanBlockDevicesOnNode(ctx context.Context) error {
 	logrus.Debugf("Scan block devices of node: %s", s.NodeName)
 
 	// load filter and auto-provision configurations from ConfigMap
 	s.loadConfigMapFilters(ctx)
-	s.debugFilter()
 
 	// list all the block devices
 	allDevices := s.collectAllDevices()
@@ -354,23 +319,23 @@ func convertBlockDeviceListToMap(bdList *diskv1.BlockDeviceList) (map[string]*di
 func (s *Scanner) ApplyExcludeFiltersForDisk(disk *block.Disk) bool {
 	if strings.HasPrefix(disk.Name, "dm-") {
 		if _, err := utils.IsMultipathDevice(disk.Name); err == nil {
-			logrus.Debugf("accept block device /dev/%s because it's a multipath device", disk.Name)
+			logrus.Infof("accept block device /dev/%s because it's a multipath device", disk.Name)
 			return false
 		}
 
-		logrus.Debugf("block device /dev/%s ignored because it's a dm device (likely LHv2 volume)", disk.Name)
+		logrus.Infof("block device /dev/%s ignored because it's a dm device (likely LHv2 volume)", disk.Name)
 		return true
 	}
 
 	for _, filter := range s.ExcludeFilters {
 		if filter.ApplyDiskFilter(disk) {
-			logrus.Debugf("block device /dev/%s ignored by %s", disk.Name, filter.Name)
+			logrus.Infof("block device /dev/%s ignored by %s and rules: %s", disk.Name, filter.Name, filter.DiskFilter.Details())
 			return true
 		}
 	}
 
 	if _, err := utils.IsManagedByMultipath(disk.Name); err == nil {
-		logrus.Debugf("block device /dev/%s is managed by multipath device, ignored", disk.Name)
+		logrus.Infof("block device /dev/%s is managed by multipath device, ignored", disk.Name)
 		return true
 	}
 
