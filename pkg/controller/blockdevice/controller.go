@@ -11,6 +11,7 @@ import (
 
 	gocommon "github.com/harvester/go-common/common"
 	ctlharvesterv1 "github.com/harvester/harvester/pkg/generated/controllers/harvesterhci.io/v1beta1"
+	k8scorev1 "github.com/rancher/wrangler/v3/pkg/generated/controllers/core/v1"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -20,6 +21,7 @@ import (
 
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
+	"github.com/harvester/node-disk-manager/pkg/filter"
 	ctldiskv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	ctllonghornv1 "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io/v1beta2"
 	"github.com/harvester/node-disk-manager/pkg/option"
@@ -29,6 +31,7 @@ import (
 
 const (
 	blockDeviceHandlerName = "harvester-block-device-handler"
+	configMapHandlerName   = "harvester-node-disk-manager-configmap-handler"
 	upgradeStateLabel      = "harvesterhci.io/upgradeState"
 	upgradeStateSucceeded  = "Succeeded"
 	upgradeStateFailed     = "Failed"
@@ -48,6 +51,7 @@ type Controller struct {
 	BlockInfo        block.Info
 
 	LVMVgClient     ctldiskv1.LVMVolumeGroupController
+	ConfigMaps      k8scorev1.ConfigMapController
 	provisionerLock *sync.Mutex // Lock for some specific provisioner operations, e.g. LVM
 
 	scanner   *Scanner
@@ -75,6 +79,7 @@ func Register(
 	upgrades ctlharvesterv1.UpgradeController,
 	bds ctldiskv1.BlockDeviceController,
 	lvmVGs ctldiskv1.LVMVolumeGroupController,
+	configMaps k8scorev1.ConfigMapController,
 	block block.Info,
 	opt *option.Option,
 	scanner *Scanner,
@@ -90,6 +95,7 @@ func Register(
 		Blockdevices:     bds,
 		BlockdeviceCache: bds.Cache(),
 		LVMVgClient:      lvmVGs,
+		ConfigMaps:       configMaps,
 		BlockInfo:        block,
 		scanner:          scanner,
 		semaphore:        semaphoreObj,
@@ -108,7 +114,26 @@ func Register(
 
 	bds.OnChange(ctx, blockDeviceHandlerName, controller.OnBlockDeviceChange)
 	bds.OnRemove(ctx, blockDeviceHandlerName, controller.OnBlockDeviceDelete)
+	configMaps.OnChange(ctx, configMapHandlerName, controller.OnConfigMapChange)
 	return nil
+}
+
+// OnConfigMapChange watches the ConfigMap changes and triggers disk rescan when filter configuration changes
+func (c *Controller) OnConfigMapChange(_ string, cm *corev1.ConfigMap) (*corev1.ConfigMap, error) {
+	if cm == nil {
+		return nil, nil
+	}
+
+	// Only trigger rescan for the specific ConfigMap
+	if cm.Name == filter.DefaultConfigMapName && cm.Namespace == filter.DefaultConfigMapNamespace {
+		logrus.Infof("ConfigMap %s/%s changed, triggering disk rescan", cm.Namespace, cm.Name)
+		utils.CallerWithCondLock(c.scanner.Cond, func() any {
+			c.scanner.Cond.Signal()
+			return nil
+		})
+	}
+
+	return cm, nil
 }
 
 // OnBlockDeviceChange watch the block device CR on change and performing disk operations
