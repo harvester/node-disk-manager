@@ -268,6 +268,7 @@ func run(opt *option.Option) error {
 			upgrades,
 			bds,
 			lvmVGs,
+			configmap,
 			block,
 			opt,
 			scanner,
@@ -283,7 +284,7 @@ func run(opt *option.Option) error {
 			logrus.Fatalf("failed to register ndm volume group controller, %s", err.Error())
 		}
 
-		if err := start.All(ctx, opt.Threadiness, disks, lhs); err != nil {
+		if err := start.All(ctx, opt.Threadiness, disks, lhs, corev1); err != nil {
 			logrus.Fatalf("error starting, %s", err.Error())
 		}
 
