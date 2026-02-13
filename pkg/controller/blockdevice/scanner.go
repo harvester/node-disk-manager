@@ -98,6 +98,9 @@ func (s *Scanner) collectAllDevices() []*deviceWithAutoProvision {
 	allDevices := make([]*deviceWithAutoProvision, 0)
 	// list all the block devices
 	for _, disk := range s.BlockInfo.GetDisks() {
+		logrus.WithFields(logrus.Fields{
+			"device": fmt.Sprintf("/dev/%s", disk.Name),
+		}).Info("Scanning device")
 		// ignore block device by filters
 		if s.ApplyExcludeFiltersForDisk(disk) {
 			continue
