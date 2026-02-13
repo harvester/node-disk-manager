@@ -394,6 +394,9 @@ func disks(ctx *context.Context, paths *linuxpath.Paths) []*Disk {
 		if strings.HasPrefix(dname, "loop") {
 			continue
 		}
+		if strings.HasPrefix(dname, "nbd") {
+			continue
+		}
 
 		d := getDisk(ctx, paths, dname)
 		disks = append(disks, d)
