@@ -85,31 +85,3 @@ autoGPTGenerate:
 
 # Enable debug logging
 debug: false
-
-# ConfigMap-based configuration
-configMap:
-  # Filter configurations - excludes devices from being managed by NDM
-  # Each entry can specify hostname (use "*" or "" for global rules)
-  filters: []
-    # Example:
-    # - hostname: "*"
-    #   excludeDevices:
-    #     - "/dev/sda"
-    #   excludeLabels:
-    #     - "COS_*"
-    #   excludeVendors:
-    #     - "QEMU"
-    #   excludePaths:
-    #     - "/var/lib/longhorn"
-    # - hostname: "node-1"
-    #   excludeDevices:
-    #     - "/dev/sdb"
-  
-  # Auto-provision configurations - automatically provisions matching devices
-  # provisioner defaults to "longhornv1" if not specified
-  autoprovision: []
-    # Example:
-    # - hostname: "*"
-    #   devices:
-    #     - "/dev/sdc"
-    #     - "/dev/sdd"
