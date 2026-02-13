@@ -1,9 +1,9 @@
 package block
 
 import (
-	"os/exec"
 	"strings"
 
+	"github.com/harvester/node-disk-manager/pkg/utils"
 	"github.com/sirupsen/logrus"
 )
 
@@ -11,18 +11,16 @@ const (
 	BLKIDCMD = "blkid"
 )
 
-func doCommandBlkid(partition string, param string) ([]byte, error) {
+func doCommandBlkid(partition string, param string) (string, error) {
 	if !strings.HasPrefix(partition, "/dev") {
 		partition = "/dev/" + partition
 	}
-	args := []string{
+	return utils.NewExecutor().Execute(BLKIDCMD, []string{
 		"-s",
 		param,
 		partition,
 		"-o",
-		"value",
-	}
-	return exec.Command(BLKIDCMD, args[0:]...).Output() // #nosec G204
+		"value"})
 }
 
 func GetFileSystemType(part string) string {
@@ -36,7 +34,7 @@ func GetFileSystemType(part string) string {
 	if len(out) == 0 {
 		return ""
 	}
-	return strings.Split(string(out), "\n")[0]
+	return strings.Split(out, "\n")[0]
 }
 
 func GetDiskUUID(part string, uuidType string) string {
@@ -49,5 +47,5 @@ func GetDiskUUID(part string, uuidType string) string {
 	if len(out) == 0 {
 		return ""
 	}
-	return strings.Split(string(out), "\n")[0]
+	return strings.Split(out, "\n")[0]
 }
