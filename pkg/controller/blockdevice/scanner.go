@@ -118,20 +118,6 @@ func (s *Scanner) collectAllDevices() []*deviceWithAutoProvision {
 		logrus.Infof("  - SerialNumber: %v", bd.Status.DeviceStatus.Details.SerialNumber)
 		autoProv := s.ApplyAutoProvisionFiltersForDisk(disk)
 		allDevices = append(allDevices, &deviceWithAutoProvision{bd: bd, AutoProvisioned: autoProv})
-
-		for _, part := range disk.Partitions {
-			// ignore block device by filters
-			if s.ApplyExcludeFiltersForPartition(part) {
-				continue
-			}
-			logrus.Debugf("Found a partition block device /dev/%s", part.Name)
-			bd := GetPartitionBlockDevice(part, s.NodeName, s.Namespace)
-			if bd.Name == "" {
-				logrus.Infof("Skip adding non-identifiable block device %s", bd.Spec.DevPath)
-				continue
-			}
-			allDevices = append(allDevices, &deviceWithAutoProvision{bd: bd, AutoProvisioned: false})
-		}
 	}
 	return allDevices
 }
@@ -342,19 +328,6 @@ func (s *Scanner) ApplyExcludeFiltersForDisk(disk *block.Disk) bool {
 		return true
 	}
 
-	return false
-}
-
-// ApplyExcludeFiltersForPartition check the status of partition for every
-// registered exclude filters. If the partition meets one of the criteria, it
-// returns true.
-func (s *Scanner) ApplyExcludeFiltersForPartition(part *block.Partition) bool {
-	for _, filter := range s.ExcludeFilters {
-		if filter.ApplyPartFilter(part) {
-			logrus.Debugf("block device /dev/%s ignored by %s", part.Name, filter.Name)
-			return true
-		}
-	}
 	return false
 }
 
