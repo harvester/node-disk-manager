@@ -100,7 +100,7 @@ func (u *Udev) monitor(ctx context.Context, errors chan error) {
 
 func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 	udevDevice := InitUdevDevice(uevent.Env)
-	if !udevDevice.IsDisk() && !udevDevice.IsPartition() {
+	if !udevDevice.IsDisk() {
 		return
 	}
 	logrus.WithFields(logrus.Fields{
@@ -118,18 +118,16 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 	}
 
 	if uevent.Action == netlink.REMOVE {
-		if udevDevice.IsDisk() {
-			// Note: at this point, the device is gone, so we can't use GetDiskByDevPath()
-			// to get any reliable information about the device, and we kinda want its
-			// name for logging purposes.  Happily, we _can_ fill out enough data to
-			// figure out the BD name by creating a minimal block.Disk then calling
-			// UpdateDiskFromUdev() here instead, so the logging works fine.
-			disk = &block.Disk{Name: strings.TrimPrefix(devPath, "/dev/")}
-			udevDevice.UpdateDiskFromUdev(disk)
-			bd = blockdevice.GetDiskBlockDevice(disk, u.nodeName, u.namespace)
-			// just wake up scanner to check if the disk is removed, do no-op internally
-			u.wakeUpScanner(uevent, bd)
-		}
+		// Note: at this point, the device is gone, so we can't use GetDiskByDevPath()
+		// to get any reliable information about the device, and we kinda want its
+		// name for logging purposes.  Happily, we _can_ fill out enough data to
+		// figure out the BD name by creating a minimal block.Disk then calling
+		// UpdateDiskFromUdev() here instead, so the logging works fine.
+		disk = &block.Disk{Name: strings.TrimPrefix(devPath, "/dev/")}
+		udevDevice.UpdateDiskFromUdev(disk)
+		bd = blockdevice.GetDiskBlockDevice(disk, u.nodeName, u.namespace)
+		// just wake up scanner to check if the disk is removed, do no-op internally
+		u.wakeUpScanner(uevent, bd)
 		return
 	}
 
@@ -137,28 +135,10 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 		return
 	}
 
-	var part *block.Partition
-	if udevDevice.IsDisk() {
-		disk = u.scanner.BlockInfo.GetDiskByDevPath(devPath)
-		bd = blockdevice.GetDiskBlockDevice(disk, u.nodeName, u.namespace)
-	} else {
-		parentPath, err := block.GetParentDevName(devPath)
-		if err != nil {
-			logrus.WithFields(logrus.Fields{
-				"device": devPath,
-				"err":    err.Error(),
-			}).Error("Failed to get parent device name")
-		}
-		part = u.scanner.BlockInfo.GetPartitionByDevPath(parentPath, devPath)
-		disk = part.Disk
-		bd = blockdevice.GetPartitionBlockDevice(part, u.nodeName, u.namespace)
-	}
+	disk = u.scanner.BlockInfo.GetDiskByDevPath(devPath)
+	bd = blockdevice.GetDiskBlockDevice(disk, u.nodeName, u.namespace)
 
 	if u.scanner.ApplyExcludeFiltersForDisk(disk) {
-		return
-	}
-
-	if part != nil && u.scanner.ApplyExcludeFiltersForPartition(part) {
 		return
 	}
 

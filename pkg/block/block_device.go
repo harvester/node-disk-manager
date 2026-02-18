@@ -43,7 +43,6 @@ type Info interface {
 	GetDisks() []*Disk
 	GetPartitions() []*Partition
 	GetDiskByDevPath(name string) *Disk
-	GetPartitionByDevPath(disk, part string) *Partition
 	GetFileSystemInfoByDevPath(dname string) *FileSystemInfo
 }
 
@@ -87,15 +86,6 @@ func (i *infoImpl) GetDiskByDevPath(name string) *Disk {
 	name = strings.TrimPrefix(name, "/dev/")
 	paths := linuxpath.New(i.ctx)
 	return getDisk(i.ctx, paths, name)
-}
-
-func (i *infoImpl) GetPartitionByDevPath(disk, part string) *Partition {
-	disk = strings.TrimPrefix(disk, "/dev/")
-	part = strings.TrimPrefix(part, "/dev/")
-	paths := linuxpath.New(i.ctx)
-	partition := diskPartition(i.ctx, paths, disk, part)
-	partition.Disk = getDisk(i.ctx, paths, disk)
-	return partition
 }
 
 func (i *infoImpl) GetFileSystemInfoByDevPath(dname string) *FileSystemInfo {
@@ -564,15 +554,6 @@ func parseMountEntry(line string) *mountEntry {
 	opts := strings.Split(fields[3], ",")
 	res.Options = opts
 	return res
-}
-
-// GeneratePartitionGUID generates a GUID for partitions.
-func GeneratePartitionGUID(part *Partition, nodeName string) string {
-	if valueExists(part.UUID) {
-		return makeHashGUID(nodeName + part.UUID)
-	}
-	logrus.Debugf("failed to generate Partition GUID for device %s", part.Name)
-	return ""
 }
 
 // GenerateDiskGUID generates a GUID for disks.

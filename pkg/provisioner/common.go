@@ -326,12 +326,6 @@ func ResolvePersistentDevPath(device *diskv1.BlockDevice) (string, error) {
 		}
 
 		return "", fmt.Errorf("WWN/UUID/PTUUID/BusPath was not found on device %s", device.Name)
-	case diskv1.DeviceTypePart:
-		partUUID := device.Status.DeviceStatus.Details.PartUUID
-		if partUUID == "" {
-			return "", fmt.Errorf("PARTUUID was not found on device %s", device.Name)
-		}
-		return filepath.EvalSymlinks("/dev/disk/by-partuuid/" + partUUID)
 	default:
 		return "", fmt.Errorf("failed to resolve persistent dev path for block device %s", device.Name)
 	}
