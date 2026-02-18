@@ -349,14 +349,6 @@ func (c *Controller) updateDeviceStatus(device *diskv1.BlockDevice, devPath stri
 		autoProvisioned := c.scanner.ApplyAutoProvisionFiltersForDisk(disk)
 		// Only disk can be auto-provisioned.
 		needAutoProvision = c.scanner.NeedsAutoProvision(device, autoProvisioned)
-	case diskv1.DeviceTypePart:
-		parentDevPath, err := block.GetParentDevName(devPath)
-		if err != nil {
-			return fmt.Errorf("failed to get parent devPath for %s: %v", device.Name, err)
-		}
-		part := c.BlockInfo.GetPartitionByDevPath(parentDevPath, devPath)
-		bd := GetPartitionBlockDevice(part, c.NodeName, c.Namespace)
-		newStatus = bd.Status.DeviceStatus
 	default:
 		return fmt.Errorf("unknown device type %s", device.Status.DeviceStatus.Details.DeviceType)
 	}
