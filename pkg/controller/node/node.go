@@ -69,9 +69,19 @@ func (c *Controller) OnNodeChange(_ string, node *longhornv1.Node) (*longhornv1.
 			return node, err
 		}
 
+		// bd.Status.Tags is specified as `json:"tags,omitempty"`
+		// but disk.Tags is specified as `json:"tags"`. This means that if
+		// both are empty, bd.Status.Tags will be nil, while disk.Tags will
+		// be an empty slice. In this case, reflect.DeepEqual() will return
+		// false, which will result in an unnecessary update. We can avoid
+		// this by skipping the DeepCopy and DeepEqual entirely if both
+		// bd.Status.Tags and disk.Tags are already empty.
+		if len(bd.Status.Tags) == 0 && len(disk.Tags) == 0 {
+			continue
+		}
+
 		bdCpy := bd.DeepCopy()
 		bdCpy.Status.Tags = disk.Tags
-
 		if !reflect.DeepEqual(bd, bdCpy) {
 			logrus.Debugf("Update block device %s tags (Status) from %v to %v", bd.Name, bd.Status.Tags, disk.Tags)
 			if _, err := c.BlockDevices.Update(bdCpy); err != nil {
