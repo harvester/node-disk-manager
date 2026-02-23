@@ -108,6 +108,11 @@ func (s *SingleDiskSuite) Test_0_AutoProvisionSingleDisk() {
 			// focus the target node
 			continue
 		}
+		if !strings.HasPrefix(blockdevice.Spec.DevPath, "/dev/sd") {
+			// we're only interested in devices that match the auto provision
+			// filter set in ci/scripts/helpers.sh, which is "/dev/sd*"
+			continue
+		}
 		bdStatus := blockdevice.Status
 		if bdStatus.State == "Active" {
 			if bdStatus.ProvisionPhase != "Provisioned" {
