@@ -132,7 +132,7 @@ func (s *HotPlugTestSuite) Test_0_PreCheckForDiskCount() {
 			s.targetDiskName = blockdevice.Name
 		}
 	}
-	require.Equal(s.T(), 1, diskCount, "We should only have one disk.")
+	require.Equal(s.T(), 1, diskCount, "We should only have one provisioned disk.")
 }
 
 func (s *HotPlugTestSuite) Test_1_HotPlugRemoveDisk() {
@@ -173,16 +173,24 @@ func (s *HotPlugTestSuite) Test_2_HotPlugAddDisk() {
 	require.Equal(s.T(), diskv1.BlockDeviceActive, curBlockdevice.Status.State, "Disk status should be inactive after we add disk")
 }
 
-func (s *HotPlugTestSuite) Test_3_AddDuplicatedWWNDsik() {
-	// create another another disk raw file and xml
+func (s *HotPlugTestSuite) Test_3_AddDuplicatedWWNDisk() {
+	getBlockDeviceCount := func() int {
+		bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
+		blockdeviceList, err := bdi.List(context.TODO(), v1.ListOptions{})
+		require.Equal(s.T(), nil, err, "Get BlockdevicesList should not get error")
+		return len(blockdeviceList.Items)
+	}
+	numBlockDevices := getBlockDeviceCount()
 
-	originalDeviceRaw := fmt.Sprintf("%s/node1-sda.qcow2", s.hotplugTargetBaseDir)
+	// create another another disk raw file and xml
 	duplicatedDeviceXML := fmt.Sprintf("%s/node1-sdb.xml", s.hotplugTargetBaseDir)
 	duplicatedDeviceRaw := fmt.Sprintf("%s/node1-sdb.qcow2", s.hotplugTargetBaseDir)
 
-	cmdCpyRawFile := fmt.Sprintf("cp %s %s", originalDeviceRaw, duplicatedDeviceRaw)
-	_, _, err := doCommand(cmdCpyRawFile)
-	require.Equal(s.T(), nil, err, "Running command `%s` should not get error", cmdCpyRawFile)
+	// We need to make a new disk image for the duplicated WWN device. If we were to
+	// copy the existing image, NDM would pick up the UUID and skip the WWN check.
+	cmdNewRawFile := fmt.Sprintf("qemu-img create -f qcow2 %s 30g", duplicatedDeviceRaw)
+	_, _, err := doCommand(cmdNewRawFile)
+	require.Equal(s.T(), nil, err, "Running command `%s` should not get error", cmdNewRawFile)
 
 	hotplugDiskXMLFileName := fmt.Sprintf("%s/node1-sda.xml", s.hotplugTargetBaseDir)
 	disk, err := utils.DiskXMLReader(hotplugDiskXMLFileName)
@@ -202,10 +210,7 @@ func (s *HotPlugTestSuite) Test_3_AddDuplicatedWWNDsik() {
 
 	// check disk status
 	require.NotEqual(s.T(), "", s.targetDiskName, "target disk name should not be empty before we start hotplug (add) test")
-	bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
-	blockdeviceList, err := bdi.List(context.TODO(), v1.ListOptions{})
-	require.Equal(s.T(), nil, err, "Get BlockdevicesList should not get error")
-	require.Equal(s.T(), 1, len(blockdeviceList.Items), "We should have one disks because duplicated wwn should not added")
+	require.Equal(s.T(), numBlockDevices, getBlockDeviceCount(), "We should have the same number of disks we started with because duplicated wwn should not be added")
 
 	// cleanup this disk
 	cmd = fmt.Sprintf("virsh detach-disk %s %s --live", s.hotplugTargetNodeName, "sdb")
