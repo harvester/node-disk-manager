@@ -148,6 +148,14 @@ func (s *LVMSuite) patchDaemonSet() {
 }
 
 func (s *LVMSuite) attachTwoDisks() {
+	getBlockDeviceCount := func() int {
+		bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
+		blockdeviceList, err := bdi.List(context.TODO(), v1.ListOptions{})
+		require.Equal(s.T(), nil, err, "Get BlockdevicesList should not get error")
+		return len(blockdeviceList.Items)
+	}
+	numBlockDevices := getBlockDeviceCount()
+
 	// Create Target Disk.
 	// we can ignore the qcow2 file because we already have the disk files on test_1_disk_hotplug_test.go
 	firstDeviceRaw := fmt.Sprintf("%s/node1-sda.qcow2", s.hotplugTargetBaseDir)
@@ -177,14 +185,13 @@ func (s *LVMSuite) attachTwoDisks() {
 
 	s.doAttachDisk(s.hotplugTargetNodeName, secondDeviceXMLFile)
 
+	require.Equal(s.T(), numBlockDevices+2, getBlockDeviceCount(), "There should be two new devices added")
 }
 
 func (s *LVMSuite) Test_0_ProvisionLVMWithMultipleDisk() {
 	bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
 	bdList, err := bdi.List(context.TODO(), v1.ListOptions{})
-	require.Equal(s.T(), len(bdList.Items), 2, "BlockdevicesList should only have two devices")
 	require.Equal(s.T(), err, nil, "Get BlockdevicesList should not get error")
-	require.NotEqual(s.T(), len(bdList.Items), 0, "BlockdevicesList should not be empty")
 
 	for _, blockdevice := range bdList.Items {
 		if blockdevice.Spec.NodeName != s.targetNodeName {
