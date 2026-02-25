@@ -81,6 +81,9 @@ func (i *infoImpl) GetPartitions() []*Partition {
 }
 
 func (i *infoImpl) GetDiskByDevPath(name string) *Disk {
+	// multipath devices use `/dev/mapper/xxx`, but inside here we need the
+	// short name (/dev/dm-x) in order to query udev via /sys/block
+	name, _ = filepath.EvalSymlinks(name)
 	name = strings.TrimPrefix(name, "/dev/")
 	paths := linuxpath.New(i.ctx)
 	return getDisk(i.ctx, paths, name)
