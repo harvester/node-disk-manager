@@ -8,12 +8,13 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/google/uuid"
 	ctlharvesterv1 "github.com/harvester/harvester/pkg/generated/controllers/harvesterhci.io/v1beta1"
+	"github.com/jaypipes/ghw/pkg/util"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"slices"
 
 	diskv1 "github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
@@ -66,6 +67,7 @@ func NewScanner(
 }
 
 func (s *Scanner) Start(ctx context.Context) error {
+	// Always scan once on start
 	if err := s.scanBlockDevicesOnNode(ctx); err != nil {
 		return err
 	}
@@ -84,7 +86,7 @@ func (s *Scanner) Start(ctx context.Context) error {
 				return
 			}
 
-			logrus.Infof("scanner waked up, do scan...")
+			logrus.Infof("Scanner woke up, do scan...")
 			if err := s.scanBlockDevicesOnNode(ctx); err != nil {
 				logrus.Errorf("Failed to rescan block devices on node %s: %v", s.NodeName, err)
 			}
@@ -94,6 +96,10 @@ func (s *Scanner) Start(ctx context.Context) error {
 	return nil
 }
 
+// collectAllDevices returns a slice containing every BlockDevice on the system.
+// The BlockDevices in the list will not have valid names, but the DeviceStatus
+// fields (UUID, WWN, Vendor, Model, SerialNumber, BusPath) will have been filled
+// in as completely as possible.
 func (s *Scanner) collectAllDevices() []*deviceWithAutoProvision {
 	allDevices := make([]*deviceWithAutoProvision, 0)
 	// list all the block devices
@@ -105,74 +111,160 @@ func (s *Scanner) collectAllDevices() []*deviceWithAutoProvision {
 		if s.ApplyExcludeFiltersForDisk(disk) {
 			continue
 		}
-		logrus.Debugf("Found a disk block device /dev/%s", disk.Name)
 		bd := GetDiskBlockDevice(disk, s.NodeName, s.Namespace)
-		if bd.Name == "" {
-			logrus.Infof("Skip adding non-identifiable block device /dev/%s", disk.Name)
-			continue
-		}
-		logrus.Infof("Detected the disk with block device /dev/%s, id(Name): %s on node %s", disk.Name, bd.Name, s.NodeName)
-		logrus.Infof("  - wwn: %v", bd.Status.DeviceStatus.Details.WWN)
-		logrus.Infof("  - vendor: %v", bd.Status.DeviceStatus.Details.Vendor)
-		logrus.Infof("  - model: %v", bd.Status.DeviceStatus.Details.Model)
-		logrus.Infof("  - SerialNumber: %v", bd.Status.DeviceStatus.Details.SerialNumber)
+		logrus.WithFields(logrus.Fields{
+			"device":  fmt.Sprintf("/dev/%s", disk.Name),
+			"uuid":    bd.Status.DeviceStatus.Details.UUID,         // Can be empty
+			"wwn":     bd.Status.DeviceStatus.Details.WWN,          // Can be util.UNKNOWN
+			"vendor":  bd.Status.DeviceStatus.Details.Vendor,       // Can be util.UNKNOWN
+			"model":   bd.Status.DeviceStatus.Details.Model,        // Can be util.UNKNOWN
+			"serial":  bd.Status.DeviceStatus.Details.SerialNumber, // Can be util.UNKNOWN
+			"buspath": bd.Status.DeviceStatus.Details.BusPath,      // Can be util.UNKNOWN
+		}).Info("Detected disk")
 		autoProv := s.ApplyAutoProvisionFiltersForDisk(disk)
 		allDevices = append(allDevices, &deviceWithAutoProvision{bd: bd, AutoProvisioned: autoProv})
 	}
 	return allDevices
 }
 
-func (s *Scanner) handleExistingDev(oldBd *diskv1.BlockDevice, newBd *diskv1.BlockDevice, autoProvisioned bool) {
-	if isDevPathChanged(oldBd, newBd) {
-		// Dev Path will change when device is temporarily gone and back.
-		// Node reboot might also cause the device path change (depends on device interrupt).
-		// According to the above, we should update the device path once it changes.
-		if oldBd.Status.State == diskv1.BlockDeviceInactive {
-			logrus.Infof("The inactive block device %s with wwn %s is coming back", newBd.Name, newBd.Status.DeviceStatus.Details.WWN)
-			oldBd.Status.State = diskv1.BlockDeviceActive
-		}
-		logrus.Infof("Try to update the device path of %s, which is changed from %s to %s.", oldBd.Name, oldBd.Status.DeviceStatus.DevPath, newBd.Status.DeviceStatus.DevPath)
-		oldBd.Status.DeviceStatus.DevPath = newBd.Status.DeviceStatus.DevPath
-		if _, err := s.Blockdevices.Update(oldBd); err != nil {
-			logrus.Errorf("Update device %s status error, wake up scanner again: %v", oldBd.Name, err)
-			s.Cond.Signal()
-		}
-	} else if isDevAlreadyProvisioned(newBd) {
-		logrus.Debugf("Skip the provisioned device: %s", newBd.Name)
-	} else if s.NeedsAutoProvision(oldBd, autoProvisioned) {
-		logrus.Debugf("Enqueue block device %s for auto-provisioning", newBd.Name)
-		s.Blockdevices.Enqueue(s.Namespace, newBd.Name)
-	} else if isDMDevice(oldBd.Status.DeviceStatus.DevPath) {
-		// Other dm devices should be filtered our at the beginning.
-		// So, we focus multipath device checking here.
-		// If system doesn't enable multipathd, the block device will become inactive after reboot.
-		// So, we need to add a checking after starting multipathd.
-		// Then the block device will become active from inactive.
-		oldBdCp := oldBd.DeepCopy()
+// handleExistingDev will update an existing BD CR based on the current state
+// of an actual block device on the system.  It will return true if newBd
+// (the detected block device) really does correspond to oldBd (the BD CR),
+// and was potentially updated in some way, or false if newBd doesn't
+// actually correspond to oldBd.
+//
+// Note:
+//   - If the device was inactive before it's OK for its status to change,
+//     notably the device path.  It should also be fine if the buspath
+//     changes (maybe it got moved somwehere else)
+//   - Changes of vendor+model+serial would always be unexpected
+//   - Changes of UUID might be unexpected (unless a UUID got added due
+//     to a device being provisioned, but that shouldn't come by this
+//     code path).
+//   - Changes of WWN might be unexepcted, except in that weird case where
+//     a kernel update changed the WWNs of existing disks.
+func (s *Scanner) handleExistingDev(oldBd *diskv1.BlockDevice, newBd *diskv1.BlockDevice, autoProvisioned bool) bool {
+	oldBdCp := oldBd.DeepCopy()
 
-		// We've checked it outside, we can skip error
-		path, _ := filepath.EvalSymlinks(oldBd.Status.DeviceStatus.DevPath)
-		if _, err := utils.IsMultipathDevice(path); err == nil {
-			logrus.Infof("The multipath device %s is available, change it to active.", oldBd.Name)
-			oldBdCp.Status.State = diskv1.BlockDeviceActive
+	if oldBd.Status.State == diskv1.BlockDeviceActive {
+		// The BD is currently active. In this case the dev path shouldn't change, but
+		// it's possible that some other details may have changed (the UUID if someone
+		// manually created a filesystem on an unprovisioned device, or the WWN in
+		// rare cases where a kernel update messes with device naming)
+		if isDevPathChanged(oldBd, newBd) {
+			// The dev path for an active device has changed.  This means that newBd
+			// might not actually correspond to oldBd.  This shouldn't usually happen
+			// in normal operation, but can happen if e.g. a multipath BD exists, but
+			// multipathd isn't started anymore.  In this case newBd will point to
+			// one of the raw devices.  The same is true in reverse.  It can also
+			// happen if someone powers down the host and moves a disk from one
+			// place to another.  In all these cases we want to skip the update and
+			// return false so that later the BD can be marked inactive or removed.
+			// For devices that end up with a new path, these will be picked up and
+			// re-activated in a subsequent scanner run.
+			logrus.WithFields(logrus.Fields{
+				"name":      oldBd.Name,
+				"device":    oldBd.Status.DeviceStatus.DevPath,
+				"newDevice": newBd.Status.DeviceStatus.DevPath,
+			}).Warn("new device path detected for active device - skipping update")
+			return false
 		}
-
-		if reflect.DeepEqual(oldBd, oldBdCp) {
-			logrus.Debugf("Skip updating multipath device %s", oldBd.Name)
-			return
-		}
-
-		if _, err := s.Blockdevices.Update(oldBdCp); err != nil {
-			logrus.Errorf("Update device %s status error, wake up scanner again: %v", oldBdCp.Name, err)
-			s.Cond.Signal()
-		}
+		// DevPath isn't changed, but other things might, e.g. UUID if someone manually formatted a disk
+		oldBdCp.Status.DeviceStatus.Capacity = newBd.Status.DeviceStatus.Capacity
+		oldBdCp.Status.DeviceStatus.Details = newBd.Status.DeviceStatus.Details
+		oldBdCp.Status.DeviceStatus.Partitioned = newBd.Status.DeviceStatus.Partitioned
 	} else {
-		logrus.Debugf("Skip updating device %s", newBd.Name)
+		// The BD is inactive.  This can happen if a provisioned device is
+		// temporarily gone and has come back.  It can also happen for provisioned
+		// multipath devices if the system is rebooted without multipathd enabled,
+		// and then later multipathd is started again.
+		if strings.HasPrefix(oldBd.Status.DeviceStatus.DevPath, "/dev/mapper") {
+			if isDevPathChanged(oldBd, newBd) {
+				logrus.WithFields(logrus.Fields{
+					"name":      oldBd.Name,
+					"device":    oldBd.Status.DeviceStatus.DevPath,
+					"newDevice": newBd.Status.DeviceStatus.DevPath,
+				}).Warn("new device path detected for inactive multipath device - skipping update")
+				return false
+			}
+			path, _ := filepath.EvalSymlinks(oldBd.Status.DeviceStatus.DevPath)
+			if _, err := utils.IsMultipathDevice(path); err == nil {
+				logrus.WithFields(logrus.Fields{
+					"name": oldBd.Name,
+				}).Info("reactivating multipath device")
+				oldBdCp.Status.State = diskv1.BlockDeviceActive
+				// DeviceStatus really shouldn't have changed for MP devices, but pick it up anyway just in case
+				oldBdCp.Status.DeviceStatus.Capacity = newBd.Status.DeviceStatus.Capacity
+				oldBdCp.Status.DeviceStatus.Details = newBd.Status.DeviceStatus.Details
+				oldBdCp.Status.DeviceStatus.Partitioned = newBd.Status.DeviceStatus.Partitioned
+			}
+		} else {
+			if isDevPathChanged(oldBd, newBd) {
+				logrus.WithFields(logrus.Fields{
+					"name":      oldBd.Name,
+					"device":    oldBd.Status.DeviceStatus.DevPath,
+					"newDevice": newBd.Status.DeviceStatus.DevPath,
+				}).Info("reactivating block device with new path")
+				oldBdCp.Status.DeviceStatus.DevPath = newBd.Status.DeviceStatus.DevPath
+			} else {
+				logrus.WithFields(logrus.Fields{
+					"name": oldBd.Name,
+				}).Infof("reactivating block device")
+			}
+			oldBdCp.Status.State = diskv1.BlockDeviceActive
+			// This pulls in all other possible updates -- wwn, uuid, vendor, model, serial, ...
+			oldBdCp.Status.DeviceStatus.Capacity = newBd.Status.DeviceStatus.Capacity
+			oldBdCp.Status.DeviceStatus.Details = newBd.Status.DeviceStatus.Details
+			oldBdCp.Status.DeviceStatus.Partitioned = newBd.Status.DeviceStatus.Partitioned
+		}
 	}
+
+	if !reflect.DeepEqual(oldBd, oldBdCp) {
+		logrus.WithFields(logrus.Fields{
+			"name":      oldBd.Name,
+			"status":    fmt.Sprintf("%+v", oldBd.Status.DeviceStatus),
+			"newStatus": fmt.Sprintf("%+v", oldBdCp.Status.DeviceStatus),
+		}).Info("updating device")
+		if _, err := s.Blockdevices.Update(oldBdCp); err != nil {
+			logrus.WithFields(logrus.Fields{
+				"name": oldBd.Name,
+				"err":  err,
+			}).Error("error updating device, waking scanner")
+			s.Cond.Signal()
+		}
+	} else if isDevAlreadyProvisioned(oldBd) {
+		logrus.WithFields(logrus.Fields{
+			"name": oldBd.Name,
+		}).Debug("skipping provisioned device")
+	} else if s.NeedsAutoProvision(oldBd, autoProvisioned) {
+		logrus.WithFields(logrus.Fields{
+			"name": oldBd.Name,
+		}).Debug("enquing device for auto-provisioning")
+		s.Blockdevices.Enqueue(s.Namespace, oldBd.Name)
+	} else {
+		logrus.WithFields(logrus.Fields{
+			"name": oldBd.Name,
+		}).Debug("device is unchanged (no need to update)")
+	}
+	return true
 }
 
-func (s *Scanner) deactivateBlockDevices(oldBds map[string]*diskv1.BlockDevice) error {
+func (s *Scanner) deactivateOrDeleteBlockDevices(oldBds map[string]*diskv1.BlockDevice) error {
 	for _, oldBd := range oldBds {
+		// It should be fine for devices that aren't actually provisioned to go away
+		// (this actually works really nicely if the scanner has found individual
+		// raw devices that should be part of a multipath device but multipathd
+		// isn't running -- once the multipath device activates later, these
+		// "wrong" devices just go away).
+		if oldBd.Status.ProvisionPhase == diskv1.ProvisionPhaseUnprovisioned {
+			logrus.Debugf("Delete device %s", oldBd.Name)
+			if err := s.Blockdevices.Delete(oldBd.Namespace, oldBd.Name, &metav1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
+				return err
+			}
+			continue
+		}
+		// ..but devices that _are_ provisioned need to be set inactive
+		// (see https://github.com/harvester/node-disk-manager/pull/55 for history)
 		if oldBd.Status.State == diskv1.BlockDeviceInactive {
 			logrus.Debugf("The device %s is already inactive, continue.", oldBd.Name)
 			continue
@@ -223,58 +315,133 @@ func (s *Scanner) loadConfigMapFilters(ctx context.Context) {
 
 // scanBlockDevicesOnNode scans block devices on the node, and it will either create or update them.
 func (s *Scanner) scanBlockDevicesOnNode(ctx context.Context) error {
-	logrus.Debugf("Scan block devices of node: %s", s.NodeName)
+	logrus.WithFields(logrus.Fields{
+		"node": s.NodeName,
+	}).Debug("Scanning block devices")
 
 	// load filter and auto-provision configurations from ConfigMap
 	s.loadConfigMapFilters(ctx)
 
-	// list all the block devices
+	// List all the block devices. These won't have valid names.
 	allDevices := s.collectAllDevices()
 
-	oldBdList, err := s.Blockdevices.List(s.Namespace, metav1.ListOptions{
+	// The list of old block devices (i.e. existing BD CRs) _will_ have valid names.
+	existingBDs, err := s.Blockdevices.List(s.Namespace, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", corev1.LabelHostname, s.NodeName),
 	})
 	if err != nil {
 		return err
 	}
 
-	oldBds, existingWWNs := convertBlockDeviceListToMap(oldBdList)
-	logrus.Debugf("The current BdList: %+v", oldBds)
+	existingBDsByName, existingBDsByWWN, existingBDsByUUID := mapBlockDeviceIDs(existingBDs)
 	for _, device := range allDevices {
-		bd := device.bd
+		newBd := device.bd
 		autoProvisioned := device.AutoProvisioned
-		logrus.Debugf("Processing block device %s with wwn: %s", bd.Name, bd.Status.DeviceStatus.Details.WWN)
-		if oldBd, ok := oldBds[bd.Name]; ok {
-			s.handleExistingDev(oldBd, bd, autoProvisioned)
-			// only first time to update the cache
-			if !CacheDiskTags.Initialized() && oldBd.Spec.Tags != nil && len(oldBd.Spec.Tags) > 0 {
-				CacheDiskTags.UpdateDiskTags(oldBd.Name, oldBd.Spec.Tags)
-			}
-			// remove blockdevice from old device so we can delete missing devices afterward
-			delete(oldBds, bd.Name)
-		} else {
-			if bd.Status.DeviceStatus.Details.WWN != "unknown" {
-				/*
-				* Prevent add duplicated wwn even if the device path is different.
-				* That prevent the device from being formatted again.
-				* We should use multiple device path (TBD) for the same wwn.
-				 */
-				if slices.Contains(existingWWNs, bd.Status.DeviceStatus.Details.WWN) {
-					logrus.Warnf("Skip adding duplicated WWN device %s, device path: %s", bd.Status.DeviceStatus.Details.WWN, bd.Spec.DevPath)
-					continue
-				}
-				existingWWNs = append(existingWWNs, bd.Status.DeviceStatus.Details.WWN)
-				logrus.Debugf("The current WWNs are: %v", existingWWNs)
-			} else {
-				// If the WWN is "unknown" it means the disk is identified by FS UUID, so skip the duplicate check
+
+		var existingBd *diskv1.BlockDevice = nil
+
+		// Here's where we find the BD by "what's on the disk"...
+		// The identify order is:
+		// 1. UUID (for provisioned disks)
+		// 2. WWN if there's no UUID
+		// 3. Vendor+Model+Serial+BusPath if there's no UUID or WWN
+		if uuid, uuidValid := getBlockDeviceUUID(newBd); uuidValid {
+			if foundBd, uuidExists := existingBDsByUUID[uuid]; uuidExists {
 				logrus.WithFields(logrus.Fields{
-					"name":   bd.Name,
-					"device": bd.Spec.DevPath,
-				}).Info("Skipping duplicate disk check (device has no WWN)")
+					"device": newBd.Status.DeviceStatus.DevPath,
+					"uuid":   uuid,
+					"name":   foundBd.Name,
+				}).Debug("found existing BD by UUID")
+				existingBd = foundBd
 			}
-			logrus.Infof("Create new device %s with wwn: %s", bd.Name, bd.Status.DeviceStatus.Details.WWN)
-			if _, err := s.SaveBlockDevice(bd, autoProvisioned); err != nil && !errors.IsAlreadyExists(err) {
+			// If it has a UUID but isn't in existingBDsByUUID, this will
+			// fall through to try and create a new BD, unless it gets
+			// picked up by WWN, or vendor+model+serial+buspath
+		}
+
+		if wwn, wwnValid := getBlockDeviceWWN(newBd); wwnValid && existingBd == nil {
+			if foundBd, wwnExists := existingBDsByWWN[wwn]; wwnExists {
+				logrus.WithFields(logrus.Fields{
+					"device": newBd.Status.DeviceStatus.DevPath,
+					"wwn":    wwn,
+					"name":   foundBd.Name,
+				}).Debug("found existing BD by WWN")
+				existingBd = foundBd
+			}
+			// If it has a WWN but isn't in existingBDsByWWN, this will
+			// fall through to try and create a new BD, unless it
+			// gets picked up by vendor+model+serial+buspath
+		}
+
+		if existingBd == nil {
+			// We have neither UUID nor WWN, so fall back to matching
+			// vendor+model+serial+buspath.  If these four match, it's
+			// the same device.  I don't think we can rely on any of
+			// these individually:
+			// - vendor and model are too broad (there can be many devices
+			//   for which these are the same)
+			// - vendor+model+serial should theoretically be unique, except:
+			//   - we've seen some RAID controllers expose duplicate serials
+			//   - this doesn't help for virtio disks which have no model
+			//     nor serial
+			// This method will result in additional BDs being added if
+			// someone pops the case and physically moves disks around,
+			// but there's probably no fixing that.
+			for _, foundBd := range existingBDs.Items {
+				if foundBd.Status.DeviceStatus.Details.Vendor == newBd.Status.DeviceStatus.Details.Vendor &&
+					foundBd.Status.DeviceStatus.Details.Model == newBd.Status.DeviceStatus.Details.Model &&
+					foundBd.Status.DeviceStatus.Details.SerialNumber == newBd.Status.DeviceStatus.Details.SerialNumber &&
+					foundBd.Status.DeviceStatus.Details.BusPath == newBd.Status.DeviceStatus.Details.BusPath {
+					logrus.WithFields(logrus.Fields{
+						"device":  newBd.Status.DeviceStatus.DevPath,
+						"vendor":  newBd.Status.DeviceStatus.Details.Vendor,
+						"model":   newBd.Status.DeviceStatus.Details.Model,
+						"serial":  newBd.Status.DeviceStatus.Details.SerialNumber,
+						"buspath": newBd.Status.DeviceStatus.Details.BusPath,
+						"name":    foundBd.Name,
+					}).Debug("found existing BD by Vendor+Model+SerialNumber+BusPath")
+					existingBd = &foundBd
+					break
+				}
+			}
+		}
+
+		if existingBd != nil {
+			// Pick up the name of the existing block device we found (not strictly necessary,
+			// but just in case we try to use newBd.name in handleExistingDev...)
+			newBd.Name = existingBd.Name
+			if s.handleExistingDev(existingBd, newBd, autoProvisioned) {
+				// only first time to update the cache
+				if !CacheDiskTags.Initialized() && existingBd.Spec.Tags != nil && len(existingBd.Spec.Tags) > 0 {
+					CacheDiskTags.UpdateDiskTags(existingBd.Name, existingBd.Spec.Tags)
+				}
+				// remove blockdevice from list of existing device names so we can delete missing devices afterward
+				delete(existingBDsByName, newBd.Name)
+			}
+		} else {
+			// New block device, needs a name...
+			newBd.Name = uuid.NewString()
+
+			logrus.WithFields(logrus.Fields{
+				"name":    newBd.Name,
+				"device":  newBd.Status.DeviceStatus.DevPath,
+				"vendor":  newBd.Status.DeviceStatus.Details.Vendor,
+				"model":   newBd.Status.DeviceStatus.Details.Model,
+				"serial":  newBd.Status.DeviceStatus.Details.SerialNumber,
+				"buspath": newBd.Status.DeviceStatus.Details.BusPath,
+				"uuid":    newBd.Status.DeviceStatus.Details.UUID,
+				"wwn":     newBd.Status.DeviceStatus.Details.WWN,
+			}).Info("creating new BD")
+			if _, err := s.SaveBlockDevice(newBd, autoProvisioned); err != nil && !errors.IsAlreadyExists(err) {
 				return err
+			}
+			// Add newly added disk to existingUUID and existingWWN maps in case there's
+			// any other disks to be added which somehow have duplicate UUIDs or WWNs.
+			if uuid, uuidValid := getBlockDeviceUUID(newBd); uuidValid {
+				existingBDsByUUID[uuid] = newBd
+			}
+			if wwn, wwnValid := getBlockDeviceWWN(newBd); wwnValid {
+				existingBDsByWWN[wwn] = newBd
 			}
 		}
 	}
@@ -283,23 +450,42 @@ func (s *Scanner) scanBlockDevicesOnNode(ctx context.Context) error {
 		logrus.Debugf("CacheDiskTags initialized: %+v", CacheDiskTags)
 	}
 
-	// We do not remove the block device that maybe just temporily not available.
-	// Set it to inactive and give the chance to recover.
-	if err := s.deactivateBlockDevices(oldBds); err != nil {
+	if err := s.deactivateOrDeleteBlockDevices(existingBDsByName); err != nil {
 		return err
 	}
 	return nil
 }
 
-func convertBlockDeviceListToMap(bdList *diskv1.BlockDeviceList) (map[string]*diskv1.BlockDevice, []string) {
-	var wwns = make([]string, len(bdList.Items))
-	bdMap := make(map[string]*diskv1.BlockDevice, len(bdList.Items))
-	for order, bd := range bdList.Items {
-		bd := bd
-		bdMap[bd.Name] = &bd
-		wwns[order] = bd.Status.DeviceStatus.Details.WWN
+func getBlockDeviceWWN(bd *diskv1.BlockDevice) (string, bool) {
+	// WWN should always either be valid or "unknown", but doesn't hurt to also check for an empty string
+	return bd.Status.DeviceStatus.Details.WWN, bd.Status.DeviceStatus.Details.WWN != "" && bd.Status.DeviceStatus.Details.WWN != util.UNKNOWN
+}
+
+func getBlockDeviceUUID(bd *diskv1.BlockDevice) (string, bool) {
+	// UUID should always be either valid or an empty string, but doesn't hurt to also check for "unknown"
+	return bd.Status.DeviceStatus.Details.UUID, bd.Status.DeviceStatus.Details.UUID != "" && bd.Status.DeviceStatus.Details.UUID != util.UNKNOWN
+}
+
+// mapBlockDeviceIDs returns three maps:
+// - names maps BD names to BlockDevices
+// - wwns maps device WWNs to BlockDevices
+// - uuids maps filesystem/LVM UUIDs to BlockDevices
+// The names map will contain all existing BDs, but the wwns and uuids maps will
+// only contain BDs that actually have WWNs and UUIDs respectively.
+func mapBlockDeviceIDs(bdList *diskv1.BlockDeviceList) (names map[string]*diskv1.BlockDevice, wwns map[string]*diskv1.BlockDevice, uuids map[string]*diskv1.BlockDevice) {
+	names = make(map[string]*diskv1.BlockDevice)
+	wwns = make(map[string]*diskv1.BlockDevice)
+	uuids = make(map[string]*diskv1.BlockDevice)
+	for _, bd := range bdList.Items {
+		names[bd.Name] = &bd
+		if wwn, ok := getBlockDeviceWWN(&bd); ok {
+			wwns[wwn] = &bd
+		}
+		if uuid, ok := getBlockDeviceUUID(&bd); ok {
+			uuids[uuid] = &bd
+		}
 	}
-	return bdMap, wwns
+	return
 }
 
 // ApplyExcludeFiltersForDisk check the status of disk for every
@@ -389,16 +575,4 @@ func isDevPathChanged(oldBd *diskv1.BlockDevice, newBd *diskv1.BlockDevice) bool
 /* isDevAlreadyProvisioned would return true if the device is provisioned */
 func isDevAlreadyProvisioned(newBd *diskv1.BlockDevice) bool {
 	return newBd.Status.ProvisionPhase == diskv1.ProvisionPhaseProvisioned
-}
-
-func isDMDevice(name string) bool {
-	// Resolve symlink to check if it points to dm-x
-	// Resolve /dev/mapper/0QEMU_QEMU_HARDDISK_disk1 -> /dev/dm-0
-	// Resolve /dev/dm-0 -> /dev/dm-0
-	path, err := filepath.EvalSymlinks(name)
-	if err == nil && strings.Contains(path, "dm-") {
-		return true
-	}
-
-	return false
 }
