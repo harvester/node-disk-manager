@@ -2,7 +2,6 @@ package block
 
 import (
 	"bufio"
-	"encoding/hex"
 	"io"
 	"os"
 	"path/filepath"
@@ -14,8 +13,6 @@ import (
 	"github.com/jaypipes/ghw/pkg/linuxpath"
 	"github.com/jaypipes/ghw/pkg/option"
 	"github.com/jaypipes/ghw/pkg/util"
-	"github.com/sirupsen/logrus"
-	"golang.org/x/crypto/blake2b"
 
 	"github.com/harvester/go-common/common"
 	ndmutils "github.com/harvester/node-disk-manager/pkg/utils"
@@ -556,31 +553,4 @@ func parseMountEntry(line string) *mountEntry {
 	opts := strings.Split(fields[3], ",")
 	res.Options = opts
 	return res
-}
-
-// GenerateDiskGUID generates a GUID for disks.
-func GenerateDiskGUID(disk *Disk, nodeName string) string {
-	var id string
-	if valueExists(disk.WWN) {
-		id = disk.WWN + disk.Vendor + disk.Model + disk.SerialNumber
-	} else if valueExists(disk.UUID) {
-		id = disk.UUID
-	} else if valueExists(disk.PtUUID) {
-		id = disk.PtUUID
-	}
-	if valueExists(id) {
-		return makeHashGUID(nodeName + id)
-	}
-	logrus.Debugf("failed to generate GUID for device %s", disk.Name)
-	return ""
-}
-
-func makeHashGUID(payload string) string {
-	hasher, _ := blake2b.New(16, nil)
-	hasher.Write([]byte(payload))
-	return hex.EncodeToString(hasher.Sum(nil))
-}
-
-func valueExists(value string) bool {
-	return len(value) > 0 && value != util.UNKNOWN
 }

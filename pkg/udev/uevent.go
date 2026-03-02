@@ -12,7 +12,6 @@ import (
 	"github.com/pilebones/go-udev/netlink"
 	"github.com/sirupsen/logrus"
 
-	"github.com/harvester/node-disk-manager/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/node-disk-manager/pkg/block"
 	"github.com/harvester/node-disk-manager/pkg/controller/blockdevice"
 	"github.com/harvester/node-disk-manager/pkg/option"
@@ -110,7 +109,6 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 
 	devPath := udevDevice.GetDevName()
 	var disk *block.Disk
-	var bd *v1beta1.BlockDevice
 
 	if strings.Contains(devPath, "dm-") {
 		// wait for rebuilding the multipath device
@@ -119,15 +117,20 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 
 	if uevent.Action == netlink.REMOVE {
 		// Note: at this point, the device is gone, so we can't use GetDiskByDevPath()
-		// to get any reliable information about the device, and we kinda want its
-		// name for logging purposes.  Happily, we _can_ fill out enough data to
-		// figure out the BD name by creating a minimal block.Disk then calling
-		// UpdateDiskFromUdev() here instead, so the logging works fine.
+		// to get any reliable information about the device, but we _can_ at least
+		// dig out the vendor, model, serial number and WWN for logging purposes
+		// if we create a minimal block.Disk then call UpdateDiskFromUdev().
 		disk = &block.Disk{Name: strings.TrimPrefix(devPath, "/dev/")}
 		udevDevice.UpdateDiskFromUdev(disk)
-		bd = blockdevice.GetDiskBlockDevice(disk, u.nodeName, u.namespace)
+		logrus.WithFields(logrus.Fields{
+			"device": devPath,
+			"vendor": disk.Vendor,
+			"model":  disk.Model,
+			"serial": disk.SerialNumber,
+			"wwn":    disk.WWN,
+		}).Info("removing disk")
 		// just wake up scanner to check if the disk is removed, do no-op internally
-		u.wakeUpScanner(uevent, bd)
+		u.wakeUpScanner(uevent, devPath, u.namespace)
 		return
 	}
 
@@ -136,31 +139,22 @@ func (u *Udev) ActionHandler(uevent netlink.UEvent) {
 	}
 
 	disk = u.scanner.BlockInfo.GetDiskByDevPath(devPath)
-	bd = blockdevice.GetDiskBlockDevice(disk, u.nodeName, u.namespace)
 
 	if u.scanner.ApplyExcludeFiltersForDisk(disk) {
 		return
 	}
 
-	if bd.Name == "" {
-		logrus.WithFields(logrus.Fields{
-			"device": bd.Spec.DevPath,
-		}).Info("Skip adding non-identifiable block device")
-		return
-	}
-
 	// just wake up scanner to check if the disk is added, do no-op internally
-	u.wakeUpScanner(uevent, bd)
+	u.wakeUpScanner(uevent, devPath, u.namespace)
 }
 
-func (u *Udev) wakeUpScanner(uevent netlink.UEvent, bd *v1beta1.BlockDevice) {
+func (u *Udev) wakeUpScanner(uevent netlink.UEvent, devPath string, namespace string) {
 	utils.CallerWithCondLock(u.scanner.Cond, func() any {
 		logrus.WithFields(logrus.Fields{
-			"namespace":  bd.Namespace,
-			"name":       bd.Name,
+			"namespace":  namespace,
 			"kind":       "BlockDevice",
 			"udevAction": uevent.Action,
-			"device":     bd.Spec.DevPath,
+			"device":     devPath,
 		}).Info("udev action triggering scanner wake")
 		u.scanner.Cond.Signal()
 		return nil

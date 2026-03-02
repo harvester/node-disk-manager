@@ -19,7 +19,9 @@ const (
 	DeviceTypeLabel = "ndm.harvesterhci.io/device-type"
 )
 
-// GetDiskBlockDevice gets a blockdevice from a given disk.
+// GetDiskBlockDevice creates a BlockDevices from a given disk. Note that the _name_ of
+// the BlockDevice retuned is not set by this function. The caller must set it before
+// trying to actually create a BD CR based on this, and must take care when comparing BDs.
 func GetDiskBlockDevice(disk *block.Disk, nodeName, namespace string) *diskv1.BlockDevice {
 	fileSystemInfo := &diskv1.FilesystemStatus{
 		MountPoint: disk.FileSystemInfo.MountPoint,
@@ -81,10 +83,6 @@ func GetDiskBlockDevice(disk *block.Disk, nodeName, namespace string) *diskv1.Bl
 			FileSystem: &diskv1.FilesystemInfo{},
 		},
 		Status: status,
-	}
-
-	if guid := block.GenerateDiskGUID(disk, nodeName); len(guid) > 0 {
-		bd.ObjectMeta.Name = guid
 	}
 
 	return bd
