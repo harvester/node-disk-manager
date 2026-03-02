@@ -11,41 +11,36 @@ const (
 	BLKIDCMD = "blkid"
 )
 
-func doCommandBlkid(partition string, param string) (string, error) {
+// doCommandBlkid runs `blkid -o export` for a given device and returns
+// a map of whatever tags are set for that device, for example we might
+// get something like this for a provisioned Longhorn V1 device:
+//
+//	# blkid -o export /dev/sdd
+//	DEVNAME=/dev/sdd
+//	UUID=e4e57552-f7cb-4934-864e-56dee55ae7da
+//	BLOCK_SIZE=4096
+//	TYPE=ext4
+//
+// The map will be empty if blkid can't find anything interesting on
+// the device.
+func doCommandBlkid(partition string) (blkidInfo map[string]string) {
+	blkidInfo = make(map[string]string)
 	if !strings.HasPrefix(partition, "/dev") {
 		partition = "/dev/" + partition
 	}
-	return utils.NewExecutor().Execute(BLKIDCMD, []string{
-		"-s",
-		param,
-		partition,
-		"-o",
-		"value"})
-}
-
-func GetFileSystemType(part string) string {
-	out, err := doCommandBlkid(part, FsType)
-
+	out, err := utils.NewExecutor().Execute(BLKIDCMD, []string{"-o", "export", partition})
 	if err != nil {
-		logrus.Debugf("failed to read disk uuid of %s : %s\n", part, err.Error())
-		return ""
+		logrus.WithFields(logrus.Fields{
+			"partition": partition,
+			"error":     err.Error(),
+		}).Debug("failed to read disk info")
+		return
 	}
-
-	if len(out) == 0 {
-		return ""
+	for line := range strings.SplitSeq(out, "\n") {
+		kv := strings.Split(line, "=")
+		if len(kv) == 2 {
+			blkidInfo[kv[0]] = kv[1]
+		}
 	}
-	return strings.Split(out, "\n")[0]
-}
-
-func GetDiskUUID(part string, uuidType string) string {
-	out, err := doCommandBlkid(part, uuidType)
-	if err != nil {
-		logrus.Debugf("failed to read disk uuid of %s : %s\n", part, err.Error())
-		return ""
-	}
-
-	if len(out) == 0 {
-		return ""
-	}
-	return strings.Split(out, "\n")[0]
+	return blkidInfo
 }
