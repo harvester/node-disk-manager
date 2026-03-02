@@ -273,8 +273,9 @@ func diskPartitions(ctx *context.Context, paths *linuxpath.Paths, disk string) [
 func diskPartition(ctx *context.Context, paths *linuxpath.Paths, disk, fname string) *Partition {
 	size := partitionSizeBytes(paths, disk, fname)
 	mp, pt, ro := partitionInfo(ctx, paths, fname)
-	du := GetDiskUUID(fname, string(PartUUID))
-	fsUUID := GetDiskUUID(fname, string(UUID))
+	blkidInfo := doCommandBlkid(fname)
+	du := blkidInfo[string(PartUUID)]
+	fsUUID := blkidInfo[string(UUID)]
 	var label string
 	if fsUUID != "" {
 		label = GetFileSystemLabel(fname)
@@ -324,8 +325,9 @@ func getDisk(ctx *context.Context, paths *linuxpath.Paths, dname string) *Disk {
 	serialNo := diskSerialNumber(paths, dname)
 	wwn := diskWWN(paths, dname)
 	removable := diskIsRemovable(paths, dname)
-	uuid := GetDiskUUID(dname, string(UUID))
-	ptuuid := GetDiskUUID(dname, string(PTUUID))
+	blkidInfo := doCommandBlkid(dname)
+	uuid := blkidInfo[string(UUID)]
+	ptuuid := blkidInfo[string(PTUUID)]
 	mp, pt, ro := partitionInfo(ctx, paths, dname)
 	fs := FileSystemInfo{
 		MountPoint: mp,
@@ -340,7 +342,7 @@ func getDisk(ctx *context.Context, paths *linuxpath.Paths, dname string) *Disk {
 	}
 
 	if fs.Type == "" {
-		fs.Type = GetFileSystemType(dname)
+		fs.Type = blkidInfo[FsType]
 	}
 
 	d := &Disk{
