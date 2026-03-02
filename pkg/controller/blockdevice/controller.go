@@ -102,12 +102,19 @@ func Register(
 		provisionerLock:  &sync.Mutex{},
 	}
 
+	// This will run the scanner once (which includes the initial CacheDiskTags
+	// update), then leave it sitting there waiting to be woken up for future
+	// scans.  Note that if any active BDs were moved to different device paths,
+	// this first scan will either mark those BDs inactive (for provisioned
+	// devices), or remove them (for unprovisioned devices), so we need to ensure
+	// the scanner runs at least once more on startup so it can re-activate any
+	// devices whose paths have changed.
 	if err := scanner.Start(ctx); err != nil {
 		return err
 	}
 
 	utils.CallerWithCondLock(scanner.Cond, func() any {
-		logrus.Infof("Wake up scanner first time to update CacheDiskTags ...")
+		logrus.Infof("Waking scanner once on startup in case any device paths have changed")
 		scanner.Cond.Signal()
 		return nil
 	})
