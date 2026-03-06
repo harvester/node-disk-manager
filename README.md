@@ -43,13 +43,12 @@ For more information, see [Chart README] https://github.com/harvester/charts/blo
 
 ## Features
 
-- [x] Disk provisioning as Longhorn disks with a simple boolean.
+- [x] Disk provisioning for Longhorn v1, Longhorn v2 and LVM
 - [x] Disk formatting if needed with a simple boolean.
 - [x] Disk discovery, including existing block devices, and hot plugged disks.
 - [x] Support multiple storage controller (IDE/SATA/SCSI/Virtio).
-- [x] Support virtual disks (WWN on the disk is required for unique identification).
-- [ ] Device mapper and LVM are not yet supported.
-- [ ] The behaviour of multipath devices is undefined.
+- [x] Support virtual disks
+- [x] Support multipath devices
 
 ## Architecture
 
@@ -74,17 +73,9 @@ information from the operating system, for example, file system status, mount
 point, and UUIDs. These details are all stored in `status.deviceStatus`.
 
 The name of a `blockdevice` is a global identifier across nodes within the
-whole cluster. At this moment, we recommend disk you want to provision to have
-at least WWN on it. It helps the system to globally identify the `blockdevice`
-resource and link to real block device of the operating system. For disks with
-a WWN, the global identifier is a hash of the concatenation of the node name,
-with the disk's WWN, Vendor, Model and Serial Number.
+whole cluster. Previously these names were deterministically generated based on disk WWN, but this is problematic for disks that don't have WWNs. Now, the names are just randomly generated UUIDs and physical disks are mapped back to `blockdevice` CRs by checking disk UUID, WWN, and Vendor+Model+Serial+BusPath in that order.
 
-Besides its `name` field, the most important fields you need to know are
-`spec.fileSystem.provisioned` and `spec.fileSystem.forceFormatted`. The former
-implies that a user expects the block device to be provisioned as Longhorn disk
-for further usage. And the latter just indicates that NDM would perform a disk
-formatting if not yet done before.
+Besides its `name` field, the most important field to know is `spec.provisioner` which allows the block device to be provisioned for use by Longhorn v1, Longhorn v2, or LVM.
 
 ### Disk Discovery
 
@@ -96,12 +87,10 @@ The first is `scanner`. It scans all supported block devices on the system and
 creates a new `blockdevice` CR if one does not exist, or deletes the old CR if
 is already removed from the system. For block devices that need to be updated, it
 simply enqueues the `blockdevice` CR to let blockdevice controller handle the
-update path to prevent any possible race condition. Scanner also periodically
-scans the system to inform the controller to update info if needed.
+update path to prevent any possible race condition.
 
 The other key component is `udev`, which utilizes Linux's dynamic device 
-management mechanism. `udev`, as a supplement of scanner, mostly behaves the same
-as scanner, but instantly for responding to hot-plugged devices.
+management mechanism. `udev` wakes up the scanner in response to events such as a hot-plugged device being attached.
 
 There is a module `filter`. It comprises several filter functions, which
 have their own predicates to determine which block device should be collected by
@@ -118,7 +107,7 @@ corresponding actions, namely
 - Update device status details
 
 Which actual action to perform are determined by the combination of
-`spec.fileSystem`, device formatting and mounting status, and
+`spec.provisioner`, device formatting and mounting status, and
 `status.provisionPhase`. The last one indicates whether the block device is 
 currently used by Longhorn.
 
@@ -144,9 +133,6 @@ Here we give the Sample XML for `libvirt` to create a SCSI device with `WWN`.
       <wwn>0x5000c50015ac3bd9</wwn>
     </disk>
 ```
-
-**NOTE**: When disks don't have a WWN, NDM will use filesystem UUID as a unique identifier.
-That has some limitations. For example, the UUID will be missing if the filesystem metadata is broken.
 
 ## License
 Copyright (c) 2026 [SUSE, LLC.](https://www.suse.com/)
