@@ -170,7 +170,7 @@ func udevInfo(paths *linuxpath.Paths, disk string) (map[string]string, error) {
 
 	// Look up block device in udev runtime database
 	udevID := "b" + strings.TrimSpace(string(devNo))
-	udevBytes, err := os.ReadFile(filepath.Join(paths.RunUdevData, udevID))
+	udevBytes, err := os.ReadFile(filepath.Clean(filepath.Join(paths.RunUdevData, udevID)))
 	if err != nil {
 		return nil, err
 	}

@@ -56,7 +56,6 @@ require (
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
 	k8s.io/client-go v12.0.0+incompatible
-	k8s.io/utils v0.0.0-20260108192941-914a6e750570
 )
 
 require (
@@ -120,6 +119,7 @@ require (
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-aggregator v0.35.0 // indirect
 	k8s.io/kube-openapi v0.31.5 // indirect
+	k8s.io/utils v0.0.0-20260108192941-914a6e750570 // indirect
 	kubevirt.io/api v1.4.0 // indirect
 	kubevirt.io/containerized-data-importer-api v1.61.0 // indirect
 	kubevirt.io/controller-lifecycle-operator-sdk/api v0.0.0-20220329064328-f3cc58c6ed90 // indirect
