@@ -1,12 +1,13 @@
 # syntax=docker/dockerfile:1.18.0
 
-FROM registry.suse.com/bci/bci-base:15.7
+FROM registry.suse.com/bci/bci-base:16.0
 
+# util-linux -> for `mount` command
 # util-linux-systemd -> for `lsblk` command
 # e2fsprogs -> for `mkfs.ext4` command
 # iproute2 -> for `ip` command
 RUN zypper -n rm container-suseconnect && \
-    zypper -n install util-linux-systemd e2fsprogs iproute2 && \
+    zypper -n install util-linux util-linux-systemd e2fsprogs iproute2 && \
     zypper -n clean -a && rm -rf /tmp/* /var/tmp/* /usr/share/doc/packages/*
 
 ARG TARGETPLATFORM
