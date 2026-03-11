@@ -197,9 +197,16 @@ func resolveLonghornV2DevPath(device *diskv1.BlockDevice) (string, error) {
 			"wwn":    device.Status.DeviceStatus.Details.WWN,
 		}).Warn("/dev/disk/by-id/wwn-* path does not exist for device")
 	}
-	// TODO: see if we can find something else under /dev/disk/by-id, for
-	// example maybe there's a serial number but no WWN.  In the "no WWN"
-	// case, maybe it's sufficient to just take whatever path we can find
-	// under /dev/disk/by-id that links back to the device...?
-	return "", fmt.Errorf("unable to resolve Longhorn V2 device path; %s has no WWN and no BDF", device.Name)
+	if busPath := device.Status.DeviceStatus.Details.BusPath; valueExists(busPath) {
+		devPath = "/dev/disk/by-path/" + busPath
+		_, err := os.Stat(devPath)
+		if err == nil {
+			return devPath, nil
+		}
+		logrus.WithFields(logrus.Fields{
+			"device":  device.Name,
+			"buspath": device.Status.DeviceStatus.Details.BusPath,
+		}).Warn("/dev/disk/by-path/* path does not exist for device")
+	}
+	return "", fmt.Errorf("unable to resolve Longhorn V2 device path; %s has no BDF, no WWN, and no BusPath", device.Name)
 }
