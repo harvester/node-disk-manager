@@ -20,7 +20,7 @@ jobs:
       - golang
     steps:
       - name: "Clone and check"
-        uses: actions/checkout@v3
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
       - name: "Run validations"
         run: |
           make validate
@@ -32,7 +32,7 @@ jobs:
       - golang
     steps:
       - name: "Clone and check"
-        uses: actions/checkout@v3
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
       - name: "Build Integration Test Image and run Unit Tests"
         run: |
           BUILD_FOR_CI=true make
@@ -113,7 +113,7 @@ jobs:
       - golang
     steps:
       - name: "Clone and check"
-        uses: actions/checkout@v3
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
       - name: "Build Integration Test Image and run Unit Tests"
         run: |
           BUILD_FOR_CI=true make
