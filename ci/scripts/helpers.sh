@@ -2,11 +2,17 @@
 
 TOP_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/" &> /dev/null && pwd )"
 
+HELM_VERSION=v3.20.0
+HELM_SUM_amd64=dbb4c8fc8e19d159d1a63dda8db655f9ffa4aac1b9a6b188b34a40957119b286
+HELM_SUM_arm64=bfb14953295d5324d47ab55f3dfba6da28d46c848978c8fbf412d4271bdc29f1
+HELM_SUM="HELM_SUM_${ARCH}"
+
 # ensure helm command
 if [[ $(ensure_command helm) -eq 1 ]]; then
     echo "no helm, try to curl..."
-    curl -O https://get.helm.sh/helm-v3.9.4-linux-amd64.tar.gz
-    tar -zxvf helm-v3.9.4-linux-amd64.tar.gz
+    curl -O https://get.helm.sh/helm-${HELM_VERSION}-linux-${ARCH}.tar.gz
+    echo "${!HELM_SUM}" helm-${HELM_VERSION}-linux-${ARCH}.tar.gz | sha256sum -c -
+    tar xvzf helm-${HELM_VERSION}-linux-${ARCH}.tar.gz
     HELM=$TOP_DIR/linux-amd64/helm
     $HELM version
 else
