@@ -50,7 +50,7 @@ type HotPlugTestSuite struct {
 
 func (s *HotPlugTestSuite) SetupSuite() {
 	nodeName := ""
-	f, err := os.Open(filepath.Join(os.Getenv("NDM_HOME"), "ssh-config"))
+	f, err := os.Open(filepath.Join(os.Getenv("NDM_HOME"), "ssh-config")) //nolint:gosec
 	require.Equal(s.T(), nil, err, "Open ssh-config should not get error")
 	cfg, err := ssh_config.Decode(f)
 	require.Equal(s.T(), nil, err, "Decode ssh-config should not get error")
@@ -252,7 +252,7 @@ func (s *HotPlugTestSuite) Test_4_RemoveInactiveDisk() {
 func doCommand(cmdString string) (string, string, error) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	cmd := exec.Command("bash", "-c", cmdString)
+	cmd := exec.Command("bash", "-c", cmdString) //nolint:gosec // G702: intentional test helper for running shell commands
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
