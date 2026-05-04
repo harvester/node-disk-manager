@@ -37,7 +37,7 @@ type LVMSuite struct {
 
 func (s *LVMSuite) SetupSuite() {
 	nodeName := ""
-	f, err := os.Open(filepath.Join(os.Getenv("NDM_HOME"), "ssh-config"))
+	f, err := os.Open(filepath.Join(os.Getenv("NDM_HOME"), "ssh-config")) //nolint:gosec
 	require.Equal(s.T(), err, nil, "Open ssh-config should not get error")
 	cfg, err := ssh_config.Decode(f)
 	require.Equal(s.T(), err, nil, "Decode ssh-config should not get error")

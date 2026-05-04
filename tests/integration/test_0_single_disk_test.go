@@ -37,7 +37,7 @@ type ProvisionedDisk struct {
 
 func (s *SingleDiskSuite) SetupSuite() {
 	nodeName := ""
-	f, err := os.Open(filepath.Join(os.Getenv("NDM_HOME"), "ssh-config"))
+	f, err := os.Open(filepath.Join(os.Getenv("NDM_HOME"), "ssh-config")) //nolint:gosec
 	require.Equal(s.T(), nil, err, "Open ssh-config should not get error")
 	cfg, err := ssh_config.Decode(f)
 	require.Equal(s.T(), nil, err, "Decode ssh-config should not get error")
