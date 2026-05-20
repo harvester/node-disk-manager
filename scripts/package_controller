@@ -14,7 +14,7 @@ if [ -e ${DOCKERFILE}.${ARCH} ]; then
     DOCKERFILE=${DOCKERFILE}.${ARCH}
 fi
 
-docker buildx build --load -f ${DOCKERFILE} -t ${IMAGE} .
+docker build -f ${DOCKERFILE} -t ${IMAGE} .
 echo Built ${IMAGE}
 if [[ -n ${BUILD_FOR_CI} ]]; then
     docker push ${IMAGE}
