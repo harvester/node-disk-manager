@@ -172,9 +172,11 @@ func resolveLonghornV2DevPath(device *diskv1.BlockDevice) (string, error) {
 			device.Status.DeviceStatus.Details.DeviceType)
 	}
 	devPath := ""
-	if device.Status.DeviceStatus.Details.StorageController == string(diskv1.StorageControllerVirtio) ||
-		device.Status.DeviceStatus.Details.StorageController == string(diskv1.StorageControllerNVMe) {
-		// In both of these cases, we should (hopefully!) be able to extract BDF from BusPath
+	if (device.Status.DeviceStatus.Details.StorageController == string(diskv1.StorageControllerVirtio) ||
+		device.Status.DeviceStatus.Details.StorageController == string(diskv1.StorageControllerNVMe)) &&
+		device.Spec.Provisioner.Longhorn.DiskDriver != longhornv1.DiskDriverAio {
+		// In both of these cases, we should (hopefully!) be able to extract BDF from BusPath,
+		// but this can't be used with the "aio" disk driver (that needs a regular device path)
 		if strings.HasPrefix(device.Status.DeviceStatus.Details.BusPath, "pci-") {
 			devPath = strings.Split(device.Status.DeviceStatus.Details.BusPath, "-")[1]
 		}
@@ -187,7 +189,11 @@ func resolveLonghornV2DevPath(device *diskv1.BlockDevice) (string, error) {
 		}).Warn("Unable to extract BDF from BusPath, falling back to WWN")
 	}
 	if wwn := device.Status.DeviceStatus.Details.WWN; valueExists(wwn) {
-		devPath = "/dev/disk/by-id/wwn-" + wwn
+		if device.Status.DeviceStatus.Details.StorageController == string(diskv1.StorageControllerNVMe) {
+			devPath = "/dev/disk/by-id/nvme-" + wwn
+		} else {
+			devPath = "/dev/disk/by-id/wwn-" + wwn
+		}
 		_, err := os.Stat(devPath)
 		if err == nil {
 			return devPath, nil
@@ -195,9 +201,10 @@ func resolveLonghornV2DevPath(device *diskv1.BlockDevice) (string, error) {
 		logrus.WithFields(logrus.Fields{
 			"device": device.Name,
 			"wwn":    device.Status.DeviceStatus.Details.WWN,
-		}).Warn("/dev/disk/by-id/wwn-* path does not exist for device")
+		}).Warn("/dev/disk/by-id/* path does not exist for device")
 	}
 	if busPath := device.Status.DeviceStatus.Details.BusPath; valueExists(busPath) {
+		// This won't work for LHv2 devices util https://github.com/longhorn/longhorn/issues/13228 is fixed
 		devPath = "/dev/disk/by-path/" + busPath
 		_, err := os.Stat(devPath)
 		if err == nil {
