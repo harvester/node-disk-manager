@@ -3,3 +3,4 @@
 /bin
 *.swp
 .idea
+/scripts/.version_env
