@@ -1,2 +1,7 @@
 ./.dapper
 ./.cache
+.git
+*.swp
+.idea
+# /bin is not excluded — package/Dockerfile and package/Dockerfile.webhook
+# reference bin/ directly as part of the docker buildx build context.
