@@ -1,5 +1,5 @@
 {
-    "extends": [
-        "github>harvester/renovate:renovate-default"
-    ]
+  "extends": [
+    "github>harvester/dependency-automation:renovate"
+  ]
 }
