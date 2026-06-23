@@ -45,7 +45,7 @@ require (
 	github.com/kevinburke/ssh_config v1.2.0
 	github.com/longhorn/longhorn-manager v1.11.0
 	github.com/melbahja/goph v1.3.0
-	github.com/pilebones/go-udev v0.0.0-20210126000448-a3c2a7a4afb7
+	github.com/pilebones/go-udev v0.9.1
 	github.com/pkg/errors v0.9.1
 	github.com/rancher/lasso v0.2.6
 	github.com/rancher/wrangler/v3 v3.4.0
