@@ -1,6 +1,7 @@
-FROM registry.suse.com/bci/golang:1.26.0 AS builder
+FROM registry.suse.com/bci/golang:1.26 AS builder
 ARG MK_HOST_ARCH
 ENV ARCH=$MK_HOST_ARCH
+ENV GOTOOLCHAIN=auto
 
 RUN zypper -n rm container-suseconnect && \
     zypper -n install git curl docker gzip tar wget awk docker-buildx
