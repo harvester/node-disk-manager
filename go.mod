@@ -41,7 +41,7 @@ require (
 	github.com/harvester/go-common v0.0.0-20260108124725-70d352e21314
 	github.com/harvester/harvester v1.5.1
 	github.com/harvester/webhook v0.1.5
-	github.com/jaypipes/ghw v0.8.1-0.20210701154532-dd036bd38c40
+	github.com/jaypipes/ghw v0.24.0
 	github.com/kevinburke/ssh_config v1.2.0
 	github.com/longhorn/longhorn-manager v1.11.0
 	github.com/melbahja/goph v1.3.0
