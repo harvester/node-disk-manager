@@ -41,7 +41,7 @@ func (u *Udev) Monitor(ctx context.Context) {
 	// because any error will break the monitor loop.
 	errChan := make(chan error)
 	go u.spawnMonitor(ctx, errChan)
-
+	go u.watchMounts(ctx)
 }
 
 func (u *Udev) spawnMonitor(ctx context.Context, errChan chan error) {
