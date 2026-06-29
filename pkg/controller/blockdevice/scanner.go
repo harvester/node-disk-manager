@@ -406,6 +406,19 @@ func (s *Scanner) scanBlockDevicesOnNode(ctx context.Context) error {
 			}
 		}
 
+		// A device with a mount point is only tracked when it was provisioned by NDM
+		// (meaning Longhorn mounted it as part of the normal flow). If it is mounted
+		// but not yet provisioned, an external process mounted it and NDM should leave
+		// it alone. For unprovisioned existing BDs in that case, deactivateOrDeleteBlockDevices
+		// will clean up the stale CR.
+		if mp := newBd.Status.DeviceStatus.FileSystem.MountPoint; mp != "" {
+			if existingBd == nil || existingBd.Status.ProvisionPhase != diskv1.ProvisionPhaseProvisioned {
+				logrus.Infof("block device %s is mounted at %s but not provisioned by NDM, ignoring",
+					newBd.Status.DeviceStatus.DevPath, mp)
+				continue
+			}
+		}
+
 		if existingBd != nil {
 			// Pick up the name of the existing block device we found (not strictly necessary,
 			// but just in case we try to use newBd.name in handleExistingDev...)
