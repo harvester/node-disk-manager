@@ -4,6 +4,7 @@ package udev
 
 import (
 	"context"
+	"fmt"
 	"math"
 
 	"github.com/sirupsen/logrus"
@@ -19,11 +20,12 @@ const procMountInfo = "/host/proc/1/mountinfo"
 
 // watchMounts monitors mount table changes by polling /proc/self/mountinfo for POLLERR.
 // The kernel raises POLLERR on this fd whenever any mount or umount occurs.
-func (u *Udev) watchMounts(ctx context.Context) {
+// On any unrecoverable error it sends to errChan so spawnMountWatcher can respawn it.
+func (u *Udev) watchMounts(ctx context.Context, errChan chan error) {
 	logrus.Debugf("mount watcher: opening %s", procMountInfo)
 	fd, err := unix.Open(procMountInfo, unix.O_RDONLY|unix.O_CLOEXEC, 0)
 	if err != nil {
-		logrus.Errorf("mount watcher: failed to open %s: %v", procMountInfo, err)
+		errChan <- fmt.Errorf("failed to open %s: %w", procMountInfo, err)
 		return
 	}
 	logrus.Debugf("mount watcher: opened fd=%d", fd)
@@ -33,7 +35,7 @@ func (u *Udev) watchMounts(ctx context.Context) {
 	}()
 
 	if fd > math.MaxInt32 {
-		logrus.Errorf("mount watcher: fd %d out of int32 range", fd)
+		errChan <- fmt.Errorf("fd %d out of int32 range", fd)
 		return
 	}
 	fdInt32 := int32(fd) //nolint:gosec // fd is guaranteed non-negative by Open and bounded by math.MaxInt32 check above
@@ -51,14 +53,14 @@ func (u *Udev) watchMounts(ctx context.Context) {
 		default:
 		}
 
-		logrus.Debugf("mount watcher: polling fd=%d for POLLERR, timeout=5s", fd)
-		n, err := unix.Poll(fds, 5*1000)
+		logrus.Debugf("mount watcher: polling fd=%d for POLLERR", fd)
+		n, err := unix.Poll(fds, -1)
 		if err != nil {
 			if err == unix.EINTR {
 				logrus.Debug("mount watcher: poll interrupted by signal, retrying")
 				continue
 			}
-			logrus.Errorf("mount watcher: poll error: %v", err)
+			errChan <- fmt.Errorf("poll error: %w", err)
 			return
 		}
 		if n == 0 {
