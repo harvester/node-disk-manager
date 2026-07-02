@@ -9,13 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pilebones/go-udev/netlink"
-	"github.com/sirupsen/logrus"
-
 	"github.com/harvester/node-disk-manager/pkg/block"
 	"github.com/harvester/node-disk-manager/pkg/controller/blockdevice"
 	"github.com/harvester/node-disk-manager/pkg/option"
 	"github.com/harvester/node-disk-manager/pkg/utils"
+	"github.com/pilebones/go-udev/netlink"
+	"github.com/sirupsen/logrus"
 )
 
 type Udev struct {
@@ -39,9 +38,10 @@ func NewUdev(opt *option.Option, scanner *blockdevice.Scanner) *Udev {
 func (u *Udev) Monitor(ctx context.Context) {
 	// we need to respawn the monitor with any error.
 	// because any error will break the monitor loop.
-	errChan := make(chan error)
-	go u.spawnMonitor(ctx, errChan)
-	go u.watchMounts(ctx)
+	udevErrChan := make(chan error)
+	go u.spawnMonitor(ctx, udevErrChan)
+	mountErrChan := make(chan error)
+	go u.spawnMountWatcher(ctx, mountErrChan)
 }
 
 func (u *Udev) spawnMonitor(ctx context.Context, errChan chan error) {
@@ -51,6 +51,19 @@ func (u *Udev) spawnMonitor(ctx context.Context, errChan chan error) {
 		case err := <-errChan:
 			logrus.Errorf("failed to monitor udev events, error: %s", err.Error())
 			go u.monitor(ctx, errChan)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (u *Udev) spawnMountWatcher(ctx context.Context, errChan chan error) {
+	go u.watchMounts(ctx, errChan)
+	for {
+		select {
+		case err := <-errChan:
+			logrus.Errorf("failed to watch mounts, error: %s", err.Error())
+			go u.watchMounts(ctx, errChan)
 		case <-ctx.Done():
 			return
 		}
