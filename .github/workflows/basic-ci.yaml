@@ -15,6 +15,7 @@ env:
 
 jobs:
   validation:
+    if: ${{ !(github.actor == 'renovate[bot]' && github.event_name == 'pull_request') }}
     runs-on:
       - self-hosted
       - golang
