@@ -28,6 +28,9 @@ jobs:
           make validate-ci
   job-new-installation:
     needs: validation
+    concurrency:
+      group: ndm-new-installation
+      cancel-in-progress: false
     runs-on:
       - self-hosted
       - golang
@@ -43,6 +46,12 @@ jobs:
       - name: "Local Deployment (Harvester+Longhorn+Node-Disk-Manager) for testing"
         id: vm_deploy
         run: |
+          # Clean up any leftover libvirt domains from previous CI runs
+          for domain in $(virsh list --all --name 2>/dev/null | grep "^ndm-new-vagrant-k3s" || true); do
+            echo "Cleaning up leftover domain: $domain"
+            virsh destroy "$domain" 2>/dev/null || true
+            virsh undefine "$domain" --remove-all-storage 2>/dev/null || true
+          done
           rm -rf ndm-new-vagrant-k3s
           git clone https://github.com/bk201/vagrant-k3s ndm-new-vagrant-k3s
           pushd ndm-new-vagrant-k3s
@@ -109,6 +118,9 @@ jobs:
 
   jobs-upgrade:
     needs: validation
+    concurrency:
+      group: ndm-upgrade
+      cancel-in-progress: false
     runs-on:
       - self-hosted
       - golang
@@ -124,6 +136,12 @@ jobs:
       - name: "Local Deployment (Harvester+Longhorn+Node-Disk-Manager) for testing"
         id: vm_deploy
         run: |
+          # Clean up any leftover libvirt domains from previous CI runs
+          for domain in $(virsh list --all --name 2>/dev/null | grep "^ndm-upgrade-vagrant-k3s" || true); do
+            echo "Cleaning up leftover domain: $domain"
+            virsh destroy "$domain" 2>/dev/null || true
+            virsh undefine "$domain" --remove-all-storage 2>/dev/null || true
+          done
           rm -rf ndm-upgrade-vagrant-k3s
           git clone https://github.com/bk201/vagrant-k3s ndm-upgrade-vagrant-k3s
           pushd ndm-upgrade-vagrant-k3s
