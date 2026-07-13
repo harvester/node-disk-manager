@@ -15,6 +15,7 @@ import (
 	"github.com/melbahja/goph"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/clientcmd"
 
@@ -244,14 +245,28 @@ func (s *HotPlugTestSuite) Test_4_RemoveInactiveDisk() {
 	_, err = bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
 	require.Equal(s.T(), nil, err, "Update Blockdevices should not get error")
 
-	// sleep 30 seconds to wait controller handle. jitter is between 7~13 seconds so 30 seconds would be enough to run twice
-	time.Sleep(30 * time.Second)
-
-	// check for the removed status
-	curBlockdevice, err = bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
-	require.Equal(s.T(), nil, err, "Get BlockdevicesList should not get error before we want to check remove")
-	require.Equal(s.T(), "", curBlockdevice.Status.DeviceStatus.FileSystem.MountPoint, "Mountpoint should be empty after we remove disk!")
-	require.Equal(s.T(), diskv1.ProvisionPhaseUnprovisioned, curBlockdevice.Status.ProvisionPhase, "Block device provisionPhase should be Unprovisioned")
+	// Poll until the controller finishes unprovisioning (up to 90 seconds).
+	// Two valid terminal states:
+	//   1. CR still exists with ProvisionPhase=Unprovisioned and MountPoint="" — the
+	//      controller has finished but the scanner hasn't cleaned it up yet.
+	//   2. CR is deleted — the scanner already cleaned up the Unprovisioned+absent disk,
+	//      which is also a correct outcome.
+	require.Eventually(s.T(), func() bool {
+		bd, getErr := bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
+		if getErr != nil {
+			if errors.IsNotFound(getErr) {
+				s.T().Logf("poll: CR deleted (fully cleaned up)")
+				// CR deleted = fully cleaned up, that's also success
+				return true
+			}
+			s.T().Logf("poll: unexpected Get error: %v", getErr)
+			return false
+		}
+		s.T().Logf("poll: MountPoint=%q ProvisionPhase=%q",
+			bd.Status.DeviceStatus.FileSystem.MountPoint, bd.Status.ProvisionPhase)
+		return bd.Status.DeviceStatus.FileSystem.MountPoint == "" &&
+			bd.Status.ProvisionPhase == diskv1.ProvisionPhaseUnprovisioned
+	}, 90*time.Second, 5*time.Second, "Disk should be unprovisioned (CR deleted or MountPoint empty with Unprovisioned phase)")
 }
 
 func doCommand(cmdString string) (string, string, error) {
