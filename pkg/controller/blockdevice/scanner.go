@@ -173,6 +173,9 @@ func (s *Scanner) handleExistingDev(oldBd *diskv1.BlockDevice, newBd *diskv1.Blo
 		oldBdCp.Status.DeviceStatus.Capacity = newBd.Status.DeviceStatus.Capacity
 		oldBdCp.Status.DeviceStatus.Details = newBd.Status.DeviceStatus.Details
 		oldBdCp.Status.DeviceStatus.Partitioned = newBd.Status.DeviceStatus.Partitioned
+		oldBdCp.Status.DeviceStatus.FileSystem.MountPoint = newBd.Status.DeviceStatus.FileSystem.MountPoint
+		oldBdCp.Status.DeviceStatus.FileSystem.Type = newBd.Status.DeviceStatus.FileSystem.Type
+		oldBdCp.Status.DeviceStatus.FileSystem.IsReadOnly = newBd.Status.DeviceStatus.FileSystem.IsReadOnly
 	} else {
 		// The BD is inactive.  This can happen if a provisioned device is
 		// temporarily gone and has come back.  It can also happen for provisioned
@@ -216,6 +219,9 @@ func (s *Scanner) handleExistingDev(oldBd *diskv1.BlockDevice, newBd *diskv1.Blo
 			oldBdCp.Status.DeviceStatus.Capacity = newBd.Status.DeviceStatus.Capacity
 			oldBdCp.Status.DeviceStatus.Details = newBd.Status.DeviceStatus.Details
 			oldBdCp.Status.DeviceStatus.Partitioned = newBd.Status.DeviceStatus.Partitioned
+			oldBdCp.Status.DeviceStatus.FileSystem.MountPoint = newBd.Status.DeviceStatus.FileSystem.MountPoint
+			oldBdCp.Status.DeviceStatus.FileSystem.Type = newBd.Status.DeviceStatus.FileSystem.Type
+			oldBdCp.Status.DeviceStatus.FileSystem.IsReadOnly = newBd.Status.DeviceStatus.FileSystem.IsReadOnly
 		}
 	}
 
@@ -403,19 +409,6 @@ func (s *Scanner) scanBlockDevicesOnNode(ctx context.Context) error {
 					existingBd = &foundBd
 					break
 				}
-			}
-		}
-
-		// A device with a mount point is only tracked when it was provisioned by NDM
-		// (meaning Longhorn mounted it as part of the normal flow). If it is mounted
-		// but not yet provisioned, an external process mounted it and NDM should leave
-		// it alone. For unprovisioned existing BDs in that case, deactivateOrDeleteBlockDevices
-		// will clean up the stale CR.
-		if mp := newBd.Status.DeviceStatus.FileSystem.MountPoint; mp != "" {
-			if existingBd == nil || existingBd.Status.ProvisionPhase != diskv1.ProvisionPhaseProvisioned {
-				logrus.Infof("block device %s is mounted at %s but not provisioned by NDM, ignoring",
-					newBd.Status.DeviceStatus.DevPath, mp)
-				continue
 			}
 		}
 
