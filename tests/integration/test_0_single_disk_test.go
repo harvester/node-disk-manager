@@ -152,14 +152,20 @@ func (s *SingleDiskSuite) Test_1_UnprovisionSingleDisk() {
 	_, err = bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
 	require.Equal(s.T(), nil, err, "Update Blockdevices should not get error")
 
-	// sleep 30 seconds to wait controller handle. jitter is between 7~13 seconds so 30 seconds would be enough to run twice
-	time.Sleep(30 * time.Second)
-
-	// check for the removed status
-	curBlockdevice, err = bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
-	require.Equal(s.T(), nil, err, "Get BlockdevicesList should not get error before we want to check remove")
-	require.Equal(s.T(), "", curBlockdevice.Status.DeviceStatus.FileSystem.MountPoint, "Mountpoint should be empty after we remove disk!")
-	require.Equal(s.T(), diskv1.ProvisionPhaseUnprovisioned, curBlockdevice.Status.ProvisionPhase, "Block device provisionPhase should be Provisioned")
+	// Poll until the controller finishes unprovisioning and Longhorn unmounts the disk
+	// (up to 90 seconds). The disk is still physically present, so the CR will not be
+	// deleted — we just wait for MountPoint to be cleared and phase to be Unprovisioned.
+	require.Eventually(s.T(), func() bool {
+		bd, getErr := bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
+		if getErr != nil {
+			s.T().Logf("poll: Get error: %v", getErr)
+			return false
+		}
+		s.T().Logf("poll: MountPoint=%q ProvisionPhase=%q",
+			bd.Status.DeviceStatus.FileSystem.MountPoint, bd.Status.ProvisionPhase)
+		return bd.Status.DeviceStatus.FileSystem.MountPoint == "" &&
+			bd.Status.ProvisionPhase == diskv1.ProvisionPhaseUnprovisioned
+	}, 90*time.Second, 5*time.Second, "Mountpoint should be empty and provisionPhase Unprovisioned after unprovision")
 
 }
 
