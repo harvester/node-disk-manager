@@ -9,6 +9,9 @@ permissions:
   contents: read
   id-token: write
 
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+
 jobs:
   fossa-scanning:
     runs-on: ubuntu-latest

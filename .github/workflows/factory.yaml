@@ -15,6 +15,7 @@ env:
   repo: "rancher"
   controllerImageName: "harvester-node-disk-manager"
   webhookImageName: "harvester-node-disk-manager-webhook"
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
 jobs:
   dapper-build:
