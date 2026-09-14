@@ -110,11 +110,13 @@ func (c *ConfigMapLoader) LoadFiltersFromConfigMap(ctx context.Context) (deviceF
 	// Merge configurations: global ("*") + node-specific
 	deviceFilter, vendorFilter, pathFilter, labelFilter = c.mergeFilterConfigs(filterConfigs)
 
-	logrus.Infof("Successfully loaded filter configuration from ConfigMap for node %s", c.nodeName)
-	logrus.Infof("  - ExcludeDevices: %s", deviceFilter)
-	logrus.Infof("  - ExcludeVendors: %s", vendorFilter)
-	logrus.Infof("  - ExcludePaths: %s", pathFilter)
-	logrus.Infof("  - ExcludeLabels: %s", labelFilter)
+	logrus.WithFields(logrus.Fields{
+		"node":           c.nodeName,
+		"excludeDevices": deviceFilter,
+		"excludeVendors": vendorFilter,
+		"excludePaths":   pathFilter,
+		"excludeLabels":  labelFilter,
+	}).Info("Successfully loaded filter configuration from ConfigMap")
 
 	return deviceFilter, vendorFilter, pathFilter, labelFilter, nil
 }
@@ -149,8 +151,10 @@ func (c *ConfigMapLoader) LoadAutoProvisionFromConfigMap(ctx context.Context) (d
 	// Merge configurations: global ("*") + node-specific
 	devPaths = c.mergeAutoProvisionConfigs(autoProvConfigs)
 
-	logrus.Infof("Successfully loaded auto-provision configuration from ConfigMap for node %s", c.nodeName)
-	logrus.Infof("  - Devices: %s", devPaths)
+	logrus.WithFields(logrus.Fields{
+		"node":    c.nodeName,
+		"devices": devPaths,
+	}).Info("Successfully loaded auto-provision configuration from ConfigMap")
 
 	return devPaths, nil
 }

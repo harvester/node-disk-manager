@@ -310,13 +310,21 @@ func (s *LVMSuite) Test_3_RemoveAllDisksOfLVMVolumeGroup() {
 	err = s.updateBlockdevice(s.targetDevSecond)
 	require.Equal(s.T(), err, nil, "Update BlockDevice(Second) should not get error")
 
-	// sleep 30 seconds to wait controller handle
-	time.Sleep(30 * time.Second)
-
+	// Poll until the controller finishes removing devices and deleting the LVMVolumeGroups (up to 90 seconds).
 	lvmClient := s.clientSet.HarvesterhciV1beta1().LVMVolumeGroups("harvester-system")
-	lvmList, err := lvmClient.List(context.TODO(), v1.ListOptions{})
-	require.Equal(s.T(), err, nil, "Get LVMVolumeGroups should not get error")
-	require.Equal(s.T(), len(lvmList.Items), 0, "LVMVolumeGroups should be empty")
+	require.Eventually(s.T(), func() bool {
+		lvmList, listErr := lvmClient.List(context.TODO(), v1.ListOptions{})
+		if listErr != nil {
+			s.T().Logf("poll: List LVMVolumeGroups error: %v", listErr)
+			return false
+		}
+		s.T().Logf("poll: %d LVMVolumeGroups remaining", len(lvmList.Items))
+		for _, lvm := range lvmList.Items {
+			s.T().Logf("poll: remaining VG: %s (vgName=%s, specDevs=%v, statusDevs=%v)",
+				lvm.Name, lvm.Spec.VgName, lvm.Spec.Devices, lvm.Status.Devices)
+		}
+		return len(lvmList.Items) == 0
+	}, 90*time.Second, 5*time.Second, "LVMVolumeGroups should be empty after removing all disks")
 }
 
 func (s *LVMSuite) doAttachDisk(nodeName, xmlFile string) {

@@ -28,8 +28,10 @@ jobs:
           make validate-ci
   job-new-installation:
     needs: validation
+    # Use a shared concurrency group with jobs-upgrade to ensure only one job
+    # provisions libvirt resources (such as the default vagrant-libvirt network) at a time.
     concurrency:
-      group: ndm-new-installation
+      group: ndm-libvirt-vm
       cancel-in-progress: false
     runs-on:
       - self-hosted
@@ -52,6 +54,11 @@ jobs:
             virsh destroy "$domain" 2>/dev/null || true
             virsh undefine "$domain" --remove-all-storage 2>/dev/null || true
           done
+          # Clean up leftover network if no longer needed
+          if virsh net-info vagrant-libvirt >/dev/null 2>&1; then
+            virsh net-destroy vagrant-libvirt 2>/dev/null || true
+            virsh net-undefine vagrant-libvirt 2>/dev/null || true
+          fi
           rm -rf ndm-new-vagrant-k3s
           git clone https://github.com/bk201/vagrant-k3s ndm-new-vagrant-k3s
           pushd ndm-new-vagrant-k3s
@@ -118,8 +125,10 @@ jobs:
 
   jobs-upgrade:
     needs: validation
+    # Use a shared concurrency group with job-new-installation to ensure only one job
+    # provisions libvirt resources (such as the default vagrant-libvirt network) at a time.
     concurrency:
-      group: ndm-upgrade
+      group: ndm-libvirt-vm
       cancel-in-progress: false
     runs-on:
       - self-hosted
@@ -142,6 +151,11 @@ jobs:
             virsh destroy "$domain" 2>/dev/null || true
             virsh undefine "$domain" --remove-all-storage 2>/dev/null || true
           done
+          # Clean up leftover network if no longer needed
+          if virsh net-info vagrant-libvirt >/dev/null 2>&1; then
+            virsh net-destroy vagrant-libvirt 2>/dev/null || true
+            virsh net-undefine vagrant-libvirt 2>/dev/null || true
+          fi
           rm -rf ndm-upgrade-vagrant-k3s
           git clone https://github.com/bk201/vagrant-k3s ndm-upgrade-vagrant-k3s
           pushd ndm-upgrade-vagrant-k3s
