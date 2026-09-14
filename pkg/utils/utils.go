@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -213,13 +212,6 @@ func IsSupportedFileSystem(fsType string) bool {
 		return true
 	}
 	return false
-}
-
-// CallerWithLock is a helper function to call a function with a condition lock
-func CallerWithCondLock[T any](cond *sync.Cond, f func() T) T {
-	cond.L.Lock()
-	defer cond.L.Unlock()
-	return f()
 }
 
 // IsMultipathDevice checks if a dm-x device is multipath device

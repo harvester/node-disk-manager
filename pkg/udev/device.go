@@ -1,44 +1,62 @@
 package udev
 
 import (
-	"strings"
-
 	"github.com/harvester/node-disk-manager/pkg/block"
 )
 
-// key and env of udev uevent.
+// Udev event actions NDM reacts to.
 const (
-	// UdevSystem is used to filter devices other than disk which udev tracks (eg. CD ROM)
-	UdevSystem = "disk"
-	// UDevPartition is used to filter out partitions
-	UdevPartition = "partition"
-	// LinkNameIndex is used to get link index from dev link
-	LinkNameIndex = 2
-
-	UdevDevname        = "DEVNAME"
-	UdevDevtype        = "DEVTYPE"
-	UdevFsUUID         = "ID_FS_UUID"
-	UdevIDPath         = "ID_PATH"
-	UdevModel          = "ID_MODEL"
-	UdevPartEntryType  = "ID_PART_ENTRY_TYPE"
-	UdevPartEntryUUID  = "ID_PART_ENTRY_UUID"
-	UdevPartTableType  = "ID_PART_TABLE_TYPE"
-	UdevPartTableUUID  = "ID_PART_TABLE_UUID"
-	UdevSerialNumber   = "ID_SERIAL"
-	UdevDMSerialNumber = "DM_SERIAL" // multipath device
-	UdevSerialShort    = "ID_SERIAL_SHORT"
-	UdevType           = "ID_TYPE"
-	UdevVendor         = "ID_VENDOR"
-	UdevWWN            = "ID_WWN"
-	UdevDMWWN          = "DM_WWN" // multipath device
+	ActionAdd    = "add"
+	ActionRemove = "remove"
 )
 
+// UdevSystem is the DEVTYPE of whole block devices; partitions have DEVTYPE=partition.
+const UdevSystem = "disk"
+
+// Names of the udev properties NDM reads.
+const (
+	UdevAction = "ACTION"
+
+	UdevDevname       = "DEVNAME"
+	UdevDevtype       = "DEVTYPE"
+	UdevFsUUID        = "ID_FS_UUID"
+	UdevModel         = "ID_MODEL"
+	UdevPartTableUUID = "ID_PART_TABLE_UUID"
+	UdevSerialNumber  = "ID_SERIAL"
+	UdevSerialShort   = "ID_SERIAL_SHORT"
+	UdevVendor        = "ID_VENDOR"
+	UdevWWN           = "ID_WWN"
+	UdevWWNExtension  = "ID_WWN_WITH_EXTENSION"
+
+	// Multipath maps (/dev/dm-*) hide the physical disks, their identity is
+	// exported by the multipath udev rules as DM_*.
+	UdevDMSerialNumber = "DM_SERIAL"
+	UdevDMWWN          = "DM_WWN"
+)
+
+// Device are the properties of a udev event. Which of them are set depends on
+// the bus, the driver and the event, a missing property reads as empty string.
 type Device map[string]string
 
-func InitUdevDevice(udev map[string]string) Device {
-	return udev
+// Action returns the event action, e.g. "add" or "remove".
+func (device Device) Action() string {
+	return device[UdevAction]
 }
 
+// IsDisk checks if device is a whole disk.
+func (device Device) IsDisk() bool {
+	return device[UdevDevtype] == UdevSystem
+}
+
+// GetDevName returns the path of the device node in /dev, e.g. "/dev/sda".
+func (device Device) GetDevName() string {
+	return device[UdevDevname]
+}
+
+// UpdateDiskFromUdev fills the identity of disk from the event properties.
+// This is all that is known about a disk in "remove" events, as the device is
+// already gone from sysfs. Serial number and WWN follow the precedence of
+// pkg/block (diskSerialNumber, diskWWN).
 func (device Device) UpdateDiskFromUdev(disk *block.Disk) {
 	if len(device[UdevFsUUID]) > 0 {
 		disk.UUID = device[UdevFsUUID]
@@ -49,11 +67,9 @@ func (device Device) UpdateDiskFromUdev(disk *block.Disk) {
 	if len(device[UdevModel]) > 0 {
 		disk.Model = device[UdevModel]
 	}
-	if len(UdevVendor) > 0 {
+	if len(device[UdevVendor]) > 0 {
 		disk.Vendor = device[UdevVendor]
 	}
-	// Match the logic from block.diskSerialNumber() to ensure
-	// we get the correct serial number!
 	if len(device[UdevSerialShort]) > 0 {
 		disk.SerialNumber = device[UdevSerialShort]
 	} else if len(device[UdevSerialNumber]) > 0 {
@@ -61,48 +77,11 @@ func (device Device) UpdateDiskFromUdev(disk *block.Disk) {
 	} else if len(device[UdevDMSerialNumber]) > 0 {
 		disk.SerialNumber = device[UdevDMSerialNumber]
 	}
-
-	if len(device[UdevWWN]) > 0 {
+	if len(device[UdevWWNExtension]) > 0 {
+		disk.WWN = device[UdevWWNExtension]
+	} else if len(device[UdevWWN]) > 0 {
 		disk.WWN = device[UdevWWN]
 	} else if len(device[UdevDMWWN]) > 0 {
 		disk.WWN = device[UdevDMWWN]
 	}
-}
-
-// IsDisk check if device is a disk
-func (device Device) IsDisk() bool {
-	return device[UdevDevtype] == UdevSystem
-}
-
-// IsPartition check if device is a partition
-func (device Device) IsPartition() bool {
-	return device[UdevDevtype] == UdevPartition
-}
-
-// GetDevName returns the path of device in /dev directory
-func (device Device) GetDevName() string {
-	return device[UdevDevname]
-}
-
-// GetShortName returns the short device name of the /dev directory, e.g /dev/sda will return the name sda
-func (device Device) GetShortName() string {
-	name := device[UdevDevname]
-	parts := strings.Split(name, "/")
-	if len(parts) < LinkNameIndex+1 {
-		return ""
-	}
-	return parts[LinkNameIndex]
-}
-
-// GetIDPath returns the device id path
-func (device Device) GetIDPath() string {
-	return device[UdevIDPath]
-}
-
-func (device Device) GetIDType() string {
-	return device[UdevType]
-}
-
-func (device Device) GetDevType() string {
-	return device[UdevDevtype]
 }
