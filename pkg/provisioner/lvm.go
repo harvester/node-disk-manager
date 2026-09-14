@@ -54,11 +54,16 @@ func (l *LVMProvisioner) Format(devPath string) (isFormatComplete, isRequeueNeed
 	// Note, the PV and VG is created by the `LVMVolumeGroup` controller
 	// beforehand, so we need to exit here if the found VG name is matching
 	// the name we are processing.
+	// A PV that does not belong to a VG yet (empty VG name) is a PV that the
+	// `LVMVolumeGroup` controller has just created and is about to add to the
+	// VG. It must not be wiped as long as the `LVMVolumeGroup` CR lists this
+	// device, otherwise the two controllers race against each other and the
+	// PV is destroyed right after it has been created.
 	vg, found := pvResult[devPath]
-	if found && vg == l.vgName {
+	if found && (vg == l.vgName || vg == "") {
 		// Check if there is a corresponding `LVMVolumeGroup` CR that matches
 		// the cluster node and the VG name.
-		_, err := l.getTargetLVMVG()
+		lvmVG, err := l.getTargetLVMVG()
 		if err != nil {
 			// Fallthrough to wipe the device if the `LVMVolumeGroup` CR is
 			// not found; this CR is not available for devices that were part
@@ -67,7 +72,7 @@ func (l *LVMProvisioner) Format(devPath string) (isFormatComplete, isRequeueNeed
 			if !errors.IsNotFound(err) {
 				return false, true, err
 			}
-		} else {
+		} else if isPVOwnedByVG(vg, lvmVG, l.device.Name) {
 			// The VG exists, and the `LVMVolumeGroup` CR is found, so no
 			// further action is needed here.
 			return true, false, nil
@@ -78,6 +83,22 @@ func (l *LVMProvisioner) Format(devPath string) (isFormatComplete, isRequeueNeed
 		return false, true, err
 	}
 	return true, false, nil
+}
+
+// isPVOwnedByVG returns true if the PV, that is a member of the VG `pvVGName`
+// (empty if it does not belong to any VG yet), is managed by the given
+// `LVMVolumeGroup` CR and therefore must not be wiped.
+func isPVOwnedByVG(pvVGName string, lvmVG *diskv1.LVMVolumeGroup, deviceName string) bool {
+	if lvmVG == nil {
+		return false
+	}
+	if pvVGName != "" {
+		return pvVGName == lvmVG.Spec.VgName
+	}
+	// The PV is not part of a VG yet. It is only owned by the CR if the CR is
+	// about to add this device to the VG.
+	_, found := lvmVG.Spec.Devices[deviceName]
+	return found
 }
 
 func (l *LVMProvisioner) UnFormat() (bool, error) {

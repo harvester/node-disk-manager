@@ -2,197 +2,189 @@ package udev
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"os"
+	"path/filepath"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/harvester/node-disk-manager/pkg/block"
-	"github.com/harvester/node-disk-manager/pkg/controller/blockdevice"
-	"github.com/harvester/node-disk-manager/pkg/option"
-	"github.com/harvester/node-disk-manager/pkg/utils"
-	"github.com/pilebones/go-udev/netlink"
 	"github.com/sirupsen/logrus"
+	"k8s.io/apimachinery/pkg/util/wait"
+
+	"github.com/harvester/node-disk-manager/pkg/block"
+	"github.com/harvester/node-disk-manager/pkg/option"
+	"github.com/harvester/node-disk-manager/pkg/udev/netlink"
 )
 
+var (
+	// restartDelay is the pause before a failed watcher is started again.
+	restartDelay = 2 * time.Second
+
+	// multipathSettleDelay is how long to wait with a new device-mapper disk,
+	// so multipathd can finish (re)building the multipath map.
+	multipathSettleDelay = time.Second
+)
+
+// Scanner is the part of the block device scanner the watchers need.
+type Scanner interface {
+	// Wake requests a scan of all disks of the node. It must not block.
+	Wake()
+	// ApplyExcludeFiltersForDisk returns true if the disk has to be ignored.
+	ApplyExcludeFiltersForDisk(disk *block.Disk) bool
+}
+
+// Udev watches the host for changes that matter for the block devices of the
+// node and wakes the scanner. The scanner stays the only one that reconciles
+// BlockDevice resources. As every scan looks at the complete state of the node,
+// the watchers only have to say "something changed", not what exactly.
+//
+// There are two independent sources:
+//   - udev events (add/remove of disks), see monitor.
+//   - changes of the host mount table, see watchMounts. A mount does not
+//     necessarily come with a block event, but decides if a disk is in use.
+//
+// Both follow the usual pattern for watches: after (re)connecting the scanner is
+// woken once, as everything that happened while not watching has been missed,
+// and a failed watcher is restarted until the context is cancelled.
 type Udev struct {
-	namespace   string
-	nodeName    string
-	startOnce   sync.Once
-	scanner     *blockdevice.Scanner
-	injectError bool
+	namespace     string
+	nodeName      string
+	scanner       Scanner
+	blockInfo     block.Info
+	mountInfoPath string
+
+	// injectError makes the next monitor run fail, to test the restart in CI.
+	injectError atomic.Bool
 }
 
-func NewUdev(opt *option.Option, scanner *blockdevice.Scanner) *Udev {
-	return &Udev{
-		startOnce:   sync.Once{},
-		namespace:   opt.Namespace,
-		nodeName:    opt.NodeName,
-		scanner:     scanner,
-		injectError: opt.InjectUdevMonitorError,
+func NewUdev(opt *option.Option, scanner Scanner, blockInfo block.Info) *Udev {
+	u := &Udev{
+		namespace:     opt.Namespace,
+		nodeName:      opt.NodeName,
+		scanner:       scanner,
+		blockInfo:     blockInfo,
+		mountInfoPath: hostMountInfo,
 	}
+	u.injectError.Store(opt.InjectUdevMonitorError)
+	return u
 }
 
+// Monitor starts the watchers in the background. They run until ctx is cancelled.
 func (u *Udev) Monitor(ctx context.Context) {
-	// we need to respawn the monitor with any error.
-	// because any error will break the monitor loop.
-	udevErrChan := make(chan error)
-	go u.spawnMonitor(ctx, udevErrChan)
-	mountErrChan := make(chan error)
-	go u.spawnMountWatcher(ctx, mountErrChan)
+	go u.run(ctx, "udev monitor", u.monitor)
+	go u.run(ctx, "mount watcher", u.watchMounts)
 }
 
-func (u *Udev) spawnMonitor(ctx context.Context, errChan chan error) {
-	go u.monitor(ctx, errChan)
-	for {
-		select {
-		case err := <-errChan:
-			logrus.Errorf("failed to monitor udev events, error: %s", err.Error())
-			go u.monitor(ctx, errChan)
-		case <-ctx.Done():
-			return
+// run executes watch again and again until ctx is cancelled. A watcher only
+// returns on failure or on cancellation.
+func (u *Udev) run(ctx context.Context, name string, watch func(context.Context) error) {
+	wait.UntilWithContext(ctx, func(ctx context.Context) {
+		if err := watch(ctx); err != nil && ctx.Err() == nil {
+			logrus.WithError(err).Errorf("The %s failed, restarting", name)
 		}
-	}
+	}, restartDelay)
 }
 
-func (u *Udev) spawnMountWatcher(ctx context.Context, errChan chan error) {
-	go u.watchMounts(ctx, errChan)
-	for {
-		select {
-		case err := <-errChan:
-			logrus.Errorf("failed to watch mounts, error: %s", err.Error())
-			go u.watchMounts(ctx, errChan)
-		case <-ctx.Done():
-			return
-		}
+// monitor receives udev events until ctx is cancelled or the connection fails.
+func (u *Udev) monitor(ctx context.Context) error {
+	if u.injectError.CompareAndSwap(true, false) {
+		return errors.New("testing error")
 	}
-}
 
-func (u *Udev) monitor(ctx context.Context, errors chan error) {
-	logrus.Infoln("Start monitoring udev processed events")
-
-	matcher, err := getOptionalMatcher(nil)
+	conn, err := netlink.Dial()
 	if err != nil {
-		logrus.Fatalf("Failed to get udev config, error: %s", err.Error())
-	}
-
-	conn := new(netlink.UEventConn)
-	if err := conn.Connect(netlink.UdevEvent); err != nil {
-		logrus.Fatalf("Unable to connect to Netlink Kobject UEvent socket, error: %s", err.Error())
+		return fmt.Errorf("connect to udev events: %w", err)
 	}
 	defer conn.Close()
 
-	uqueue := make(chan netlink.UEvent)
-	errChan := make(chan error)
-	quit := conn.Monitor(uqueue, errChan, matcher)
-	defer close(quit)
+	// Conn.Read does not know about contexts, closing the connection unblocks it.
+	defer context.AfterFunc(ctx, func() { _ = conn.Close() })()
 
-	// simulator the error from udev monitor
-	if u.injectError {
-		logrus.Infof("Injecting error to udev monitor for testing")
-		errors <- fmt.Errorf("testing error")
-		u.injectError = false
-		return
-	}
-	// Handling message from udev queue
+	logrus.WithField("node", u.nodeName).Info("Start monitoring udev events")
+	u.scanner.Wake()
+
 	for {
-		select {
-		case uevent := <-uqueue:
-			u.ActionHandler(uevent)
-		case err := <-errChan:
-			errors <- err
-			return
-		case <-ctx.Done():
-			return
+		properties, err := conn.Read()
+		switch {
+		case ctx.Err() != nil:
+			return nil
+		case errors.Is(err, netlink.ErrEventsLost):
+			logrus.WithField("node", u.nodeName).Warn("Udev events lost, rescanning all disks")
+			u.scanner.Wake()
+		case err != nil:
+			return fmt.Errorf("receive udev event: %w", err)
+		default:
+			u.handle(Device(properties))
 		}
 	}
 }
 
-func (u *Udev) ActionHandler(uevent netlink.UEvent) {
-	udevDevice := InitUdevDevice(uevent.Env)
-	if !udevDevice.IsDisk() {
+// handle wakes the scanner if a disk was added or removed, other events are ignored.
+func (u *Udev) handle(device Device) {
+	action := device.Action()
+	if (action != ActionAdd && action != ActionRemove) || !device.IsDisk() {
 		return
 	}
-	logrus.WithFields(logrus.Fields{
-		"udevAction": uevent.Action,
-		"udevEnv":    fmt.Sprintf("%+v", uevent.Env),
-	}).Debug("Prepare to handle udev action")
-
-	devPath := udevDevice.GetDevName()
-	var disk *block.Disk
-
-	if strings.Contains(devPath, "dm-") {
-		// wait for rebuilding the multipath device
-		time.Sleep(1 * time.Second)
-	}
-
-	if uevent.Action == netlink.REMOVE {
-		// Note: at this point, the device is gone, so we can't use GetDiskByDevPath()
-		// to get any reliable information about the device, but we _can_ at least
-		// dig out the vendor, model, serial number and WWN for logging purposes
-		// if we create a minimal block.Disk then call UpdateDiskFromUdev().
-		disk = &block.Disk{Name: strings.TrimPrefix(devPath, "/dev/")}
-		udevDevice.UpdateDiskFromUdev(disk)
+	devPath := device.GetDevName()
+	if devPath == "" {
 		logrus.WithFields(logrus.Fields{
+			"node":   u.nodeName,
+			"action": action,
+		}).Debug("Ignoring udev event without device name")
+		return
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"node":   u.nodeName,
+		"action": action,
+		"device": devPath,
+	}).Debug("Handling udev event")
+
+	if action == ActionRemove {
+		// The device is gone from sysfs already, so only the event itself
+		// tells which disk it was. The scanner deactivates or deletes its BlockDevice.
+		disk := &block.Disk{Name: strings.TrimPrefix(devPath, "/dev/")}
+		device.UpdateDiskFromUdev(disk)
+		logrus.WithFields(logrus.Fields{
+			"node":      u.nodeName,
+			"namespace": u.namespace,
+			"device":    devPath,
+			"vendor":    disk.Vendor,
+			"model":     disk.Model,
+			"serial":    disk.SerialNumber,
+			"wwn":       disk.WWN,
+		}).Info("Disk removed")
+		u.scanner.Wake()
+		return
+	}
+
+	if strings.HasPrefix(filepath.Base(devPath), "dm-") {
+		// The scan is level-triggered, so it does not matter that this may
+		// overtake the events that follow.
+		time.AfterFunc(multipathSettleDelay, func() { u.handleAdd(devPath) })
+		return
+	}
+	u.handleAdd(devPath)
+}
+
+func (u *Udev) handleAdd(devPath string) {
+	disk := u.blockInfo.GetDiskByDevPath(devPath)
+	if disk == nil {
+		logrus.WithFields(logrus.Fields{
+			"node":   u.nodeName,
 			"device": devPath,
-			"vendor": disk.Vendor,
-			"model":  disk.Model,
-			"serial": disk.SerialNumber,
-			"wwn":    disk.WWN,
-		}).Info("removing disk")
-		// just wake up scanner to check if the disk is removed, do no-op internally
-		u.wakeUpScanner(uevent, devPath, u.namespace)
+		}).Warn("Unable to query details of added disk")
 		return
 	}
-
-	if uevent.Action != netlink.ADD {
-		return
-	}
-
-	disk = u.scanner.BlockInfo.GetDiskByDevPath(devPath)
-
 	if u.scanner.ApplyExcludeFiltersForDisk(disk) {
 		return
 	}
 
-	// just wake up scanner to check if the disk is added, do no-op internally
-	u.wakeUpScanner(uevent, devPath, u.namespace)
-}
-
-func (u *Udev) wakeUpScanner(uevent netlink.UEvent, devPath string, namespace string) {
-	utils.CallerWithCondLock(u.scanner.Cond, func() any {
-		logrus.WithFields(logrus.Fields{
-			"namespace":  namespace,
-			"kind":       "BlockDevice",
-			"udevAction": uevent.Action,
-			"device":     devPath,
-		}).Info("udev action triggering scanner wake")
-		u.scanner.Cond.Signal()
-		return nil
-	})
-}
-
-// getOptionalMatcher Parse and load config file which contains rules for matching
-func getOptionalMatcher(filePath *string) (matcher netlink.Matcher, err error) {
-	if filePath == nil || *filePath == "" {
-		return nil, nil
-	}
-
-	stream, err := os.ReadFile(*filePath)
-	if err != nil {
-		return nil, err
-	}
-
-	if stream == nil {
-		return nil, fmt.Errorf("empty, no rules provided in \"%s\", err: %w", *filePath, err)
-	}
-
-	var rules netlink.RuleDefinitions
-	if err := json.Unmarshal(stream, &rules); err != nil {
-		return nil, fmt.Errorf("wrong rule syntax, err: %v", err)
-	}
-
-	return &rules, nil
+	logrus.WithFields(logrus.Fields{
+		"node":      u.nodeName,
+		"namespace": u.namespace,
+		"device":    devPath,
+	}).Info("Disk added")
+	u.scanner.Wake()
 }
