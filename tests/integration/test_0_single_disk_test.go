@@ -148,7 +148,8 @@ func (s *SingleDiskSuite) Test_1_UnprovisionSingleDisk() {
 
 	require.Equal(s.T(), diskv1.BlockDeviceActive, curBlockdevice.Status.State, "Block device state should be Active")
 	newBlockdevice := curBlockdevice.DeepCopy()
-	newBlockdevice.Spec.FileSystem.Provisioned = false
+	// Spec.Provision is the controller's canonical desired-state field (PR #151).
+	newBlockdevice.Spec.Provision = false
 	_, err = bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
 	require.Equal(s.T(), nil, err, "Update Blockdevices should not get error")
 
@@ -177,7 +178,8 @@ func (s *SingleDiskSuite) Test_2_ManuallyProvisionSingleDisk() {
 
 	require.Equal(s.T(), diskv1.BlockDeviceActive, curBlockdevice.Status.State, "Block device state should be Active")
 	newBlockdevice := curBlockdevice.DeepCopy()
-	newBlockdevice.Spec.FileSystem.Provisioned = true
+	// Spec.Provision is the controller's canonical desired-state field (PR #151).
+	newBlockdevice.Spec.Provision = true
 	targetTags := []string{"default", "test-disk"}
 	newBlockdevice.Spec.Tags = targetTags
 	_, err = bdi.Update(context.TODO(), newBlockdevice, v1.UpdateOptions{})
