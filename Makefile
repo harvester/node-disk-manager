@@ -36,13 +36,19 @@ DOCKER_BUILD = docker build \
 
 .DEFAULT_GOAL := ci
 
-.PHONY: build validate validate-ci test generate generate-manifest package ci gen-version-env clean
+.PHONY: build validate validate-ci test generate generate-manifest package ci gen-version-env clean fix
 
 # ---- gen-version-env ----
 # Pre-generate version env for container builds (no .git needed inside Docker).
 # Also handles git worktree checkouts where .git is a pointer file to an external directory.
 gen-version-env:
 	@bash $(ROOT)/scripts/version > /dev/null
+
+# ---- format Go code ----
+fix:
+	$(BANNER)
+	@echo "Formatting Go files ..."
+	@go fmt ./...
 
 # ---- build ----
 build: gen-version-env | $(ROOT)/bin

@@ -166,7 +166,7 @@ func (s *Scanner) handleExistingDev(oldBd *diskv1.BlockDevice, newBd *diskv1.Blo
 				"name":      oldBd.Name,
 				"device":    oldBd.Status.DeviceStatus.DevPath,
 				"newDevice": newBd.Status.DeviceStatus.DevPath,
-			}).Warn("new device path detected for active device - skipping update")
+			}).Warn("New device path detected for active device - skipping update")
 			return false
 		}
 		// DevPath isn't changed, but other things might, e.g. UUID if someone manually formatted a disk
@@ -187,14 +187,14 @@ func (s *Scanner) handleExistingDev(oldBd *diskv1.BlockDevice, newBd *diskv1.Blo
 					"name":      oldBd.Name,
 					"device":    oldBd.Status.DeviceStatus.DevPath,
 					"newDevice": newBd.Status.DeviceStatus.DevPath,
-				}).Warn("new device path detected for inactive multipath device - skipping update")
+				}).Warn("New device path detected for inactive multipath device - skipping update")
 				return false
 			}
 			path, _ := filepath.EvalSymlinks(oldBd.Status.DeviceStatus.DevPath)
 			if _, err := utils.IsMultipathDevice(path); err == nil {
 				logrus.WithFields(logrus.Fields{
 					"name": oldBd.Name,
-				}).Info("reactivating multipath device")
+				}).Info("Reactivating multipath device")
 				oldBdCp.Status.State = diskv1.BlockDeviceActive
 				// DeviceStatus really shouldn't have changed for MP devices, but pick it up anyway just in case
 				oldBdCp.Status.DeviceStatus.Capacity = newBd.Status.DeviceStatus.Capacity
@@ -207,12 +207,12 @@ func (s *Scanner) handleExistingDev(oldBd *diskv1.BlockDevice, newBd *diskv1.Blo
 					"name":      oldBd.Name,
 					"device":    oldBd.Status.DeviceStatus.DevPath,
 					"newDevice": newBd.Status.DeviceStatus.DevPath,
-				}).Info("reactivating block device with new path")
+				}).Info("Reactivating block device with new path")
 				oldBdCp.Status.DeviceStatus.DevPath = newBd.Status.DeviceStatus.DevPath
 			} else {
 				logrus.WithFields(logrus.Fields{
 					"name": oldBd.Name,
-				}).Infof("reactivating block device")
+				}).Infof("Reactivating block device")
 			}
 			oldBdCp.Status.State = diskv1.BlockDeviceActive
 			// This pulls in all other possible updates -- wwn, uuid, vendor, model, serial, ...
@@ -235,22 +235,22 @@ func (s *Scanner) handleExistingDev(oldBd *diskv1.BlockDevice, newBd *diskv1.Blo
 			logrus.WithFields(logrus.Fields{
 				"name": oldBd.Name,
 				"err":  err,
-			}).Error("error updating device, waking scanner")
+			}).Error("Error updating device, waking scanner")
 			s.Cond.Signal()
 		}
 	} else if isDevAlreadyProvisioned(oldBd) {
 		logrus.WithFields(logrus.Fields{
 			"name": oldBd.Name,
-		}).Debug("skipping provisioned device")
+		}).Debug("Skipping provisioned device")
 	} else if s.NeedsAutoProvision(oldBd, autoProvisioned) {
 		logrus.WithFields(logrus.Fields{
 			"name": oldBd.Name,
-		}).Debug("enquing device for auto-provisioning")
+		}).Debug("Enqueuing device for auto-provisioning")
 		s.Blockdevices.Enqueue(s.Namespace, oldBd.Name)
 	} else {
 		logrus.WithFields(logrus.Fields{
 			"name": oldBd.Name,
-		}).Debug("device is unchanged (no need to update)")
+		}).Debug("Device is unchanged (no need to update)")
 	}
 	return true
 }
@@ -357,7 +357,7 @@ func (s *Scanner) scanBlockDevicesOnNode(ctx context.Context) error {
 					"device": newBd.Status.DeviceStatus.DevPath,
 					"uuid":   uuid,
 					"name":   foundBd.Name,
-				}).Debug("found existing BD by UUID")
+				}).Debug("Found existing BD by UUID")
 				existingBd = foundBd
 			}
 			// If it has a UUID but isn't in existingBDsByUUID, this will
@@ -371,7 +371,7 @@ func (s *Scanner) scanBlockDevicesOnNode(ctx context.Context) error {
 					"device": newBd.Status.DeviceStatus.DevPath,
 					"wwn":    wwn,
 					"name":   foundBd.Name,
-				}).Debug("found existing BD by WWN")
+				}).Debug("Found existing BD by WWN")
 				existingBd = foundBd
 			}
 			// If it has a WWN but isn't in existingBDsByWWN, this will
@@ -405,7 +405,7 @@ func (s *Scanner) scanBlockDevicesOnNode(ctx context.Context) error {
 						"serial":  newBd.Status.DeviceStatus.Details.SerialNumber,
 						"buspath": newBd.Status.DeviceStatus.Details.BusPath,
 						"name":    foundBd.Name,
-					}).Debug("found existing BD by Vendor+Model+SerialNumber+BusPath")
+					}).Debug("Found existing BD by Vendor+Model+SerialNumber+BusPath")
 					existingBd = &foundBd
 					break
 				}
@@ -437,7 +437,7 @@ func (s *Scanner) scanBlockDevicesOnNode(ctx context.Context) error {
 				"buspath": newBd.Status.DeviceStatus.Details.BusPath,
 				"uuid":    newBd.Status.DeviceStatus.Details.UUID,
 				"wwn":     newBd.Status.DeviceStatus.Details.WWN,
-			}).Info("creating new BD")
+			}).Info("Creating new BD")
 			if _, err := s.SaveBlockDevice(newBd, autoProvisioned); err != nil && !errors.IsAlreadyExists(err) {
 				return err
 			}
@@ -500,23 +500,23 @@ func mapBlockDeviceIDs(bdList *diskv1.BlockDeviceList) (names map[string]*diskv1
 func (s *Scanner) ApplyExcludeFiltersForDisk(disk *block.Disk) bool {
 	if strings.HasPrefix(disk.Name, "dm-") {
 		if _, err := utils.IsMultipathDevice(disk.Name); err == nil {
-			logrus.Infof("accept block device /dev/%s because it's a multipath device", disk.Name)
+			logrus.Infof("Accept block device /dev/%s because it's a multipath device", disk.Name)
 			return false
 		}
 
-		logrus.Infof("block device /dev/%s ignored because it's a dm device (likely LHv2 volume)", disk.Name)
+		logrus.Infof("Block device /dev/%s ignored because it's a dm device (likely LHv2 volume)", disk.Name)
 		return true
 	}
 
 	for _, filter := range s.ExcludeFilters {
 		if filter.ApplyDiskFilter(disk) {
-			logrus.Infof("block device /dev/%s ignored by %s and rules: %s", disk.Name, filter.Name, filter.DiskFilter.Details())
+			logrus.Infof("Block device /dev/%s ignored by %s and rules: %s", disk.Name, filter.Name, filter.DiskFilter.Details())
 			return true
 		}
 	}
 
 	if _, err := utils.IsManagedByMultipath(disk.Name); err == nil {
-		logrus.Infof("block device /dev/%s is managed by multipath device, ignored", disk.Name)
+		logrus.Infof("Block device /dev/%s is managed by multipath device, ignored", disk.Name)
 		return true
 	}
 
@@ -529,7 +529,7 @@ func (s *Scanner) ApplyExcludeFiltersForDisk(disk *block.Disk) bool {
 func (s *Scanner) ApplyAutoProvisionFiltersForDisk(disk *block.Disk) bool {
 	for _, filter := range s.AutoProvisionFilters {
 		if filter.ApplyDiskFilter(disk) {
-			logrus.Debugf("block device /dev/%s is promoted to auto-provision by %s", disk.Name, filter.Name)
+			logrus.Debugf("Block device /dev/%s is promoted to auto-provision by %s", disk.Name, filter.Name)
 			return true
 		}
 	}
