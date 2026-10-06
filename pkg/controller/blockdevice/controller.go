@@ -113,11 +113,8 @@ func Register(
 		return err
 	}
 
-	utils.CallerWithCondLock(scanner.Cond, func() any {
-		logrus.Infof("Waking scanner once on startup in case any device paths have changed")
-		scanner.Cond.Signal()
-		return nil
-	})
+	logrus.Infof("Waking scanner once on startup in case any device paths have changed")
+	scanner.Wake()
 
 	bds.OnChange(ctx, blockDeviceHandlerName, controller.OnBlockDeviceChange)
 	bds.OnRemove(ctx, blockDeviceHandlerName, controller.OnBlockDeviceDelete)
@@ -134,10 +131,7 @@ func (c *Controller) OnConfigMapChange(_ string, cm *corev1.ConfigMap) (*corev1.
 	// Only trigger rescan for the specific ConfigMap
 	if cm.Name == filter.DefaultConfigMapName && cm.Namespace == filter.DefaultConfigMapNamespace {
 		logrus.Infof("ConfigMap %s/%s changed, triggering disk rescan", cm.Namespace, cm.Name)
-		utils.CallerWithCondLock(c.scanner.Cond, func() any {
-			c.scanner.Cond.Signal()
-			return nil
-		})
+		c.scanner.Wake()
 	}
 
 	return cm, nil
@@ -151,7 +145,7 @@ func (c *Controller) OnBlockDeviceChange(_ string, device *diskv1.BlockDevice) (
 	}
 
 	// give another chance to update provision for auto provision device
-	if len(c.scanner.AutoProvisionFilters) > 0 && !device.Spec.Provision && device.Status.DeviceStatus.FileSystem.LastFormattedAt == nil {
+	if c.scanner.HasAutoProvisionFilters() && !device.Spec.Provision && device.Status.DeviceStatus.FileSystem.LastFormattedAt == nil {
 		if devNew, needUpdated := c.updateAutoProvisionDevice(device); needUpdated {
 			return c.Blockdevices.Update(devNew)
 		}

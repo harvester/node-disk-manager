@@ -23,7 +23,7 @@ func SetAutoProvisionFilters(devPathString string) []*Filter {
 }
 
 func SetExcludeFilters(deviceString, vendorString, pathString, labelString string) []*Filter {
-	logrus.Info("register exclude filters")
+	logrus.Info("Register exclude filters")
 
 	driveTypeFilter := RegisterDriveTypeFilter()
 

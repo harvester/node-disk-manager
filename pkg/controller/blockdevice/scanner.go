@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 	ctlharvesterv1 "github.com/harvester/harvester/pkg/generated/controllers/harvesterhci.io/v1beta1"
@@ -24,18 +26,36 @@ import (
 	"github.com/harvester/node-disk-manager/pkg/utils"
 )
 
+// retryDelay is how long to wait before scanning again after a scan or a
+// BlockDevice update failed. Failures like resource version conflicts are
+// transient, but a permanent one (e.g. a webhook rejecting the update) must
+// not turn into a busy loop, as every scan also runs external commands.
+var retryDelay = 5 * time.Second
+
+// Scanner reconciles the block devices of the node with the BlockDevice CRs.
+//
+// A scan is level-triggered: it always looks at the complete state of the node,
+// never at a single event. Anything that may have changed that state (udev
+// events, mount changes, ConfigMap changes, ...) therefore only has to call
+// Wake(). Wake-ups that arrive while a scan is running or pending are
+// coalesced into exactly one further scan.
 type Scanner struct {
-	NodeName             string
-	Namespace            string
-	UpgradeClient        ctlharvesterv1.UpgradeClient
-	Blockdevices         ctldiskv1.BlockDeviceController
-	BlockInfo            block.Info
-	ExcludeFilters       []*filter.Filter
-	AutoProvisionFilters []*filter.Filter
-	ConfigMapLoader      *filter.ConfigMapLoader
-	Cond                 *sync.Cond
-	Shutdown             bool
-	TerminatedChannels   *chan bool
+	NodeName        string
+	Namespace       string
+	UpgradeClient   ctlharvesterv1.UpgradeClient
+	Blockdevices    ctldiskv1.BlockDeviceController
+	BlockInfo       block.Info
+	ConfigMapLoader *filter.ConfigMapLoader
+
+	// filterMu guards the filter lists below, they are replaced by every scan
+	// and read concurrently (e.g. by the udev watcher and the controller).
+	filterMu             sync.RWMutex
+	excludeFilters       []*filter.Filter
+	autoProvisionFilters []*filter.Filter
+
+	wake         chan struct{} // capacity 1, see Wake()
+	retryPending atomic.Bool   // a retry is scheduled, see retryLater()
+	done         chan struct{} // closed when the scan loop has terminated
 }
 
 type deviceWithAutoProvision struct {
@@ -49,23 +69,79 @@ func NewScanner(
 	bds ctldiskv1.BlockDeviceController,
 	block block.Info,
 	configMapLoader *filter.ConfigMapLoader,
-	cond *sync.Cond,
-	shutdown bool,
-	ch *chan bool,
 ) *Scanner {
 	return &Scanner{
-		NodeName:           nodeName,
-		Namespace:          namespace,
-		Blockdevices:       bds,
-		UpgradeClient:      upgrades,
-		BlockInfo:          block,
-		ConfigMapLoader:    configMapLoader,
-		Cond:               cond,
-		Shutdown:           shutdown,
-		TerminatedChannels: ch,
+		NodeName:        nodeName,
+		Namespace:       namespace,
+		Blockdevices:    bds,
+		UpgradeClient:   upgrades,
+		BlockInfo:       block,
+		ConfigMapLoader: configMapLoader,
+		wake:            make(chan struct{}, 1),
+		done:            make(chan struct{}),
 	}
 }
 
+// Wake requests a scan. It never blocks and is safe for concurrent use. If a
+// scan is already requested but has not started yet, the request is merged
+// with it, otherwise it triggers one further scan, so no request is ever lost.
+func (s *Scanner) Wake() {
+	select {
+	case s.wake <- struct{}{}:
+	default:
+	}
+}
+
+// Wait blocks until the scan loop started by Start has terminated, i.e. after
+// the context passed to Start has been cancelled and a running scan finished.
+// It must only be called after Start succeeded, otherwise it blocks forever.
+func (s *Scanner) Wait() {
+	<-s.done
+}
+
+// retryLater requests a scan after retryDelay. Nothing else would trigger one
+// after a failure, so the BlockDevices would stay stale until the next event.
+//
+// At most one retry is pending, further calls are no-ops until it fired. A
+// scan can fail for many devices at once and a retry that fails again must
+// not multiply, otherwise overlapping timers would keep the scanner busy.
+func (s *Scanner) retryLater() {
+	if !s.retryPending.CompareAndSwap(false, true) {
+		return
+	}
+	time.AfterFunc(retryDelay, func() {
+		s.retryPending.Store(false)
+		s.Wake()
+	})
+}
+
+// run calls scan whenever Wake() was called until ctx is cancelled.
+func (s *Scanner) run(ctx context.Context, scan func(context.Context) error) {
+	for {
+		select {
+		case <-ctx.Done():
+		case <-s.wake:
+		}
+		// If both are ready, select picks one at random. A pending wake-up must
+		// not start a full scan, and with it API writes, while shutting down.
+		if ctx.Err() != nil {
+			logrus.Info("Scanner stopped")
+			return
+		}
+
+		logrus.Info("Scanner woke up, do scan...")
+		if err := scan(ctx); err != nil {
+			logrus.Errorf("Failed to rescan block devices on node %s: %v", s.NodeName, err)
+			// A scan that failed because of the shutdown needs no retry.
+			if ctx.Err() == nil {
+				s.retryLater()
+			}
+		}
+	}
+}
+
+// Start scans once synchronously and then keeps scanning whenever Wake() is
+// called until ctx is cancelled.
 func (s *Scanner) Start(ctx context.Context) error {
 	// Always scan once on start
 	if err := s.scanBlockDevicesOnNode(ctx); err != nil {
@@ -73,25 +149,8 @@ func (s *Scanner) Start(ctx context.Context) error {
 	}
 
 	go func() {
-		for {
-			s.Cond.L.Lock()
-			logrus.Infof("Waiting new event to trigger...")
-			s.Cond.Wait()
-
-			if s.Shutdown {
-				logrus.Info("Prepare to stop scanner.")
-				s.Cond.L.Unlock()
-				logrus.Info("Receiver routine shutdown.")
-				*s.TerminatedChannels <- true
-				return
-			}
-
-			logrus.Infof("Scanner woke up, do scan...")
-			if err := s.scanBlockDevicesOnNode(ctx); err != nil {
-				logrus.Errorf("Failed to rescan block devices on node %s: %v", s.NodeName, err)
-			}
-			s.Cond.L.Unlock()
-		}
+		defer close(s.done)
+		s.run(ctx, s.scanBlockDevicesOnNode)
 	}()
 	return nil
 }
@@ -166,7 +225,7 @@ func (s *Scanner) handleExistingDev(oldBd *diskv1.BlockDevice, newBd *diskv1.Blo
 				"name":      oldBd.Name,
 				"device":    oldBd.Status.DeviceStatus.DevPath,
 				"newDevice": newBd.Status.DeviceStatus.DevPath,
-			}).Warn("new device path detected for active device - skipping update")
+			}).Warn("New device path detected for active device - skipping update")
 			return false
 		}
 		// DevPath isn't changed, but other things might, e.g. UUID if someone manually formatted a disk
@@ -187,14 +246,14 @@ func (s *Scanner) handleExistingDev(oldBd *diskv1.BlockDevice, newBd *diskv1.Blo
 					"name":      oldBd.Name,
 					"device":    oldBd.Status.DeviceStatus.DevPath,
 					"newDevice": newBd.Status.DeviceStatus.DevPath,
-				}).Warn("new device path detected for inactive multipath device - skipping update")
+				}).Warn("New device path detected for inactive multipath device - skipping update")
 				return false
 			}
 			path, _ := filepath.EvalSymlinks(oldBd.Status.DeviceStatus.DevPath)
 			if _, err := utils.IsMultipathDevice(path); err == nil {
 				logrus.WithFields(logrus.Fields{
 					"name": oldBd.Name,
-				}).Info("reactivating multipath device")
+				}).Info("Reactivating multipath device")
 				oldBdCp.Status.State = diskv1.BlockDeviceActive
 				// DeviceStatus really shouldn't have changed for MP devices, but pick it up anyway just in case
 				oldBdCp.Status.DeviceStatus.Capacity = newBd.Status.DeviceStatus.Capacity
@@ -207,12 +266,12 @@ func (s *Scanner) handleExistingDev(oldBd *diskv1.BlockDevice, newBd *diskv1.Blo
 					"name":      oldBd.Name,
 					"device":    oldBd.Status.DeviceStatus.DevPath,
 					"newDevice": newBd.Status.DeviceStatus.DevPath,
-				}).Info("reactivating block device with new path")
+				}).Info("Reactivating block device with new path")
 				oldBdCp.Status.DeviceStatus.DevPath = newBd.Status.DeviceStatus.DevPath
 			} else {
 				logrus.WithFields(logrus.Fields{
 					"name": oldBd.Name,
-				}).Infof("reactivating block device")
+				}).Infof("Reactivating block device")
 			}
 			oldBdCp.Status.State = diskv1.BlockDeviceActive
 			// This pulls in all other possible updates -- wwn, uuid, vendor, model, serial, ...
@@ -235,22 +294,22 @@ func (s *Scanner) handleExistingDev(oldBd *diskv1.BlockDevice, newBd *diskv1.Blo
 			logrus.WithFields(logrus.Fields{
 				"name": oldBd.Name,
 				"err":  err,
-			}).Error("error updating device, waking scanner")
-			s.Cond.Signal()
+			}).Error("Error updating device, scheduling rescan")
+			s.retryLater()
 		}
 	} else if isDevAlreadyProvisioned(oldBd) {
 		logrus.WithFields(logrus.Fields{
 			"name": oldBd.Name,
-		}).Debug("skipping provisioned device")
+		}).Debug("Skipping provisioned device")
 	} else if s.NeedsAutoProvision(oldBd, autoProvisioned) {
 		logrus.WithFields(logrus.Fields{
 			"name": oldBd.Name,
-		}).Debug("enquing device for auto-provisioning")
+		}).Debug("Enqueuing device for auto-provisioning")
 		s.Blockdevices.Enqueue(s.Namespace, oldBd.Name)
 	} else {
 		logrus.WithFields(logrus.Fields{
 			"name": oldBd.Name,
-		}).Debug("device is unchanged (no need to update)")
+		}).Debug("Device is unchanged (no need to update)")
 	}
 	return true
 }
@@ -303,7 +362,7 @@ func (s *Scanner) loadConfigMapFilters(ctx context.Context) {
 	}
 
 	// Update filters
-	s.ExcludeFilters = filter.SetExcludeFilters(deviceFilter, vendorFilter, pathFilter, labelFilter)
+	excludeFilters := filter.SetExcludeFilters(deviceFilter, vendorFilter, pathFilter, labelFilter)
 
 	autoProvisionFilter, err := s.ConfigMapLoader.LoadAutoProvisionFromConfigMap(ctx)
 	if err != nil {
@@ -316,7 +375,12 @@ func (s *Scanner) loadConfigMapFilters(ctx context.Context) {
 	}
 
 	// Update auto-provision filters
-	s.AutoProvisionFilters = filter.SetAutoProvisionFilters(autoProvisionFilter)
+	autoProvisionFilters := filter.SetAutoProvisionFilters(autoProvisionFilter)
+
+	s.filterMu.Lock()
+	s.excludeFilters = excludeFilters
+	s.autoProvisionFilters = autoProvisionFilters
+	s.filterMu.Unlock()
 }
 
 // scanBlockDevicesOnNode scans block devices on the node, and it will either create or update them.
@@ -357,7 +421,7 @@ func (s *Scanner) scanBlockDevicesOnNode(ctx context.Context) error {
 					"device": newBd.Status.DeviceStatus.DevPath,
 					"uuid":   uuid,
 					"name":   foundBd.Name,
-				}).Debug("found existing BD by UUID")
+				}).Debug("Found existing BD by UUID")
 				existingBd = foundBd
 			}
 			// If it has a UUID but isn't in existingBDsByUUID, this will
@@ -371,7 +435,7 @@ func (s *Scanner) scanBlockDevicesOnNode(ctx context.Context) error {
 					"device": newBd.Status.DeviceStatus.DevPath,
 					"wwn":    wwn,
 					"name":   foundBd.Name,
-				}).Debug("found existing BD by WWN")
+				}).Debug("Found existing BD by WWN")
 				existingBd = foundBd
 			}
 			// If it has a WWN but isn't in existingBDsByWWN, this will
@@ -405,7 +469,7 @@ func (s *Scanner) scanBlockDevicesOnNode(ctx context.Context) error {
 						"serial":  newBd.Status.DeviceStatus.Details.SerialNumber,
 						"buspath": newBd.Status.DeviceStatus.Details.BusPath,
 						"name":    foundBd.Name,
-					}).Debug("found existing BD by Vendor+Model+SerialNumber+BusPath")
+					}).Debug("Found existing BD by Vendor+Model+SerialNumber+BusPath")
 					existingBd = &foundBd
 					break
 				}
@@ -437,7 +501,7 @@ func (s *Scanner) scanBlockDevicesOnNode(ctx context.Context) error {
 				"buspath": newBd.Status.DeviceStatus.Details.BusPath,
 				"uuid":    newBd.Status.DeviceStatus.Details.UUID,
 				"wwn":     newBd.Status.DeviceStatus.Details.WWN,
-			}).Info("creating new BD")
+			}).Info("Creating new BD")
 			if _, err := s.SaveBlockDevice(newBd, autoProvisioned); err != nil && !errors.IsAlreadyExists(err) {
 				return err
 			}
@@ -500,36 +564,49 @@ func mapBlockDeviceIDs(bdList *diskv1.BlockDeviceList) (names map[string]*diskv1
 func (s *Scanner) ApplyExcludeFiltersForDisk(disk *block.Disk) bool {
 	if strings.HasPrefix(disk.Name, "dm-") {
 		if _, err := utils.IsMultipathDevice(disk.Name); err == nil {
-			logrus.Infof("accept block device /dev/%s because it's a multipath device", disk.Name)
+			logrus.Infof("Accept block device /dev/%s because it's a multipath device", disk.Name)
 			return false
 		}
 
-		logrus.Infof("block device /dev/%s ignored because it's a dm device (likely LHv2 volume)", disk.Name)
+		logrus.Infof("Block device /dev/%s ignored because it's a dm device (likely LHv2 volume)", disk.Name)
 		return true
 	}
 
-	for _, filter := range s.ExcludeFilters {
+	s.filterMu.RLock()
+	excludeFilters := s.excludeFilters
+	s.filterMu.RUnlock()
+	for _, filter := range excludeFilters {
 		if filter.ApplyDiskFilter(disk) {
-			logrus.Infof("block device /dev/%s ignored by %s and rules: %s", disk.Name, filter.Name, filter.DiskFilter.Details())
+			logrus.Infof("Block device /dev/%s ignored by %s and rules: %s", disk.Name, filter.Name, filter.DiskFilter.Details())
 			return true
 		}
 	}
 
 	if _, err := utils.IsManagedByMultipath(disk.Name); err == nil {
-		logrus.Infof("block device /dev/%s is managed by multipath device, ignored", disk.Name)
+		logrus.Infof("Block device /dev/%s is managed by multipath device, ignored", disk.Name)
 		return true
 	}
 
 	return false
 }
 
+// HasAutoProvisionFilters returns true if at least one auto-provision filter is configured.
+func (s *Scanner) HasAutoProvisionFilters() bool {
+	s.filterMu.RLock()
+	defer s.filterMu.RUnlock()
+	return len(s.autoProvisionFilters) > 0
+}
+
 // ApplyAutoProvisionFiltersForDisk check the status of disk for every
 // registered auto-provision filters. If the disk meets one of the criteria, it
 // returns true.
 func (s *Scanner) ApplyAutoProvisionFiltersForDisk(disk *block.Disk) bool {
-	for _, filter := range s.AutoProvisionFilters {
+	s.filterMu.RLock()
+	autoProvisionFilters := s.autoProvisionFilters
+	s.filterMu.RUnlock()
+	for _, filter := range autoProvisionFilters {
 		if filter.ApplyDiskFilter(disk) {
-			logrus.Debugf("block device /dev/%s is promoted to auto-provision by %s", disk.Name, filter.Name)
+			logrus.Debugf("Block device /dev/%s is promoted to auto-provision by %s", disk.Name, filter.Name)
 			return true
 		}
 	}
