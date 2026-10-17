@@ -8,7 +8,6 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/ehazlett/simplelog"
@@ -30,7 +29,6 @@ import (
 	ctllonghorn "github.com/harvester/node-disk-manager/pkg/generated/controllers/longhorn.io"
 	"github.com/harvester/node-disk-manager/pkg/option"
 	"github.com/harvester/node-disk-manager/pkg/udev"
-	"github.com/harvester/node-disk-manager/pkg/utils"
 	"github.com/harvester/node-disk-manager/pkg/version"
 )
 
@@ -240,10 +238,6 @@ func run(opt *option.Option) error {
 		opt.AutoProvisionFilter,
 	)
 
-	terminatedChannel := make(chan bool, 1)
-
-	locker := &sync.Mutex{}
-	cond := sync.NewCond(locker)
 	upgrades := harvesters.Harvesterhci().V1beta1().Upgrade()
 	bds := disks.Harvesterhci().V1beta1().BlockDevice()
 	lvmVGs := disks.Harvesterhci().V1beta1().LVMVolumeGroup()
@@ -255,9 +249,6 @@ func run(opt *option.Option) error {
 		bds,
 		block,
 		configMapLoader,
-		cond,
-		false,
-		&terminatedChannel,
 	)
 
 	start := func(ctx context.Context) {
@@ -292,18 +283,13 @@ func run(opt *option.Option) error {
 		// 2. add node actions, i.e. block device rescan
 
 		// register to monitor the UDEV events, similar to run `udevadm monitor -u`
-		go udev.NewUdev(opt, scanner).Monitor(ctx)
+		udev.NewUdev(opt, scanner, block).Monitor(ctx)
 	}
 
 	start(ctx)
 
 	<-ctx.Done()
-	scanner.Shutdown = true
 	logrus.Infof("NDM is shutting down")
-	utils.CallerWithCondLock(scanner.Cond, func() any {
-		scanner.Cond.Signal()
-		return nil
-	})
-	<-terminatedChannel
+	scanner.Wait()
 	return nil
 }
