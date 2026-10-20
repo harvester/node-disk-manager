@@ -68,6 +68,13 @@ func main() {
 			Destination: &options.HTTPSListenPort,
 		},
 		&cli.StringFlag{
+			Name:        "bind-address",
+			EnvVars:     []string{"WEBHOOK_BIND_ADDRESS"},
+			Usage:       "IPv4 or IPv6 address to bind to (leave blank for all interfaces, dual-stack)",
+			Value:       "",
+			Destination: &options.BindHost,
+		},
+		&cli.StringFlag{
 			Name:        "namespace",
 			EnvVars:     []string{"NAMESPACE"},
 			Destination: &options.Namespace,

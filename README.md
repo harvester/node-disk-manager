@@ -49,6 +49,7 @@ For more information, see [Chart README] https://github.com/harvester/charts/blo
 - [x] Support multiple storage controller (IDE/SATA/SCSI/Virtio).
 - [x] Support virtual disks
 - [x] Support multipath devices
+- [x] Supported on IPv4-only, IPv6-only, and dual-stack (IPv4-first) Kubernetes clusters
 
 ## Architecture
 
