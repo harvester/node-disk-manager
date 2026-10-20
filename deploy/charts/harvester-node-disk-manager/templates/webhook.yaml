@@ -36,6 +36,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   type: ClusterIP
+  ipFamilyPolicy: {{ .Values.global.ipFamilyPolicy | default "SingleStack" }}
   selector:
     {{- include "harvester-node-disk-manager-webhook.selectorLabels" . | nindent 4 }}
   ports:
