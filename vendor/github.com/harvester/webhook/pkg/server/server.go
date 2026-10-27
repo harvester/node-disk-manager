@@ -144,6 +144,7 @@ func (s *WebhookServer) listenAndServe(clients *clients.Clients, handler http.Ha
 	tlsName := fmt.Sprintf("%s.%s.svc", s.name, s.options.Namespace)
 
 	return dls.ListenAndServe(s.context, s.options.HTTPSListenPort, 0, handler, &dls.ListenOpts{
+		BindHost:      s.options.BindHost,
 		Secrets:       clients.Core.Secret(),
 		CertNamespace: s.options.Namespace,
 		CertName:      certName,

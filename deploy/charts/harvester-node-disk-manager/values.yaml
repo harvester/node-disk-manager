@@ -2,6 +2,11 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+# global is populated by the parent chart when this is deployed as a
+# subchart dependency (e.g. ipFamilyPolicy set based on how the cluster's
+# IP families were configured at install time).
+global: {}
+
 image:
   repository: rancher/harvester-node-disk-manager
   pullPolicy: IfNotPresent
