@@ -199,20 +199,28 @@ func updatePVAndVG(vgCpy *diskv1.LVMVolumeGroup, toAdd, toRemove map[string]stri
 	logrus.Infof("Prepare to add devices: %v", toAdd)
 	for bdName, dev := range toAdd {
 		pvFound, vgFound, _ := checkPVAndVG(pvsResult, dev, vgCpy.Spec.VgName)
+		// pvFound only tells that the device is a PV, not that it is a member
+		// of the target VG. A PV without VG (e.g. left over from a failed
+		// vgextend) must still be added to the VG.
+		pvInVG := pvsResult[dev] == vgCpy.Spec.VgName
 		logrus.WithFields(logrus.Fields{
 			"device":  dev,
 			"vgName":  vgCpy.Spec.VgName,
 			"pvFound": pvFound,
 			"vgFound": vgFound,
+			"pvInVG":  pvInVG,
 		}).Infof("Checking for PV and VG")
-		if !vgFound {
+		switch {
+		case !vgFound:
+			// vgcreate initializes the device as PV if necessary.
 			if err := lvm.DoVGCreate(dev, vgCpy.Spec.VgName); err != nil {
 				return err
 			}
-		}
-		if !pvFound {
-			if err := lvm.DoPVCreate(dev); err != nil {
-				return err
+		case !pvInVG:
+			if !pvFound {
+				if err := lvm.DoPVCreate(dev); err != nil {
+					return err
+				}
 			}
 			if err := lvm.DoVGExtend(dev, vgCpy.Spec.VgName); err != nil {
 				return err
