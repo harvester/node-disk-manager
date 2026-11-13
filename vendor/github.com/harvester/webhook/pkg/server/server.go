@@ -55,9 +55,11 @@ type WebhookServer struct {
 
 	isStarted bool
 
-	validators []admission.Validator
-	mutators   []admission.Mutator
-	converters []conversion.Converter
+	validators       []admission.Validator
+	mutators         []admission.Mutator
+	converters       []conversion.Converter
+	ValidationFilter *admission.ResourceFilters
+	MutationFilter   *admission.ResourceFilters
 }
 
 // NewWebhookServer creates a new server for admitter webhook
@@ -144,6 +146,7 @@ func (s *WebhookServer) listenAndServe(clients *clients.Clients, handler http.Ha
 	tlsName := fmt.Sprintf("%s.%s.svc", s.name, s.options.Namespace)
 
 	return dls.ListenAndServe(s.context, s.options.HTTPSListenPort, 0, handler, &dls.ListenOpts{
+		BindHost:      s.options.BindHost,
 		Secrets:       clients.Core.Secret(),
 		CertNamespace: s.options.Namespace,
 		CertName:      certName,
@@ -171,27 +174,39 @@ func (s *WebhookServer) validatingWebhookConfiguration() *v1.ValidatingWebhookCo
 		resources = append(resources, validator.Resource())
 	}
 
+	validatingWebhook := v1.ValidatingWebhook{
+		Name: "validator." + s.options.Namespace + "." + s.name,
+		ClientConfig: v1.WebhookClientConfig{
+			Service: &v1.ServiceReference{
+				Namespace: s.options.Namespace,
+				Name:      s.name,
+				Path:      &validationPath,
+				Port:      &port,
+			},
+			CABundle: s.caBundle,
+		},
+		Rules:                   buildRules(resources),
+		FailurePolicy:           &failPolicyFail,
+		SideEffects:             &sideEffectClassNone,
+		AdmissionReviewVersions: []string{"v1", "v1beta1"},
+		MatchConditions:         buildConditions(resources),
+	}
+
+	if s.ValidationFilter != nil {
+		if s.ValidationFilter.NamespaceSelector != nil {
+			validatingWebhook.NamespaceSelector = s.ValidationFilter.NamespaceSelector
+		}
+		if s.ValidationFilter.ObjectSelector != nil {
+			validatingWebhook.ObjectSelector = s.ValidationFilter.ObjectSelector
+		}
+	}
+
 	return &v1.ValidatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: s.name,
 		},
 		Webhooks: []v1.ValidatingWebhook{
-			{
-				Name: "validator." + s.options.Namespace + "." + s.name,
-				ClientConfig: v1.WebhookClientConfig{
-					Service: &v1.ServiceReference{
-						Namespace: s.options.Namespace,
-						Name:      s.name,
-						Path:      &validationPath,
-						Port:      &port,
-					},
-					CABundle: s.caBundle,
-				},
-				Rules:                   buildRules(resources),
-				FailurePolicy:           &failPolicyFail,
-				SideEffects:             &sideEffectClassNone,
-				AdmissionReviewVersions: []string{"v1", "v1beta1"},
-			},
+			validatingWebhook,
 		},
 	}
 }
@@ -205,27 +220,40 @@ func (s *WebhookServer) mutatingWebhookConfiguration() *v1.MutatingWebhookConfig
 	for _, mutator := range s.mutators {
 		resources = append(resources, mutator.Resource())
 	}
+
+	mutatingWebhook := v1.MutatingWebhook{
+		Name: "mutator." + s.options.Namespace + "." + s.name,
+		ClientConfig: v1.WebhookClientConfig{
+			Service: &v1.ServiceReference{
+				Namespace: s.options.Namespace,
+				Name:      s.name,
+				Path:      &mutationPath,
+				Port:      &port,
+			},
+			CABundle: s.caBundle,
+		},
+		Rules:                   buildRules(resources),
+		FailurePolicy:           &failPolicyIgnore,
+		SideEffects:             &sideEffectClassNone,
+		AdmissionReviewVersions: []string{"v1", "v1beta1"},
+		MatchConditions:         buildConditions(resources),
+	}
+
+	if s.MutationFilter != nil {
+		if s.MutationFilter.NamespaceSelector != nil {
+			mutatingWebhook.NamespaceSelector = s.MutationFilter.NamespaceSelector
+		}
+		if s.MutationFilter.ObjectSelector != nil {
+			mutatingWebhook.ObjectSelector = s.MutationFilter.ObjectSelector
+		}
+	}
+
 	return &v1.MutatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: s.name,
 		},
 		Webhooks: []v1.MutatingWebhook{
-			{
-				Name: "mutator." + s.options.Namespace + "." + s.name,
-				ClientConfig: v1.WebhookClientConfig{
-					Service: &v1.ServiceReference{
-						Namespace: s.options.Namespace,
-						Name:      s.name,
-						Path:      &mutationPath,
-						Port:      &port,
-					},
-					CABundle: s.caBundle,
-				},
-				Rules:                   buildRules(resources),
-				FailurePolicy:           &failPolicyIgnore,
-				SideEffects:             &sideEffectClassNone,
-				AdmissionReviewVersions: []string{"v1", "v1beta1"},
-			},
+			mutatingWebhook,
 		},
 	}
 }
@@ -338,4 +366,14 @@ func buildRules(resources []admission.Resource) []v1.RuleWithOperations {
 	}
 
 	return rules
+}
+
+func buildConditions(resources []admission.Resource) []v1.MatchCondition {
+	conditions := make([]v1.MatchCondition, 0)
+	for _, rsc := range resources {
+		logrus.Debugf("Add match conditions for %+v", rsc)
+		conditions = append(conditions, rsc.MatchConditions...)
+	}
+
+	return conditions
 }
