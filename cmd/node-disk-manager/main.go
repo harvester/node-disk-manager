@@ -67,7 +67,7 @@ func main() {
 		&cli.StringFlag{
 			Name:        "profile-listen-address",
 			Value:       "",
-			Usage:       "Address to listen on for profiling, e.g. `:6060`",
+			Usage:       "Address to listen on for profiling, e.g. `:6060` (all interfaces, dual-stack), `127.0.0.1:6060` (loopback, IPv4), `[::1]:6060` (loopback, IPv6)",
 			Destination: &opt.ProfilerAddress,
 		},
 		&cli.BoolFlag{
