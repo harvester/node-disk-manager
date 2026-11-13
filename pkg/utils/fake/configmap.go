@@ -31,6 +31,10 @@ func (c FakeConfigMapClient) Delete(namespace, name string, options *metav1.Dele
 	return c(namespace).Delete(context.TODO(), name, *options)
 }
 
+func (c FakeConfigMapClient) DeleteCollection(_ string, _ metav1.DeleteOptions, _ metav1.ListOptions) error {
+	panic("implement me")
+}
+
 func (c FakeConfigMapClient) List(_ string, _ metav1.ListOptions) (*corev1.ConfigMapList, error) {
 	panic("implement me")
 }
