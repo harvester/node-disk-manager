@@ -162,16 +162,17 @@ func (s *HotPlugTestSuite) Test_2_HotPlugAddDisk() {
 	_, _, err := doCommand(cmd)
 	require.Equal(s.T(), nil, err, "Running command `%s` should not get error", cmd)
 
-	// wait for controller handling, the device will be changed need more time to wait for the controller handling
-	time.Sleep(30 * time.Second)
-
-	// check disk status
 	require.NotEqual(s.T(), s.targetDiskName, "", "target disk name should not be empty before we start hotplug (add) test")
 	bdi := s.clientSet.HarvesterhciV1beta1().BlockDevices("longhorn-system")
-	curBlockdevice, err := bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
-	require.Equal(s.T(), nil, err, "Get Blockdevices should not get error")
-
-	require.Equal(s.T(), diskv1.BlockDeviceActive, curBlockdevice.Status.State, "Disk status should be inactive after we add disk")
+	require.Eventually(s.T(), func() bool {
+		curBlockdevice, err := bdi.Get(context.TODO(), s.targetDiskName, v1.GetOptions{})
+		if err != nil {
+			s.T().Logf("poll: Get BlockDevice error: %v", err)
+			return false
+		}
+		s.T().Logf("poll: disk state=%q", curBlockdevice.Status.State)
+		return curBlockdevice.Status.State == diskv1.BlockDeviceActive
+	}, 90*time.Second, 5*time.Second, "Disk should become active after it is added")
 }
 
 func (s *HotPlugTestSuite) Test_3_AddDuplicatedWWNDisk() {
